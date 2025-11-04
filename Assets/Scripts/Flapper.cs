@@ -6,56 +6,75 @@ using UnityEngine;
 public class Flapper : MonoBehaviour
 {
     [Header("Feedback")]
-    public AudioSource audioSource;   // arrastra si quieres, si no, puedes añadirlo al GameObject
-    public AudioClip tickClip;        // tu clip placeholder
-    [Tooltip("Grados de 'golpecito' al tocar un pin")]
+    public AudioSource audioSource;
+    public AudioClip tickClip;
     public float nudgeAngle = 8f;
-    [Tooltip("Tiempo de ir hacia atrás (s)")]
     public float nudgeTime = 0.06f;
-    [Tooltip("Tiempo de volver a reposo (s)")]
     public float returnTime = 0.08f;
 
-    [Header("Limits")]
-    [Tooltip("Evita doble tick en el mismo borde si vas muy lento")]
-    public float cooldown = 0.03f;
+    [Header("Detection")]
+    public float cooldownPerPin = 0.03f;     // más fino, permite registrar hits consecutivos
+    public float minFlagHitInterval = 0.05f; // reduce lag entre flag hits
 
-    float _lastTickTime = -999f;
-    float _baseLocalZ;
-    Coroutine _activeCo;
+    private float _baseLocalZ;
+    private Coroutine _activeCo;
+    private Dictionary<Collider2D, float> lastHitTime = new Dictionary<Collider2D, float>();
+    private float lastFlagHitTime = -999f;
 
     void Awake()
     {
         _baseLocalZ = transform.localEulerAngles.z;
-        if (audioSource == null) audioSource = GetComponent<AudioSource>();
+
+        if (audioSource == null)
+            audioSource = GetComponent<AudioSource>();
+
+        var rb = GetComponent<Rigidbody2D>();
+        rb.bodyType = RigidbodyType2D.Kinematic;
+        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
     }
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        // Solo reaccionamos a pins de la rueda (que son triggers)
         if (!other.isTrigger) return;
-        if (Time.time - _lastTickTime < cooldown) return;
 
-        _lastTickTime = Time.time;
+        float now = Time.time;
 
-        if (tickClip != null && audioSource != null)
+        // previene dobles registros del mismo pin
+        if (lastHitTime.ContainsKey(other) && now - lastHitTime[other] < cooldownPerPin)
+            return;
+
+        bool validHit = false;
+        var flagPin = other.GetComponent<FlagPin>();
+
+        if (flagPin != null)
+        {
+            if (now - lastFlagHitTime < minFlagHitInterval)
+                return;
+
+            lastFlagHitTime = now;
+            validHit = true;
+            flagPin.RegisterHit();
+        }
+        else if (other.name.ToLower().Contains("pin"))
+        {
+            validHit = true;
+        }
+
+        if (!validHit) return;
+
+        lastHitTime[other] = now;
+
+        if (tickClip && audioSource)
             audioSource.PlayOneShot(tickClip);
 
-        DoTick();
-    }
-
-    /// <summary>
-    /// Permite disparar el tick desde código (por detección angular, etc.)
-    /// </summary>
-    public void DoTick()
-    {
-        if (_activeCo != null) StopCoroutine(_activeCo);
-        _activeCo = StartCoroutine(NudgeRoutine());
+        // deja que la animación se solape, no bloquea hits
+        StartCoroutine(NudgeRoutine());
     }
 
     IEnumerator NudgeRoutine()
     {
-        // Lerp hacia atrás
-        float startZ = Normalize180(transform.localEulerAngles.z);
+        float startZ = Mathf.DeltaAngle(0f, transform.localEulerAngles.z);
         float targetZ = _baseLocalZ - nudgeAngle;
 
         float t = 0f;
@@ -67,7 +86,6 @@ public class Flapper : MonoBehaviour
             yield return null;
         }
 
-        // Volver a base
         t = 0f;
         while (t < 1f)
         {
@@ -76,13 +94,5 @@ public class Flapper : MonoBehaviour
             transform.localRotation = Quaternion.Euler(0f, 0f, z);
             yield return null;
         }
-
-        _activeCo = null;
-    }
-
-    // Normaliza ángulo a rango [-180, 180]
-    float Normalize180(float z)
-    {
-        return Mathf.DeltaAngle(0f, z);
     }
 }
