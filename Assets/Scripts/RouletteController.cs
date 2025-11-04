@@ -38,7 +38,7 @@ public class RouletteController : MonoBehaviour
     private int startSegmentIndex = -1;
     private int endSegmentIndex = -1;
 
-    // 🔹 Nueva propiedad para saber si hay una tirada activa
+    // Tirada activa
     public bool SpinInProgress { get; private set; } = false;
 
     public void SetInputBlocked(bool v)
@@ -117,7 +117,7 @@ public class RouletteController : MonoBehaviour
                 Debug.Log($"🎬 Empieza la tirada. Segmento inicial: {startSegmentIndex}");
 
                 OnSpinStart?.Invoke();
-                SpinInProgress = true; // 🔹 Activamos el flag
+                SpinInProgress = true;
             }
             else
             {
@@ -173,10 +173,13 @@ public class RouletteController : MonoBehaviour
         {
             wasMoving = false;
             OnSpinEnd?.Invoke();
-            SpinInProgress = false; // 🔹 Tirada finalizada
+            SpinInProgress = false;
 
             endSegmentIndex = GetCurrentSegmentIndex();
             Debug.Log($"🏁 Tirada finalizada. Segmento ganador: {endSegmentIndex}");
+
+            // Activar efectos de stickers del segmento ganador
+            TriggerStickersOnWinningSegment();
         }
     }
 
@@ -212,4 +215,24 @@ public class RouletteController : MonoBehaviour
     }
 
     public float GetCurrentAngularVelocity() => spinSpeed;
+
+    // ✅ FIX: usamos el transform del collider del segmento
+    void TriggerStickersOnWinningSegment()
+    {
+        if (generator == null || generator.segments == null) return;
+        if (endSegmentIndex < 0 || endSegmentIndex >= generator.segments.Count) return;
+
+        var segData = generator.segments[endSegmentIndex];
+        if (segData == null || segData.collider == null) return;
+
+        Transform winningTransform = segData.collider.transform;
+
+        var stickers = winningTransform.GetComponentsInChildren<BaseSticker>(true);
+        foreach (var sticker in stickers)
+        {
+            sticker.OnSegmentWin();
+        }
+
+        Debug.Log($"✨ {stickers.Length} stickers activados en el segmento {winningTransform.name}");
+    }
 }

@@ -30,7 +30,7 @@ public class WheelGenerator : MonoBehaviour
 
     // 🔸 Lista de segmentos accesible para la ruleta
     [HideInInspector] public List<WheelSegmentData> segments = new List<WheelSegmentData>();
-    
+
     [ContextMenu("Generate Wheel")]
     public void GenerateWheel()
     {
@@ -40,6 +40,17 @@ public class WheelGenerator : MonoBehaviour
         float step = 360f / segmentCount;
         Transform segmentsRoot = new GameObject("Segments").transform;
         segmentsRoot.SetParent(transform, false);
+
+        // 🔹 Obtener capas (si existen)
+        int segmentLayer = LayerMask.NameToLayer("Segment");
+        int pinLayer = LayerMask.NameToLayer("Pin");
+
+#if UNITY_EDITOR
+        if (segmentLayer == -1)
+            Debug.LogWarning("⚠️ No existe la capa 'Segment'. Créala manualmente desde Project Settings > Tags & Layers.");
+        if (pinLayer == -1)
+            Debug.LogWarning("⚠️ No existe la capa 'Pin'. Créala manualmente desde Project Settings > Tags & Layers.");
+#endif
 
         for (int i = 0; i < segmentCount; i++)
         {
@@ -74,14 +85,18 @@ public class WheelGenerator : MonoBehaviour
             }
             poly.SetPath(0, pts.ToArray());
 
+            // 🔹 Asignar capa "Segment"
+            if (segmentLayer != -1)
+                seg.layer = segmentLayer;
+
             segments.Add(new WheelSegmentData { index = i, collider = poly });
         }
 
         if (generatePins)
-            GeneratePins(step);
+            GeneratePins(step, pinLayer);
     }
 
-    void GeneratePins(float step)
+    void GeneratePins(float step, int pinLayer)
     {
         Transform old = transform.Find(pinsParentName);
         if (old != null) DestroyImmediate(old.gameObject);
@@ -104,6 +119,10 @@ public class WheelGenerator : MonoBehaviour
             var bc = pin.AddComponent<BoxCollider2D>();
             bc.size = pinSize;
             bc.isTrigger = pinsAreTriggers;
+
+            // 🔹 Asignar capa "Pin"
+            if (pinLayer != -1)
+                pin.layer = pinLayer;
         }
     }
 
