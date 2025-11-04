@@ -2,134 +2,21 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-[RequireComponent(typeof(Collider2D))]
-public class FlagPin : MonoBehaviour
+public class FlagPin : BaseFlagPin
 {
-    [Header("Placement")]
-    public Transform wheelCenter;
-    public bool isPlaced = false;
+    [Header("Rewards")]
+    [Tooltip("Cantidad de dinero que otorga este pin al ser golpeado durante una tirada activa.")]
+    public int moneyReward = 1;
 
-    [Header("References")]
-    public Round1Manager round;
-    public RouletteController controller;
-
-    [Header("Safety")]
-    public float selfMinInterval = 0.07f; // micro-seguro local
-
-    private Camera cam;
-    private bool isDragging = false;
-    private Vector3 offset;
-    private float _lastHitTime = -999f;
-
-    void Awake()
+    public override void RegisterHit()
     {
-        cam = Camera.main;
-        if (wheelCenter == null)
-        {
-            var w = GameObject.Find("Wheel");
-            if (w) wheelCenter = w.transform;
-        }
-    }
+        base.RegisterHit();
 
-    void Update()
-    {
-        HandleDragging();
-
-        if (isPlaced && wheelCenter != null)
-            UpdateOrientation();
-    }
-
-    void HandleDragging()
-    {
-#if UNITY_EDITOR || UNITY_STANDALONE
-        Vector2 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
-
-        if (Input.GetMouseButtonDown(0))
-        {
-            if (GetComponent<Collider2D>().OverlapPoint(mouseWorld))
-            {
-                isDragging = true;
-                if (controller) controller.SetInputBlocked(true);
-
-                if (isPlaced)
-                {
-                    isPlaced = false;
-                    transform.SetParent(null, true);
-                }
-
-                offset = transform.position - (Vector3)mouseWorld;
-            }
-        }
-
-        if (isDragging)
-        {
-            transform.position = (Vector3)mouseWorld + offset;
-
-            if (wheelCenter != null)
-                UpdateOrientation();
-
-            if (wheelCenter != null)
-            {
-                Collider2D wheelCol = wheelCenter.GetComponent<Collider2D>();
-                if (wheelCol && wheelCol.OverlapPoint(mouseWorld))
-                {
-                    PlaceOnWheel();
-                    return;
-                }
-            }
-
-            if (Input.GetMouseButtonUp(0))
-            {
-                isDragging = false;
-                if (controller) controller.SetInputBlocked(false);
-            }
-        }
-#endif
-    }
-
-    void PlaceOnWheel()
-    {
-        if (isPlaced || wheelCenter == null) return;
-
-        isPlaced = true;
-        isDragging = false;
-
-        if (controller) controller.SetInputBlocked(false);
-
-        transform.SetParent(wheelCenter, true);
-
-        Vector2 dir = (transform.position - wheelCenter.position).normalized;
-        float radius = 1f;
-        var wheelCol = wheelCenter.GetComponent<CircleCollider2D>();
-        if (wheelCol)
-            radius = wheelCol.radius * wheelCenter.localScale.x;
-
-        transform.position = wheelCenter.position + (Vector3)dir * radius;
-
-        UpdateOrientation();
-        Debug.Log("📍 FlagPin clavado correctamente en la rueda");
-    }
-
-    void UpdateOrientation()
-    {
-        if (!wheelCenter) return;
-        Vector2 dir = (wheelCenter.position - transform.position).normalized;
-        float ang = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
-        transform.rotation = Quaternion.Euler(0, 0, ang + 90f);
-    }
-
-    public void RegisterHit()
-    {
-        if (Time.time - _lastHitTime < selfMinInterval) return;
-        _lastHitTime = Time.time;
-
-        if (round != null)
-            round.RegisterPinHit(this);
-
-        // 💰 Solo sumar si la tirada está activa
+        // 💵 Solo sumar dinero si la ruleta está girando
         if (controller != null && controller.SpinInProgress && CurrencyManager.Instance != null)
         {
-            CurrencyManager.Instance.AddDollar(1);
+            CurrencyManager.Instance.AddDollar(moneyReward);
+            Debug.Log($"💰 +{moneyReward}$ (Total: {CurrencyManager.Instance.dollars})");
         }
     }
 }
