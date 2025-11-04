@@ -35,7 +35,6 @@ public class RouletteController : MonoBehaviour
     private bool wasMoving = false;
     private Queue<float> recentSpeeds = new Queue<float>();
 
-    // Datos de estado
     private int startSegmentIndex = -1;
     private int endSegmentIndex = -1;
 
@@ -177,21 +176,34 @@ public class RouletteController : MonoBehaviour
         }
     }
 
-    // ✅ Método robusto: calcula el índice de segmento actual según la posición del flapper
+    // ✅ Ahora este método usa colliders del WheelGenerator
     int GetCurrentSegmentIndex()
     {
         if (generator == null || wheel == null || flapperTip == null) return 0;
+        if (generator.segments == null || generator.segments.Count == 0)
+            return GetCurrentSegmentIndexByAngle();
+
+        // 🔹 Intentamos detectar el collider bajo la punta del flapper
+        Vector2 tip = flapperTip.position;
+        foreach (var seg in generator.segments)
+        {
+            if (seg.collider != null && seg.collider.OverlapPoint(tip))
+                return seg.index;
+        }
+
+        // fallback angular si no toca ningún collider
+        return GetCurrentSegmentIndexByAngle();
+    }
+
+    // 🔸 Método de respaldo por ángulo
+    int GetCurrentSegmentIndexByAngle()
+    {
         int segs = generator.segmentCount;
         if (segs <= 0) return 0;
 
-        // Posición del flapper en el espacio local de la rueda
         Vector3 local = wheel.InverseTransformPoint(flapperTip.position);
-
-        // Ángulo local (0° = +X)
         float ang = Mathf.Atan2(local.y, local.x) * Mathf.Rad2Deg;
         if (ang < 0f) ang += 360f;
-
-        // Compensar la orientación del flapper (apunta hacia +Y)
         ang = (ang - 90f + 360f) % 360f;
 
         float step = 360f / segs;
@@ -199,6 +211,5 @@ public class RouletteController : MonoBehaviour
         return Mathf.Clamp(idx, 0, segs - 1);
     }
 
-    // Getter para Round1Manager (si lo usas)
     public float GetCurrentAngularVelocity() => spinSpeed;
 }
