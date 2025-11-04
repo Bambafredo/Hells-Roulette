@@ -8,7 +8,7 @@ public class RouletteController : MonoBehaviour
     [Header("References")]
     public Transform wheel;
     public WheelGenerator generator;
-    public Transform flapperTip; // ← la punta real del flapper
+    public Transform flapperTip;
 
     [Header("Feel")]
     public float gestureToSpin = 1.0f;
@@ -34,7 +34,10 @@ public class RouletteController : MonoBehaviour
     private float lastSampleTime = 0f;
     private bool wasMoving = false;
     private Queue<float> recentSpeeds = new Queue<float>();
-    private bool spinStartedThisPress = false;
+
+    // Datos de estado
+    private int startSegmentIndex = -1;
+    private int endSegmentIndex = -1;
 
     public void SetInputBlocked(bool v)
     {
@@ -61,14 +64,10 @@ public class RouletteController : MonoBehaviour
             Vector2 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
             if (Physics2D.OverlapPoint(mouseWorld, blockInputMask))
                 return;
-        }
 
-        if (down)
-        {
             if (Vector2.Distance(pos, (Vector2)wheel.position) >= minDragRadius)
             {
                 dragging = true;
-                spinStartedThisPress = true;
                 lastAngleDeg = WorldAngleFromCenter(pos);
                 lastSampleTime = Time.time;
                 recentSpeeds.Clear();
@@ -77,12 +76,6 @@ public class RouletteController : MonoBehaviour
 
         if (held && dragging)
         {
-            if (spinStartedThisPress)
-            {
-                spinStartedThisPress = false;
-                OnSpinStart?.Invoke();
-            }
-
             float currentAngle = WorldAngleFromCenter(pos);
             float delta = Mathf.DeltaAngle(lastAngleDeg, currentAngle);
             wheel.Rotate(0f, 0f, delta);
@@ -115,9 +108,19 @@ public class RouletteController : MonoBehaviour
             float weightedSpeed = avgSpeed / wheelWeight;
 
             if (Mathf.Abs(weightedSpeed) > minThrowSpeed)
+            {
                 spinSpeed = Mathf.Clamp(weightedSpeed, -maxSpinSpeed, maxSpinSpeed);
+
+                // 🎯 Guardar el segmento de salida real (antes del giro)
+                startSegmentIndex = GetCurrentSegmentIndex();
+                Debug.Log($"🎬 Empieza la tirada. Segmento inicial: {startSegmentIndex}");
+
+                OnSpinStart?.Invoke();
+            }
             else
+            {
                 spinSpeed *= 0.5f;
+            }
 
             recentSpeeds.Clear();
         }
@@ -169,33 +172,33 @@ public class RouletteController : MonoBehaviour
             wasMoving = false;
             OnSpinEnd?.Invoke();
 
-            int winner = GetCurrentSegmentIndex();
-            Debug.Log($"🎯 Segmento ganador: {winner}");
+            endSegmentIndex = GetCurrentSegmentIndex();
+            Debug.Log($"🏁 Tirada finalizada. Segmento ganador: {endSegmentIndex}");
         }
     }
 
-    // ✅ Cálculo correcto del segmento, compensando la orientación del flapper (+Y)
+    // ✅ Método robusto: calcula el índice de segmento actual según la posición del flapper
     int GetCurrentSegmentIndex()
     {
-        int segs = (generator != null) ? generator.segmentCount : 0;
-        if (segs <= 0 || wheel == null || flapperTip == null)
-            return 0;
+        if (generator == null || wheel == null || flapperTip == null) return 0;
+        int segs = generator.segmentCount;
+        if (segs <= 0) return 0;
 
-        // 1️⃣ Posición del flapper en el espacio local de la rueda
+        // Posición del flapper en el espacio local de la rueda
         Vector3 local = wheel.InverseTransformPoint(flapperTip.position);
 
-        // 2️⃣ Ángulo local (0° = +X)
+        // Ángulo local (0° = +X)
         float ang = Mathf.Atan2(local.y, local.x) * Mathf.Rad2Deg;
         if (ang < 0f) ang += 360f;
 
-        // 3️⃣ Compensamos porque el flapper apunta hacia +Y (90°)
+        // Compensar la orientación del flapper (apunta hacia +Y)
         ang = (ang - 90f + 360f) % 360f;
 
-        // 4️⃣ Tamaño del segmento
         float step = 360f / segs;
-
-        // 5️⃣ Índice final
         int idx = Mathf.FloorToInt(ang / step);
         return Mathf.Clamp(idx, 0, segs - 1);
     }
+
+    // Getter para Round1Manager (si lo usas)
+    public float GetCurrentAngularVelocity() => spinSpeed;
 }
