@@ -38,6 +38,9 @@ public class RouletteController : MonoBehaviour
     private int startSegmentIndex = -1;
     private int endSegmentIndex = -1;
 
+    // 🔹 Nueva propiedad para saber si hay una tirada activa
+    public bool SpinInProgress { get; private set; } = false;
+
     public void SetInputBlocked(bool v)
     {
         inputBlocked = v;
@@ -110,11 +113,11 @@ public class RouletteController : MonoBehaviour
             {
                 spinSpeed = Mathf.Clamp(weightedSpeed, -maxSpinSpeed, maxSpinSpeed);
 
-                // 🎯 Guardar el segmento de salida real (antes del giro)
                 startSegmentIndex = GetCurrentSegmentIndex();
                 Debug.Log($"🎬 Empieza la tirada. Segmento inicial: {startSegmentIndex}");
 
                 OnSpinStart?.Invoke();
+                SpinInProgress = true; // 🔹 Activamos el flag
             }
             else
             {
@@ -170,20 +173,19 @@ public class RouletteController : MonoBehaviour
         {
             wasMoving = false;
             OnSpinEnd?.Invoke();
+            SpinInProgress = false; // 🔹 Tirada finalizada
 
             endSegmentIndex = GetCurrentSegmentIndex();
             Debug.Log($"🏁 Tirada finalizada. Segmento ganador: {endSegmentIndex}");
         }
     }
 
-    // ✅ Ahora este método usa colliders del WheelGenerator
     int GetCurrentSegmentIndex()
     {
         if (generator == null || wheel == null || flapperTip == null) return 0;
         if (generator.segments == null || generator.segments.Count == 0)
             return GetCurrentSegmentIndexByAngle();
 
-        // 🔹 Intentamos detectar el collider bajo la punta del flapper
         Vector2 tip = flapperTip.position;
         foreach (var seg in generator.segments)
         {
@@ -191,11 +193,9 @@ public class RouletteController : MonoBehaviour
                 return seg.index;
         }
 
-        // fallback angular si no toca ningún collider
         return GetCurrentSegmentIndexByAngle();
     }
 
-    // 🔸 Método de respaldo por ángulo
     int GetCurrentSegmentIndexByAngle()
     {
         int segs = generator.segmentCount;

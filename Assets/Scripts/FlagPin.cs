@@ -44,7 +44,6 @@ public class FlagPin : MonoBehaviour
 #if UNITY_EDITOR || UNITY_STANDALONE
         Vector2 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
 
-        // Iniciar drag
         if (Input.GetMouseButtonDown(0))
         {
             if (GetComponent<Collider2D>().OverlapPoint(mouseWorld))
@@ -52,7 +51,6 @@ public class FlagPin : MonoBehaviour
                 isDragging = true;
                 if (controller) controller.SetInputBlocked(true);
 
-                // Si estaba clavado, lo "desclavamos"
                 if (isPlaced)
                 {
                     isPlaced = false;
@@ -63,23 +61,20 @@ public class FlagPin : MonoBehaviour
             }
         }
 
-        // Mientras arrastro
         if (isDragging)
         {
             transform.position = (Vector3)mouseWorld + offset;
 
-            // Orientarlo hacia el centro mientras se arrastra
             if (wheelCenter != null)
                 UpdateOrientation();
 
-            // Detectar si toca la rueda mientras arrastramos
             if (wheelCenter != null)
             {
                 Collider2D wheelCol = wheelCenter.GetComponent<Collider2D>();
                 if (wheelCol && wheelCol.OverlapPoint(mouseWorld))
                 {
                     PlaceOnWheel();
-                    return; // deja de arrastrar
+                    return;
                 }
             }
 
@@ -99,13 +94,10 @@ public class FlagPin : MonoBehaviour
         isPlaced = true;
         isDragging = false;
 
-        // Se vuelve a permitir el input de la ruleta
         if (controller) controller.SetInputBlocked(false);
 
-        // Parentarlo a la rueda para que gire con ella
         transform.SetParent(wheelCenter, true);
 
-        // Calcular posición justo en el borde
         Vector2 dir = (transform.position - wheelCenter.position).normalized;
         float radius = 1f;
         var wheelCol = wheelCenter.GetComponent<CircleCollider2D>();
@@ -128,11 +120,16 @@ public class FlagPin : MonoBehaviour
 
     public void RegisterHit()
     {
-        // Micro-debounce: descarta hits pegados
         if (Time.time - _lastHitTime < selfMinInterval) return;
         _lastHitTime = Time.time;
 
         if (round != null)
             round.RegisterPinHit(this);
+
+        // 💰 Solo sumar si la tirada está activa
+        if (controller != null && controller.SpinInProgress && CurrencyManager.Instance != null)
+        {
+            CurrencyManager.Instance.AddDollar(1);
+        }
     }
 }
