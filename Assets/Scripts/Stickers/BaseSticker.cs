@@ -19,6 +19,10 @@ public class BaseSticker : MonoBehaviour
     public LayerMask segmentMask;
     public LayerMask stickerMask;
 
+    [Header("Placement Tuning")]
+    [Range(0f, 0.2f)] public float tolerance = 0.05f;
+    [Range(0.5f, 1f)] public float coverageThreshold = 0.75f;
+
     private Camera cam;
     private bool isDragging = false;
     private Vector3 offset;
@@ -26,13 +30,13 @@ public class BaseSticker : MonoBehaviour
     private Quaternion originalRotation;
     private Transform originalParent;
     private Collider2D myCollider;
-    private Transform root; // moveremos este GO
+    private Transform root;
 
     protected virtual void Awake()
     {
         cam = Camera.main;
         myCollider = GetComponent<Collider2D>();
-        root = transform.parent; // 👈 moveremos el root, no este GO
+        root = transform.parent;
 
         if (wheelCenter == null)
         {
@@ -48,7 +52,6 @@ public class BaseSticker : MonoBehaviour
     {
         HandleDragging();
 
-        // 🔹 Si está colocado, que gire junto con la ruleta
         if (isPlaced && currentSegment != null)
             root.rotation = currentSegment.rotation;
     }
@@ -60,6 +63,10 @@ public class BaseSticker : MonoBehaviour
 
         if (Input.GetMouseButtonDown(0))
         {
+            // 🚫 No permitir arrastrar stickers mientras la ruleta gira
+            if (controller != null && controller.SpinInProgress)
+                return;
+
             if (myCollider.OverlapPoint(mouseWorld))
             {
                 isDragging = true;
@@ -98,23 +105,20 @@ public class BaseSticker : MonoBehaviour
     protected virtual void TryPlaceSticker()
     {
         Vector2 worldPos = root.position;
-
-        // 1️⃣ Comprobar si está dentro del collider de un segmento
         Collider2D segCol = Physics2D.OverlapPoint(worldPos, segmentMask);
+
         if (segCol == null)
         {
             ReturnToOrigin();
             return;
         }
 
-        // 2️⃣ Comprobar que todo el collider esté dentro del segmento (no solo el centro)
-        if (!IsFullyInsideSegment(myCollider, segCol))
+        if (!IsMostlyInsideSegment(myCollider, segCol, tolerance, coverageThreshold))
         {
             ReturnToOrigin();
             return;
         }
 
-        // 3️⃣ Comprobar si toca otros stickers
         Collider2D[] overlaps = Physics2D.OverlapCircleAll(worldPos, myCollider.bounds.extents.x * 0.9f, stickerMask);
         foreach (var o in overlaps)
         {
@@ -125,28 +129,34 @@ public class BaseSticker : MonoBehaviour
             }
         }
 
-        // ✅ Colocar correctamente
         root.SetParent(segCol.transform, true);
         currentSegment = segCol.transform;
         isPlaced = true;
         Debug.Log($"✅ Sticker {name} colocado en {segCol.name}");
     }
 
-    private bool IsFullyInsideSegment(Collider2D sticker, Collider2D segment)
+    private bool IsMostlyInsideSegment(Collider2D sticker, Collider2D segment, float tolerance, float threshold)
     {
-        Vector3[] corners = new Vector3[4];
         Bounds b = sticker.bounds;
-        corners[0] = new Vector3(b.min.x, b.min.y);
-        corners[1] = new Vector3(b.min.x, b.max.y);
-        corners[2] = new Vector3(b.max.x, b.min.y);
-        corners[3] = new Vector3(b.max.x, b.max.y);
+        Vector3 min = b.min - new Vector3(tolerance, tolerance, 0f);
+        Vector3 max = b.max + new Vector3(tolerance, tolerance, 0f);
 
-        foreach (var c in corners)
+        int totalChecks = 9;
+        int inside = 0;
+
+        for (int ix = 0; ix < 3; ix++)
         {
-            if (!segment.OverlapPoint(c))
-                return false;
+            for (int iy = 0; iy < 3; iy++)
+            {
+                float x = Mathf.Lerp(min.x, max.x, ix / 2f);
+                float y = Mathf.Lerp(min.y, max.y, iy / 2f);
+                if (segment.OverlapPoint(new Vector2(x, y)))
+                    inside++;
+            }
         }
-        return true;
+
+        float ratio = inside / (float)totalChecks;
+        return ratio >= threshold;
     }
 
     protected virtual void ReturnToOrigin()
