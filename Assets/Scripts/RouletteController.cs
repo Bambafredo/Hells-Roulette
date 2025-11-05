@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System;
+using UnityEngine.UI;
 
 public class RouletteController : MonoBehaviour
 {
@@ -24,6 +25,15 @@ public class RouletteController : MonoBehaviour
     public LayerMask blockInputMask;
     public bool inputBlocked = false;
 
+    // 🟢 NUEVO — Sistema de freno
+    [Header("Brake System")]
+    public bool enableBrake = true;
+    public float extraDeceleration = 300f;
+    public float brakeResourceMax = 3f;     // duración máxima
+    public Slider brakeBar;
+    private float currentBrake = 0f;
+    private bool isBraking = false;
+
     // 🔔 Eventos
     public event Action OnSpinStart;
     public event Action OnSpinEnd;
@@ -38,7 +48,6 @@ public class RouletteController : MonoBehaviour
     private int startSegmentIndex = -1;
     private int endSegmentIndex = -1;
 
-    // Tirada activa
     public bool SpinInProgress { get; private set; } = false;
 
     public void SetInputBlocked(bool v)
@@ -46,10 +55,21 @@ public class RouletteController : MonoBehaviour
         inputBlocked = v;
     }
 
+    void Start()
+    {
+        currentBrake = brakeResourceMax;
+        if (brakeBar != null)
+        {
+            brakeBar.maxValue = brakeResourceMax;
+            brakeBar.value = brakeResourceMax;
+        }
+    }
+
     void Update()
     {
         HandlePointer();
         ApplySpin();
+        UpdateBrakeBar();
     }
 
     void HandlePointer()
@@ -61,6 +81,32 @@ public class RouletteController : MonoBehaviour
         bool down, held, up;
         ReadPointer(out pos, out down, out held, out up);
 
+        // ⚠️ Importante: no hacemos NADA al tocar la ruleta si está girando
+        if (SpinInProgress)
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            if (Input.GetMouseButton(0))
+            {
+                Vector2 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                Collider2D col = wheel.GetComponent<Collider2D>();
+                if (col != null && col.OverlapPoint(mouseWorld) && currentBrake > 0)
+                {
+                    isBraking = true;
+                }
+                else
+                {
+                    isBraking = false;
+                }
+            }
+            else
+            {
+                isBraking = false;
+            }
+#endif
+            return;
+        }
+
+        // 🧭 Solo podemos arrastrar para tirar si NO hay una tirada en curso
         if (down)
         {
             Vector2 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
@@ -162,6 +208,14 @@ public class RouletteController : MonoBehaviour
             wheel.Rotate(0f, 0f, spinSpeed * Time.deltaTime);
 
             float adjustedDecel = deceleration / wheelWeight;
+
+            // 🟢 Si se mantiene pulsado sobre la ruleta, se aplica freno
+            if (enableBrake && isBraking && currentBrake > 0f)
+            {
+                adjustedDecel += extraDeceleration;
+                currentBrake -= Time.deltaTime;
+            }
+
             float sign = Mathf.Sign(spinSpeed);
             spinSpeed -= sign * adjustedDecel * Time.deltaTime;
             if (Mathf.Sign(spinSpeed) != sign)
@@ -178,9 +232,14 @@ public class RouletteController : MonoBehaviour
             endSegmentIndex = GetCurrentSegmentIndex();
             Debug.Log($"🏁 Tirada finalizada. Segmento ganador: {endSegmentIndex}");
 
-            // Activar efectos de stickers del segmento ganador
             TriggerStickersOnWinningSegment();
         }
+    }
+
+    private void UpdateBrakeBar()
+    {
+        if (brakeBar != null)
+            brakeBar.value = currentBrake;
     }
 
     int GetCurrentSegmentIndex()
@@ -216,7 +275,6 @@ public class RouletteController : MonoBehaviour
 
     public float GetCurrentAngularVelocity() => spinSpeed;
 
-    // ✅ FIX: usamos el transform del collider del segmento
     void TriggerStickersOnWinningSegment()
     {
         if (generator == null || generator.segments == null) return;
