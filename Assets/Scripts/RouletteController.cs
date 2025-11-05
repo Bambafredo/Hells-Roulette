@@ -25,14 +25,14 @@ public class RouletteController : MonoBehaviour
     public LayerMask blockInputMask;
     public bool inputBlocked = false;
 
-    // 🟢 NUEVO — Sistema de freno
     [Header("Brake System")]
     public bool enableBrake = true;
     public float extraDeceleration = 300f;
-    public float brakeResourceMax = 3f;     // duración máxima
-    public Slider brakeBar;
-    private float currentBrake = 0f;
+    public int bloodCostPerSecond = 1; // 🩸 Sangre gastada por segundo al frenar
     private bool isBraking = false;
+
+    // ⏱️ Temporizador para control de gasto por segundo real
+    private float bloodTimer = 0f;
 
     // 🔔 Eventos
     public event Action OnSpinStart;
@@ -55,21 +55,10 @@ public class RouletteController : MonoBehaviour
         inputBlocked = v;
     }
 
-    void Start()
-    {
-        currentBrake = brakeResourceMax;
-        if (brakeBar != null)
-        {
-            brakeBar.maxValue = brakeResourceMax;
-            brakeBar.value = brakeResourceMax;
-        }
-    }
-
     void Update()
     {
         HandlePointer();
         ApplySpin();
-        UpdateBrakeBar();
     }
 
     void HandlePointer()
@@ -81,7 +70,7 @@ public class RouletteController : MonoBehaviour
         bool down, held, up;
         ReadPointer(out pos, out down, out held, out up);
 
-        // ⚠️ Importante: no hacemos NADA al tocar la ruleta si está girando
+        // 🔴 Durante la tirada, solo podemos frenar
         if (SpinInProgress)
         {
 #if UNITY_EDITOR || UNITY_STANDALONE
@@ -89,14 +78,10 @@ public class RouletteController : MonoBehaviour
             {
                 Vector2 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
                 Collider2D col = wheel.GetComponent<Collider2D>();
-                if (col != null && col.OverlapPoint(mouseWorld) && currentBrake > 0)
-                {
+                if (col != null && col.OverlapPoint(mouseWorld))
                     isBraking = true;
-                }
                 else
-                {
                     isBraking = false;
-                }
             }
             else
             {
@@ -164,6 +149,7 @@ public class RouletteController : MonoBehaviour
 
                 OnSpinStart?.Invoke();
                 SpinInProgress = true;
+                bloodTimer = 0f;
             }
             else
             {
@@ -206,14 +192,36 @@ public class RouletteController : MonoBehaviour
         if (!dragging && Mathf.Abs(spinSpeed) > 0.1f)
         {
             wheel.Rotate(0f, 0f, spinSpeed * Time.deltaTime);
-
             float adjustedDecel = deceleration / wheelWeight;
 
-            // 🟢 Si se mantiene pulsado sobre la ruleta, se aplica freno
-            if (enableBrake && isBraking && currentBrake > 0f)
+            // 🩸 Si mantenemos pulsado sobre la ruleta, perdemos sangre para frenarla
+            if (enableBrake && isBraking && BloodManager.Instance != null)
             {
-                adjustedDecel += extraDeceleration;
-                currentBrake -= Time.deltaTime;
+                bloodTimer += Time.deltaTime;
+                bool hasBlood = BloodManager.Instance.currentBlood > 0;
+
+                // Solo frenar si aún hay sangre
+                if (hasBlood)
+                {
+                    float interval = 1f / bloodCostPerSecond;
+                    if (bloodTimer >= interval)
+                    {
+                        bool canBrake = BloodManager.Instance.ConsumeBlood(1);
+                        bloodTimer = 0f;
+
+                        // Si justo ahora se queda sin sangre, corta el freno
+                        if (!canBrake)
+                            isBraking = false;
+                    }
+
+                    // 🔧 Solo aplica freno si sigues teniendo sangre
+                    adjustedDecel += extraDeceleration;
+                }
+                else
+                {
+                    // Sin sangre => no puedes frenar
+                    isBraking = false;
+                }
             }
 
             float sign = Mathf.Sign(spinSpeed);
@@ -234,12 +242,6 @@ public class RouletteController : MonoBehaviour
 
             TriggerStickersOnWinningSegment();
         }
-    }
-
-    private void UpdateBrakeBar()
-    {
-        if (brakeBar != null)
-            brakeBar.value = currentBrake;
     }
 
     int GetCurrentSegmentIndex()
@@ -287,9 +289,7 @@ public class RouletteController : MonoBehaviour
 
         var stickers = winningTransform.GetComponentsInChildren<BaseSticker>(true);
         foreach (var sticker in stickers)
-        {
             sticker.OnSegmentWin();
-        }
 
         Debug.Log($"✨ {stickers.Length} stickers activados en el segmento {winningTransform.name}");
     }

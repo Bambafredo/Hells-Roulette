@@ -833,11 +833,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -1.68
+      value: -1.31
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -3.12
+      value: 3.14
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
       propertyPath: m_LocalPosition.z
@@ -1733,6 +1733,7 @@ GameObject:
   m_Component:
   - component: {fileID: 996127458}
   - component: {fileID: 996127459}
+  - component: {fileID: 996127460}
   m_Layer: 0
   m_Name: GameManagers
   m_TagString: Untagged
@@ -1773,6 +1774,25 @@ MonoBehaviour:
   maxHits: 8
   minRealSpinSpeed: 100
   stableSpinTime: 0.1
+--- !u!114 &996127460
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996127457}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 84061f7ca073f1a4f9463fe0457a8018, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxBlood: 100
+  currentBlood: 0
+  bloodSlider: {fileID: 1397869060}
+  fill: {fileID: 1828547889}
+  valueText: {fileID: 1033164336}
+  fullColor: {r: 1, g: 0.034525074, b: 0, a: 1}
+  emptyColor: {r: 1, g: 0, b: 0, a: 1}
 --- !u!1 &1009172658
 GameObject:
   m_ObjectHideFlags: 0
@@ -2138,9 +2158,8 @@ MonoBehaviour:
     m_Bits: 0
   inputBlocked: 0
   enableBrake: 1
-  extraDeceleration: 400
-  brakeResourceMax: 10
-  brakeBar: {fileID: 1397869060}
+  extraDeceleration: 800
+  bloodCostPerSecond: 10
 --- !u!43 &1082852472
 Mesh:
   m_ObjectHideFlags: 0
@@ -2891,7 +2910,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1397869059}
   - component: {fileID: 1397869060}
-  - component: {fileID: 1397869061}
   m_Layer: 5
   m_Name: BrakeBar
   m_TagString: Untagged
@@ -2972,23 +2990,6 @@ MonoBehaviour:
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &1397869061
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1397869058}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ab393b2f9d5aac8409727b8fc0d9142c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  slider: {fileID: 1397869060}
-  fill: {fileID: 1828547889}
-  valueText: {fileID: 1033164336}
-  fullColor: {r: 1, g: 0.03311698, b: 0, a: 1}
-  emptyColor: {r: 1, g: 0.03137255, b: 0, a: 1}
 --- !u!1 &1403957980
 GameObject:
   m_ObjectHideFlags: 0
@@ -3111,11 +3112,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -0.79
+      value: -2.19
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -3.71
+      value: 2.57
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
       propertyPath: m_LocalPosition.z
@@ -4228,11 +4229,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0.22
+      value: -2.16
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -3.89
+      value: 3.62
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
       propertyPath: m_LocalPosition.z
