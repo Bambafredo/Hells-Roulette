@@ -11,33 +11,35 @@ public class BaseEnemy : MonoBehaviour
     public int damageToPlayer = 1;
 
     [Header("References")]
-    public TextMeshPro hpText;
-    public SpriteRenderer sprite;
+    public TextMeshPro hpText;        // Número encima del sprite
+    public SpriteRenderer sprite;     // Para efectos visuales opcionales
 
     private int currentHP;
     private bool isDead = false;
+    private RouletteController roulette;
 
     private void Start()
     {
         currentHP = maxHP;
         UpdateHPDisplay();
 
-        var roulette = FindObjectOfType<RouletteController>();
+        roulette = FindObjectOfType<RouletteController>();
         if (roulette != null)
             roulette.OnSpinEnd += OnSpinEnd;
     }
 
     private void OnDestroy()
     {
-        var roulette = FindObjectOfType<RouletteController>();
         if (roulette != null)
             roulette.OnSpinEnd -= OnSpinEnd;
     }
 
+    // 🔔 Cuando termina la tirada
     private void OnSpinEnd()
     {
         if (isDead) return;
 
+        // Si sigue vivo al terminar la tirada, daña al jugador
         if (BloodManager.Instance != null)
         {
             BloodManager.Instance.ConsumeBlood(damageToPlayer);
@@ -45,15 +47,29 @@ public class BaseEnemy : MonoBehaviour
         }
     }
 
+    // ⚔️ Recibir daño
     public void TakeDamage(int dmg)
     {
         if (isDead) return;
 
         currentHP -= dmg;
         UpdateHPDisplay();
+        StartCoroutine(HitFlash());
 
         if (currentHP <= 0)
             Die();
+    }
+
+    // 💥 Efecto visual de golpe (opcional)
+    private IEnumerator HitFlash()
+    {
+        if (sprite != null)
+        {
+            Color original = sprite.color;
+            sprite.color = Color.white;
+            yield return new WaitForSeconds(0.1f);
+            sprite.color = original;
+        }
     }
 
     private void Die()
