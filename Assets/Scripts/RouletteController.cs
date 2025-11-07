@@ -28,13 +28,11 @@ public class RouletteController : MonoBehaviour
     [Header("Brake System")]
     public bool enableBrake = true;
     public float extraDeceleration = 300f;
-    public int bloodCostPerSecond = 1; // 🩸 Sangre gastada por segundo al frenar
+    public int bloodCostPerSecond = 1;
     private bool isBraking = false;
 
-    // ⏱️ Temporizador para control de gasto por segundo real
     private float bloodTimer = 0f;
 
-    // 🔔 Eventos
     public event Action OnSpinStart;
     public event Action OnSpinEnd;
 
@@ -70,7 +68,15 @@ public class RouletteController : MonoBehaviour
         bool down, held, up;
         ReadPointer(out pos, out down, out held, out up);
 
-        // 🔴 Durante la tirada, solo podemos frenar
+        // ✅ NUEVO: Si click en un portal → ignorar ruleta
+        if (BagManager.Instance != null)
+        {
+            if (BagManager.Instance.IsPointOnBagPortal(pos) ||
+                BagManager.Instance.IsPointOnGameplayPortal(pos))
+                return;
+        }
+
+        // 🔴 Durante la tirada, solo frenar
         if (SpinInProgress)
         {
 #if UNITY_EDITOR || UNITY_STANDALONE
@@ -91,7 +97,6 @@ public class RouletteController : MonoBehaviour
             return;
         }
 
-        // 🧭 Solo podemos arrastrar para tirar si NO hay una tirada en curso
         if (down)
         {
             Vector2 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
@@ -194,13 +199,11 @@ public class RouletteController : MonoBehaviour
             wheel.Rotate(0f, 0f, spinSpeed * Time.deltaTime);
             float adjustedDecel = deceleration / wheelWeight;
 
-            // 🩸 Si mantenemos pulsado sobre la ruleta, perdemos sangre para frenarla
             if (enableBrake && isBraking && BloodManager.Instance != null)
             {
                 bloodTimer += Time.deltaTime;
                 bool hasBlood = BloodManager.Instance.currentBlood > 0;
 
-                // Solo frenar si aún hay sangre
                 if (hasBlood)
                 {
                     float interval = 1f / bloodCostPerSecond;
@@ -209,17 +212,14 @@ public class RouletteController : MonoBehaviour
                         bool canBrake = BloodManager.Instance.ConsumeBlood(1);
                         bloodTimer = 0f;
 
-                        // Si justo ahora se queda sin sangre, corta el freno
                         if (!canBrake)
                             isBraking = false;
                     }
 
-                    // 🔧 Solo aplica freno si sigues teniendo sangre
                     adjustedDecel += extraDeceleration;
                 }
                 else
                 {
-                    // Sin sangre => no puedes frenar
                     isBraking = false;
                 }
             }
