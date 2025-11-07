@@ -162,6 +162,7 @@ public class BaseSticker : MonoBehaviour
         // ✅ GAMEPLAY ACTIVO
         if (BagManager.Instance.IsPointInsideGameplay(p))
         {
+            // 1. Intentar colocarlo en la ruleta
             bool ok = TryPlaceOnWheel(p);
 
             if (ok)
@@ -169,11 +170,20 @@ public class BaseSticker : MonoBehaviour
                 BagManager.Instance.RemoveSticker(this);
                 return;
             }
-            else
-            {
-                ReturnToOrigin();
-                return;
-            }
+
+            // 2. Si NO cae en un segmento → se coloca libremente dentro del gameplay area
+            //    (como hacemos con BagArea)
+            root.SetParent(BagManager.Instance.gameplayContentRoot, true);
+            isPlaced = false;
+            currentSegment = null;
+
+            // 3. Clamp opcional para no salir del GameplayArea
+            Bounds g = BagManager.Instance.gameplayAreaCollider.bounds;
+            float x = Mathf.Clamp(root.position.x, g.min.x, g.max.x);
+            float y = Mathf.Clamp(root.position.y, g.min.y, g.max.y);
+            root.position = new Vector3(x, y, root.position.z);
+
+            return;
         }
 
         // ✅ Lógica original ruleta
