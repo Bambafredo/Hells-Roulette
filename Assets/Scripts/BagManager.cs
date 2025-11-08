@@ -6,38 +6,32 @@ public class BagManager : MonoBehaviour
 {
     public static BagManager Instance;
 
-    [Header("Screen Objects")]
+    [Header("Screens")]
     public GameObject bagScreen;
     public GameObject gameplayScreen;
 
-    [Header("Area Colliders")]
+    [Header("Areas")]
     public Collider2D bagAreaCollider;
     public Collider2D gameplayAreaCollider;
 
     [Header("Portals")]
-    public Collider2D bagPortalCollider;        // gameplay → bag
-    public Collider2D gameplayPortalCollider;   // bag → gameplay
+    public Collider2D bagPortalCollider;        // Gameplay → Bag
+    public Collider2D gameplayPortalCollider;   // Bag → Gameplay
 
     [Header("Roots")]
     public Transform bagContentRoot;
     public Transform gameplayContentRoot;
 
-    [Header("State")]
-    public List<BaseSticker> placedStickers = new List<BaseSticker>();
-
-    [Header("Buttons (UI)")]
-    public UnityEngine.UI.Button goToBagButton;
-    public UnityEngine.UI.Button goToGameplayButton;
+    [Header("Slots")]
+    public List<BagZone> bagSlots = new List<BagZone>();
+    public BagZone currentBagZone;
 
     private void Awake()
     {
         Instance = this;
 
-        if (goToBagButton != null)
-            goToBagButton.onClick.AddListener(SwitchToBag);
-
-        if (goToGameplayButton != null)
-            goToGameplayButton.onClick.AddListener(SwitchToGameplay);
+        // Detectar todos los BagZone de la escena
+        bagSlots.AddRange(GetComponentsInChildren<BagZone>(true));
     }
 
     private void Update()
@@ -45,9 +39,9 @@ public class BagManager : MonoBehaviour
         HandlePortalClicks();
     }
 
-    // ---------------------------------------------------------------------
-    // ✅ Detectar clic en portales (USANDO COLLIDERS COMO BOTONES)
-    void HandlePortalClicks()
+    // ------------------ PORTAL INPUT ---------------------
+
+    private void HandlePortalClicks()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
         if (Input.GetMouseButtonDown(0))
@@ -69,28 +63,8 @@ public class BagManager : MonoBehaviour
 #endif
     }
 
-    // ---------------------------------------------------------------------
-    public bool IsPointInsideBag(Vector2 point)
-    {
-        return bagAreaCollider != null && bagAreaCollider.OverlapPoint(point);
-    }
+    // ------------------ SCREEN SWITCH ---------------------
 
-    public bool IsPointInsideGameplay(Vector2 point)
-    {
-        return gameplayAreaCollider != null && gameplayAreaCollider.OverlapPoint(point);
-    }
-
-    public bool IsPointOnBagPortal(Vector2 point)
-    {
-        return bagPortalCollider != null && bagPortalCollider.OverlapPoint(point);
-    }
-
-    public bool IsPointOnGameplayPortal(Vector2 point)
-    {
-        return gameplayPortalCollider != null && gameplayPortalCollider.OverlapPoint(point);
-    }
-
-    // ---------------------------------------------------------------------
     public void SwitchToBag()
     {
         gameplayScreen.SetActive(false);
@@ -105,79 +79,79 @@ public class BagManager : MonoBehaviour
 
     public bool IsBagActive() => bagScreen.activeSelf;
 
-    // ---------------------------------------------------------------------
+    // ------------------ HELPERS ---------------------
+
+    public bool IsPointInsideBag(Vector2 p)
+        => bagAreaCollider != null && bagAreaCollider.OverlapPoint(p);
+
+    public bool IsPointInsideGameplay(Vector2 p)
+        => gameplayAreaCollider != null && gameplayAreaCollider.OverlapPoint(p);
+
+    public bool IsPointOnBagPortal(Vector2 p)
+        => bagPortalCollider != null && bagPortalCollider.OverlapPoint(p);
+
+    public bool IsPointOnGameplayPortal(Vector2 p)
+        => gameplayPortalCollider != null && gameplayPortalCollider.OverlapPoint(p);
+
     public Vector3 ClampToBag(Vector3 p)
     {
         Bounds b = bagAreaCollider.bounds;
-
-        float x = Mathf.Clamp(p.x, b.min.x, b.max.x);
-        float y = Mathf.Clamp(p.y, b.min.y, b.max.y);
-
-        return new Vector3(x, y, p.z);
-    }
-
-    public bool TryPlaceSticker(BaseSticker s, Vector3 dropPos)
-    {
-        Vector2 center = dropPos;
-        float step = 0.25f;
-
-        float safeRadius = s.GetComponent<Collider2D>().bounds.extents.x * 1.1f;
-
-        float maxRadius = Mathf.Max(
-            bagAreaCollider.bounds.extents.x,
-            bagAreaCollider.bounds.extents.y
+        return new Vector3(
+            Mathf.Clamp(p.x, b.min.x, b.max.x),
+            Mathf.Clamp(p.y, b.min.y, b.max.y),
+            p.z
         );
-
-        for (float r = 0; r < maxRadius; r += step)
-        {
-            for (float a = 0; a < 360; a += 12)
-            {
-                Vector2 candidate = center + new Vector2(
-                    Mathf.Cos(a * Mathf.Deg2Rad) * r,
-                    Mathf.Sin(a * Mathf.Deg2Rad) * r
-                );
-
-                if (!bagAreaCollider.OverlapPoint(candidate))
-                    continue;
-
-                if (Collides(candidate, safeRadius, s))
-                    continue;
-
-                Transform root = s.transform.parent;
-                root.position = candidate;
-                root.rotation = Quaternion.identity;
-
-                root.SetParent(bagContentRoot, true);
-
-                if (!placedStickers.Contains(s))
-                    placedStickers.Add(s);
-
-                s.currentSegment = null;
-                s.isPlaced = true;
-
-                return true;
-            }
-        }
-
-        return false;
     }
 
-    private bool Collides(Vector2 candidate, float radius, BaseSticker ignore)
+    // ------------------ SLOT LOGIC ---------------------
+
+    public BagZone FindFirstFreeSlot()
     {
-        foreach (var other in placedStickers)
+        foreach (var slot in bagSlots)
         {
-            if (other == ignore) continue;
-
-            float d = Vector2.Distance(candidate, other.transform.position);
-            if (d < radius * 2f)
-                return true;
+            if (!slot.occupied)
+                return slot;
         }
-
-        return false;
+        return null;
     }
 
-    public void RemoveSticker(BaseSticker s)
+    public BagZone GetSlotAtPosition(Vector2 p)
     {
-        placedStickers.Remove(s);
+        foreach (var slot in bagSlots)
+        {
+            if (slot.zoneCollider.OverlapPoint(p))
+                return slot;
+        }
+        return null;
+    }
+
+    public void PlaceStickerInSlot_Auto(BaseSticker s, BagZone slot)
+    {
+        // liberar slot anterior si tenía
+        if (s.currentBagZone != null)
+        {
+            s.currentBagZone.occupied = false;
+            s.currentBagZone.autoSticker = null;
+        }
+
+        slot.occupied = true;
+        slot.autoSticker = s;
+        s.currentBagZone = slot;
+        s.isPlaced = true;
+
+        Transform root = s.transform.parent;
+        root.SetParent(slot.contentRoot, false);
+        root.localPosition = Vector3.zero;
+        root.localRotation = Quaternion.identity;
+    }
+
+    public void FreeSlot(BaseSticker s)
+    {
+        if (s.currentBagZone != null)
+        {
+            s.currentBagZone.occupied = false;
+            s.currentBagZone.autoSticker = null;
+            s.currentBagZone = null;
+        }
     }
 }

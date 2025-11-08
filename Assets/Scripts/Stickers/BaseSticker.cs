@@ -12,8 +12,11 @@ public class BaseSticker : MonoBehaviour
     public RouletteController controller;
 
     [Header("Placement")]
-    public bool isPlaced = false;      
+    public bool isPlaced = false;
     public Transform currentSegment;
+
+    // bag slot tracking
+    public BagZone currentBagZone;
 
     [Header("Validation Masks")]
     public LayerMask segmentMask;
@@ -22,10 +25,6 @@ public class BaseSticker : MonoBehaviour
     [Header("Placement Tuning")]
     [Range(0f, 0.2f)] public float tolerance = 0.05f;
     [Range(0.5f, 1f)] public float coverageThreshold = 0.75f;
-
-    // BAG SYSTEM
-    public LayerMask bagMask;
-    public LayerMask gameplayMask;
 
     private Camera cam;
     private bool isDragging = false;
@@ -60,9 +59,12 @@ public class BaseSticker : MonoBehaviour
             root.rotation = currentSegment.rotation;
     }
 
+    // ---------------- DRAG -----------------------
+
     protected virtual void HandleDragging()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
+
         Vector2 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
 
         if (Input.GetMouseButtonDown(0))
@@ -78,7 +80,7 @@ public class BaseSticker : MonoBehaviour
                 originalRotation = root.rotation;
                 originalParent = root.parent;
 
-                if (controller) controller.SetInputBlocked(true);
+                BagManager.Instance?.FreeSlot(this);
 
                 if (isPlaced)
                 {
@@ -89,6 +91,9 @@ public class BaseSticker : MonoBehaviour
 
                 offset = root.position - (Vector3)mouseWorld;
                 SetAlpha(0.6f);
+
+                if (controller)
+                    controller.SetInputBlocked(true);
             }
         }
 
@@ -101,94 +106,101 @@ public class BaseSticker : MonoBehaviour
                 HandleDrop();
                 isDragging = false;
 
-                if (controller) controller.SetInputBlocked(false);
+                if (controller)
+                    controller.SetInputBlocked(false);
+
                 SetAlpha(1f);
             }
         }
+
 #endif
     }
+
+    // ---------------- DROP -----------------------
 
     private void HandleDrop()
     {
         Vector2 p = root.position;
 
-        // ✅ Gameplay → Bag portal
+        // PORTAL → BAG
         if (BagManager.Instance.IsPointOnBagPortal(p))
         {
-            Vector3 seed = BagManager.Instance.ClampToBag(p);
+            BagZone slot = BagManager.Instance.FindFirstFreeSlot();
 
-            root.SetParent(BagManager.Instance.bagContentRoot, true);
+            if (slot != null)
+            {
+                BagManager.Instance.PlaceStickerInSlot_Auto(this, slot);
+                return;
+            }
 
-            BagManager.Instance.TryPlaceSticker(this, seed);
+            ReturnToOrigin();
             return;
         }
 
-        // ✅ Bag → Gameplay portal
+        // PORTAL → GAMEPLAY
         if (BagManager.Instance.IsPointOnGameplayPortal(p))
         {
-            BagManager.Instance.RemoveSticker(this);
+            BagManager.Instance.FreeSlot(this);
 
-            // 1. Reparent al ContentRoot del Gameplay
+            // devolver al gameplay contentRoot
             root.SetParent(BagManager.Instance.gameplayContentRoot, true);
 
-            // 2. Intentar colocarlo en la ruleta
             if (TryPlaceOnWheel(p))
             {
                 isPlaced = true;
                 return;
             }
 
-            // 3. Si no cabe en la ruleta, lo dejamos dentro del GameplayArea
+            // si no cabe en la ruleta
             if (!BagManager.Instance.IsPointInsideGameplay(p))
                 root.position = BagManager.Instance.gameplayAreaCollider.bounds.center;
 
-            isPlaced = false;
-            currentSegment = null;
-
             return;
         }
 
-        // ✅ BAG ACTIVA
+        // BAG SCREEN (SLOTS MANUALES)
         if (BagManager.Instance.IsBagActive())
         {
-            Vector3 seed = BagManager.Instance.ClampToBag(p);
+            BagZone slot = BagManager.Instance.GetSlotAtPosition(p);
 
-            if (!BagManager.Instance.TryPlaceSticker(this, seed))
-                ReturnToOrigin();
-
-            return;
-        }
-
-        // ✅ GAMEPLAY ACTIVO
-        if (BagManager.Instance.IsPointInsideGameplay(p))
-        {
-            // 1. Intentar colocarlo en la ruleta
-            bool ok = TryPlaceOnWheel(p);
-
-            if (ok)
+            if (slot != null)
             {
-                BagManager.Instance.RemoveSticker(this);
+                // manual placement allows multiple stickers
+                root.SetParent(slot.contentRoot, true);
+
+                // NO marcamos slot como ocupado
+                // porque este sticker NO es el autoSticker
+                currentBagZone = slot;
+
                 return;
             }
 
-            // 2. Si NO cae en un segmento → se coloca libremente dentro del gameplay area
-            //    (como hacemos con BagArea)
-            root.SetParent(BagManager.Instance.gameplayContentRoot, true);
-            isPlaced = false;
-            currentSegment = null;
+            ReturnToOrigin();
+            return;
+        }
 
-            // 3. Clamp opcional para no salir del GameplayArea
-            Bounds g = BagManager.Instance.gameplayAreaCollider.bounds;
-            float x = Mathf.Clamp(root.position.x, g.min.x, g.max.x);
-            float y = Mathf.Clamp(root.position.y, g.min.y, g.max.y);
+        // GAMEPLAY SCREEN
+        if (BagManager.Instance.IsPointInsideGameplay(p))
+        {
+            if (TryPlaceOnWheel(p))
+                return;
+
+            root.SetParent(BagManager.Instance.gameplayContentRoot, true);
+
+            Bounds b = BagManager.Instance.gameplayAreaCollider.bounds;
+            float x = Mathf.Clamp(root.position.x, b.min.x, b.max.x);
+            float y = Mathf.Clamp(root.position.y, b.min.y, b.max.y);
+
             root.position = new Vector3(x, y, root.position.z);
 
             return;
         }
 
-        // ✅ Lógica original ruleta
+        // fallback: try rueda
         TryPlaceSticker();
     }
+
+    // ---------------- ROULETTE LOGIC -----------------------
 
     private bool TryPlaceOnWheel(Vector3 dropPos)
     {
@@ -233,6 +245,7 @@ public class BaseSticker : MonoBehaviour
 
         Collider2D[] overlaps =
             Physics2D.OverlapCircleAll(worldPos, myCollider.bounds.extents.x * 0.9f, stickerMask);
+
         foreach (var o in overlaps)
         {
             if (o != myCollider)
@@ -245,7 +258,6 @@ public class BaseSticker : MonoBehaviour
         root.SetParent(segCol.transform, true);
         currentSegment = segCol.transform;
         isPlaced = true;
-        Debug.Log($"✅ Sticker {name} colocado en {segCol.name}");
     }
 
     private bool IsMostlyInsideSegment(Collider2D sticker, Collider2D segment, float tolerance, float threshold)
@@ -254,7 +266,7 @@ public class BaseSticker : MonoBehaviour
         Vector3 min = b.min - new Vector3(tolerance, tolerance, 0f);
         Vector3 max = b.max + new Vector3(tolerance, tolerance, 0f);
 
-        int totalChecks = 9;
+        int total = 9;
         int inside = 0;
 
         for (int ix = 0; ix < 3; ix++)
@@ -268,8 +280,7 @@ public class BaseSticker : MonoBehaviour
             }
         }
 
-        float ratio = inside / (float)totalChecks;
-        return ratio >= threshold;
+        return inside / (float)total >= threshold;
     }
 
     protected virtual void ReturnToOrigin()
@@ -277,7 +288,6 @@ public class BaseSticker : MonoBehaviour
         root.SetParent(originalParent);
         root.position = originalPosition;
         root.rotation = originalRotation;
-        Debug.Log($"❌ Sticker {name} vuelve a su sitio");
     }
 
     private void SetAlpha(float a)
@@ -295,6 +305,5 @@ public class BaseSticker : MonoBehaviour
     {
         if (effect == null) return;
         effect.ApplyEffect();
-        Debug.Log($"💵 Sticker '{effect.stickerName}' activado → {effect.dollarReward}$");
     }
 }

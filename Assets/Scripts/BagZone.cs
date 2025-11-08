@@ -6,16 +6,18 @@ using UnityEngine;
 public class BagZone : MonoBehaviour
 {
     [Header("Zone")]
-    public Collider2D zoneCollider;      // El área válida (rectángulo, círculo, polígono…)
-    public Transform contentRoot;        // Carpeta donde meter los stickers dentro del área
+    public Collider2D zoneCollider;       // área del slot
+    public Transform contentRoot;         // dónde se meten los stickers
+
+    [Header("State")]
+    public bool occupied = false;         // si tiene sticker AUTO colocado
+    public BaseSticker autoSticker = null; // el sticker asignado automáticamente
 
     private void Reset()
     {
-        // Asignar automáticamente el collider
         if (zoneCollider == null)
             zoneCollider = GetComponent<Collider2D>();
 
-        // Crear contentRoot si no existe
         if (contentRoot == null)
         {
             GameObject root = new GameObject("ContentRoot");
