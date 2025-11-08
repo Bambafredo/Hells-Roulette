@@ -321,4 +321,16 @@ public class BagManager : MonoBehaviour
         }
         return false;
     }
+    public bool IsPointInsideAnyGameplayArea(Vector2 p)
+    {
+        if (gameplayAreaCollider != null && gameplayAreaCollider.OverlapPoint(p))
+            return true;
+
+        // Cualquier BagZone de gameplay cuenta como “área de gameplay”
+        foreach (var slot in gameplaySlots)
+            if (slot != null && slot.zoneCollider != null && slot.zoneCollider.OverlapPoint(p))
+                return true;
+
+        return false;
+    }
 }

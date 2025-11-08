@@ -175,42 +175,37 @@ public class BaseSticker : MonoBehaviour
         }
 
         // -------- GAMEPLAY SCREEN
-        if (BagManager.Instance.IsPointInsideGameplay(p))
+        var gSlot = BagManager.Instance.GetGameplaySlotAtPosition(p);
+        if (gSlot != null)
         {
-            // 1) Si suelta sobre un slot de gameplay, intentamos colocarlo ahí primero (prioridad al slot)
-            var gSlot = BagManager.Instance.GetGameplaySlotAtPosition(p);
-            if (gSlot != null)
-            {
-                if (BagManager.Instance.TryPlaceInSlotManual(this, gSlot, root.position))
-                    return;
-
-                // Si no hay sitio libre en ese slot, probamos ruleta
-                if (TryPlaceOnWheel(p))
-                    return;
-
-                // Nada → clamp a gameplay area
-                root.SetParent(BagManager.Instance.gameplayContentRoot, true);
-                Bounds b = BagManager.Instance.gameplayAreaCollider.bounds;
-                float x = Mathf.Clamp(root.position.x, b.min.x, b.max.x);
-                float y = Mathf.Clamp(root.position.y, b.min.y, b.max.y);
-                root.position = new Vector3(x, y, root.position.z);
+            if (BagManager.Instance.TryPlaceInSlotManual(this, gSlot, root.position))
                 return;
-            }
 
-            // 2) Si NO está sobre un slot, intentamos la ruleta
+            // Si el slot está lleno (no encuentra hueco), probamos ruleta como fallback
             if (TryPlaceOnWheel(p))
                 return;
 
-            // 3) Área libre de gameplay (clamp)
+            // Y si tampoco cabe en la ruleta, lo dejamos en gameplay area (clamp)
             root.SetParent(BagManager.Instance.gameplayContentRoot, true);
-            Bounds b2 = BagManager.Instance.gameplayAreaCollider.bounds;
-            float x2 = Mathf.Clamp(root.position.x, b2.min.x, b2.max.x);
-            float y2 = Mathf.Clamp(root.position.y, b2.min.y, b2.max.y);
-            root.position = new Vector3(x2, y2, root.position.z);
+            Vector3 cg = BagManager.Instance.ClampToGameplay(root.position);
+            root.position = new Vector3(cg.x, cg.y, root.position.z);
             return;
         }
 
-        // Fallback original: intentar ruleta
+        // 2) Si NO está sobre slot, probamos primero ruleta
+        if (TryPlaceOnWheel(p))
+            return;
+
+        // 3) Y finalmente, si cae en cualquier área de gameplay, lo clamp-eamos
+        if (BagManager.Instance.IsPointInsideAnyGameplayArea(p))
+        {
+            root.SetParent(BagManager.Instance.gameplayContentRoot, true);
+            Vector3 cg = BagManager.Instance.ClampToGameplay(root.position);
+            root.position = new Vector3(cg.x, cg.y, root.position.z);
+            return;
+        }
+
+        // Fallback
         TryPlaceSticker();
     }
 
