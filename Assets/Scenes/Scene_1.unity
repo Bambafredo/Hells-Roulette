@@ -839,7 +839,7 @@ Transform:
   m_GameObject: {fileID: 346694832}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: -0.63, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1863,7 +1863,7 @@ GameObject:
   - component: {fileID: 836167152}
   - component: {fileID: 836167151}
   m_Layer: 0
-  m_Name: GameplayArea_1 (1)
+  m_Name: GameplayArea_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1999,7 +1999,7 @@ GameObject:
   - component: {fileID: 860441222}
   - component: {fileID: 860441221}
   m_Layer: 0
-  m_Name: GameplayArea_1 (2)
+  m_Name: GameplayArea_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2665,7 +2665,10 @@ MonoBehaviour:
   - {fileID: 926068487}
   - {fileID: 1013033073}
   - {fileID: 2011539653}
-  currentBagZone: {fileID: 0}
+  gameplaySlots:
+  - {fileID: 1958939434}
+  - {fileID: 836167151}
+  - {fileID: 860441221}
 --- !u!1 &1009172658
 GameObject:
   m_ObjectHideFlags: 0
@@ -3319,7 +3322,7 @@ Transform:
   m_GameObject: {fileID: 1099505659}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: -0.63, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -6426,7 +6429,7 @@ Transform:
   m_GameObject: {fileID: 1948041338}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: -0.63, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

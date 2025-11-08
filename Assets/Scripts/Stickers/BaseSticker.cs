@@ -12,11 +12,12 @@ public class BaseSticker : MonoBehaviour
     public RouletteController controller;
 
     [Header("Placement")]
-    public bool isPlaced = false;
+    public bool isPlaced = false;          // true si está en un segmento de la ruleta
     public Transform currentSegment;
 
-    // bag slot tracking
-    public BagZone currentBagZone;
+    // Seguimiento de slots (AUTO)
+    [HideInInspector] public BagZone currentBagZone;        // slot auto de bag
+    [HideInInspector] public BagZone currentGameplayZone;   // slot auto de gameplay
 
     [Header("Validation Masks")]
     public LayerMask segmentMask;
@@ -64,7 +65,6 @@ public class BaseSticker : MonoBehaviour
     protected virtual void HandleDragging()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
-
         Vector2 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
 
         if (Input.GetMouseButtonDown(0))
@@ -80,7 +80,12 @@ public class BaseSticker : MonoBehaviour
                 originalRotation = root.rotation;
                 originalParent = root.parent;
 
-                BagManager.Instance?.FreeSlot(this);
+                // Liberar cualquier slot AUTO que tuviera
+                if (BagManager.Instance != null)
+                {
+                    BagManager.Instance.FreeBagSlot(this);
+                    BagManager.Instance.FreeGameplaySlot(this);
+                }
 
                 if (isPlaced)
                 {
@@ -92,8 +97,7 @@ public class BaseSticker : MonoBehaviour
                 offset = root.position - (Vector3)mouseWorld;
                 SetAlpha(0.6f);
 
-                if (controller)
-                    controller.SetInputBlocked(true);
+                if (controller) controller.SetInputBlocked(true);
             }
         }
 
@@ -106,13 +110,10 @@ public class BaseSticker : MonoBehaviour
                 HandleDrop();
                 isDragging = false;
 
-                if (controller)
-                    controller.SetInputBlocked(false);
-
+                if (controller) controller.SetInputBlocked(false);
                 SetAlpha(1f);
             }
         }
-
 #endif
     }
 
@@ -120,83 +121,96 @@ public class BaseSticker : MonoBehaviour
 
     private void HandleDrop()
     {
+        if (BagManager.Instance == null)
+        {
+            TryPlaceSticker();
+            return;
+        }
+
         Vector2 p = root.position;
 
-        // PORTAL → BAG
+        // PORTAL → BAG (auto-slot único)
         if (BagManager.Instance.IsPointOnBagPortal(p))
         {
-            BagZone slot = BagManager.Instance.FindFirstFreeSlot();
-
-            if (slot != null)
+            var free = BagManager.Instance.FindFirstFreeBagSlot();
+            if (free != null)
             {
-                BagManager.Instance.PlaceStickerInSlot_Auto(this, slot);
+                BagManager.Instance.PlaceStickerInBagSlot_Auto(this, free);
                 return;
             }
-
             ReturnToOrigin();
             return;
         }
 
-        // PORTAL → GAMEPLAY
+        // PORTAL → GAMEPLAY (auto-slot único)
         if (BagManager.Instance.IsPointOnGameplayPortal(p))
         {
-            BagManager.Instance.FreeSlot(this);
-
-            // devolver al gameplay contentRoot
-            root.SetParent(BagManager.Instance.gameplayContentRoot, true);
-
-            if (TryPlaceOnWheel(p))
+            var free = BagManager.Instance.FindFirstFreeGameplaySlot();
+            if (free != null)
             {
-                isPlaced = true;
+                BagManager.Instance.PlaceStickerInGameplaySlot_Auto(this, free);
                 return;
             }
-
-            // si no cabe en la ruleta
-            if (!BagManager.Instance.IsPointInsideGameplay(p))
-                root.position = BagManager.Instance.gameplayAreaCollider.bounds.center;
-
-            return;
-        }
-
-        // BAG SCREEN (SLOTS MANUALES)
-        if (BagManager.Instance.IsBagActive())
-        {
-            BagZone slot = BagManager.Instance.GetSlotAtPosition(p);
-
-            if (slot != null)
-            {
-                // manual placement allows multiple stickers
-                root.SetParent(slot.contentRoot, true);
-
-                // NO marcamos slot como ocupado
-                // porque este sticker NO es el autoSticker
-                currentBagZone = slot;
-
-                return;
-            }
-
             ReturnToOrigin();
             return;
         }
 
-        // GAMEPLAY SCREEN
-        if (BagManager.Instance.IsPointInsideGameplay(p))
+        // -------- BAG SCREEN: slots manuales (permiten varios)
+        if (BagManager.Instance.IsBagActive())
         {
-            if (TryPlaceOnWheel(p))
+            var slot = BagManager.Instance.GetBagSlotAtPosition(p);
+            if (slot != null)
+            {
+                if (BagManager.Instance.TryPlaceInSlotManual(this, slot, root.position))
+                    return;
+
+                // No hay sitio sin solapar en ese slot → volver
+                ReturnToOrigin();
                 return;
+            }
 
-            root.SetParent(BagManager.Instance.gameplayContentRoot, true);
-
-            Bounds b = BagManager.Instance.gameplayAreaCollider.bounds;
-            float x = Mathf.Clamp(root.position.x, b.min.x, b.max.x);
-            float y = Mathf.Clamp(root.position.y, b.min.y, b.max.y);
-
-            root.position = new Vector3(x, y, root.position.z);
-
+            // No ha caído en slot → volver
+            ReturnToOrigin();
             return;
         }
 
-        // fallback: try rueda
+        // -------- GAMEPLAY SCREEN
+        if (BagManager.Instance.IsPointInsideGameplay(p))
+        {
+            // 1) Si suelta sobre un slot de gameplay, intentamos colocarlo ahí primero (prioridad al slot)
+            var gSlot = BagManager.Instance.GetGameplaySlotAtPosition(p);
+            if (gSlot != null)
+            {
+                if (BagManager.Instance.TryPlaceInSlotManual(this, gSlot, root.position))
+                    return;
+
+                // Si no hay sitio libre en ese slot, probamos ruleta
+                if (TryPlaceOnWheel(p))
+                    return;
+
+                // Nada → clamp a gameplay area
+                root.SetParent(BagManager.Instance.gameplayContentRoot, true);
+                Bounds b = BagManager.Instance.gameplayAreaCollider.bounds;
+                float x = Mathf.Clamp(root.position.x, b.min.x, b.max.x);
+                float y = Mathf.Clamp(root.position.y, b.min.y, b.max.y);
+                root.position = new Vector3(x, y, root.position.z);
+                return;
+            }
+
+            // 2) Si NO está sobre un slot, intentamos la ruleta
+            if (TryPlaceOnWheel(p))
+                return;
+
+            // 3) Área libre de gameplay (clamp)
+            root.SetParent(BagManager.Instance.gameplayContentRoot, true);
+            Bounds b2 = BagManager.Instance.gameplayAreaCollider.bounds;
+            float x2 = Mathf.Clamp(root.position.x, b2.min.x, b2.max.x);
+            float y2 = Mathf.Clamp(root.position.y, b2.min.y, b2.max.y);
+            root.position = new Vector3(x2, y2, root.position.z);
+            return;
+        }
+
+        // Fallback original: intentar ruleta
         TryPlaceSticker();
     }
 
@@ -245,7 +259,6 @@ public class BaseSticker : MonoBehaviour
 
         Collider2D[] overlaps =
             Physics2D.OverlapCircleAll(worldPos, myCollider.bounds.extents.x * 0.9f, stickerMask);
-
         foreach (var o in overlaps)
         {
             if (o != myCollider)
