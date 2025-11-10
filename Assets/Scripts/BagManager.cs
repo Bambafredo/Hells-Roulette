@@ -11,9 +11,8 @@ public class BagManager : MonoBehaviour
     public GameObject gameplayScreen;
 
     // ---------------------------------------------------------
-    //          NUEVO SISTEMA MULTI-ÁREA DE GAMEPLAY
+    //          MULTI-ÁREA DE GAMEPLAY
     // ---------------------------------------------------------
-
     [System.Serializable]
     public class GameplayArea
     {
@@ -28,7 +27,6 @@ public class BagManager : MonoBehaviour
     // ---------------------------------------------------------
     //                     SISTEMA BAG
     // ---------------------------------------------------------
-
     [Header("Bag Area")]
     public Collider2D bagAreaCollider;
 
@@ -39,8 +37,7 @@ public class BagManager : MonoBehaviour
     [Header("Roots")]
     public Transform bagContentRoot;
 
-    // ¡OJO! gameplayContentRoot ya NO se usa como único root
-    // pero lo dejo para compatibilidad (por si algo aún lo referencia).
+    // Solo por compatibilidad con código viejo (no se usa como único root)
     public Transform gameplayContentRoot;
 
     [Header("Slots")]
@@ -51,7 +48,7 @@ public class BagManager : MonoBehaviour
     {
         Instance = this;
 
-        // Auto-descubrir slots si las listas están vacías
+        // Autodescubrir slots si listas vacías
         if (bagSlots.Count == 0 || gameplaySlots.Count == 0)
         {
             var allZones = FindObjectsOfType<BagZone>(true);
@@ -75,7 +72,6 @@ public class BagManager : MonoBehaviour
     }
 
     // ------------------ PORTAL INPUT ---------------------
-
     private void HandlePortalClicks()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
@@ -99,7 +95,6 @@ public class BagManager : MonoBehaviour
     }
 
     // ------------------ SCREEN SWITCH ---------------------
-
     public void SwitchToBag()
     {
         gameplayScreen.SetActive(false);
@@ -115,12 +110,9 @@ public class BagManager : MonoBehaviour
     public bool IsBagActive() => bagScreen != null && bagScreen.activeSelf;
 
     // ------------------ HELPERS ---------------------
-
     public bool IsPointInsideBag(Vector2 p)
         => bagAreaCollider != null && bagAreaCollider.OverlapPoint(p);
 
-    // ya no usamos gameplayAreaCollider único
-    // pero lo mantengo por compatibilidad
     public bool IsPointInsideGameplay(Vector2 p)
         => IsPointInsideAnyGameplayArea(p);
 
@@ -141,28 +133,20 @@ public class BagManager : MonoBehaviour
         );
     }
 
-    // ---------- MULTI-ÁREA: CLAMP REAL AL ÁREA CORRECTA ----------
-
+    // ---------- MULTI-ÁREA: CLAMP ----------
     public Vector3 ClampToGameplay(Vector3 p)
     {
         int idx = GetGameplayAreaIndexAtPoint(p);
         if (idx >= 0) return ClampToGameplay(p, idx);
-
-        // fallback: usa área 0 si existe
-        if (gameplayAreas.Count > 0)
-            return ClampToGameplay(p, 0);
-
+        if (gameplayAreas.Count > 0) return ClampToGameplay(p, 0);
         return p;
     }
 
     public Vector3 ClampToGameplay(Vector3 p, int areaIndex)
     {
-        if (areaIndex < 0 || areaIndex >= gameplayAreas.Count)
-            return p;
-
+        if (areaIndex < 0 || areaIndex >= gameplayAreas.Count) return p;
         var area = gameplayAreas[areaIndex];
-        if (area == null || area.areaCollider == null)
-            return p;
+        if (area == null || area.areaCollider == null) return p;
 
         Bounds b = area.areaCollider.bounds;
         return new Vector3(
@@ -172,8 +156,7 @@ public class BagManager : MonoBehaviour
         );
     }
 
-    // ---------- MULTI-ÁREA: DETECTAR QUÉ ÁREA ESTÁ BAJO UN PUNTO ----------
-
+    // ---------- MULTI-ÁREA: DETECCIÓN ----------
     public int GetGameplayAreaIndexAtPoint(Vector2 p)
     {
         for (int i = 0; i < gameplayAreas.Count; i++)
@@ -185,18 +168,14 @@ public class BagManager : MonoBehaviour
         return -1;
     }
 
-    // ---------- MULTI-ÁREA: ¿EL PUNTO ESTÁ EN ALGUNA ÁREA? ----------
-
     public bool IsPointInsideAnyGameplayArea(Vector2 p)
     {
         foreach (var area in gameplayAreas)
         {
             if (area == null || area.areaCollider == null) continue;
-            if (area.areaCollider.OverlapPoint(p))
-                return true;
+            if (area.areaCollider.OverlapPoint(p)) return true;
         }
 
-        // Los slots también cuentan como "área válida"
         foreach (var slot in gameplaySlots)
             if (slot != null && slot.zoneCollider != null && slot.zoneCollider.OverlapPoint(p))
                 return true;
@@ -205,7 +184,6 @@ public class BagManager : MonoBehaviour
     }
 
     // ------------------ SLOT QUERIES ---------------------
-
     public BagZone FindFirstFreeBagSlot()
     {
         foreach (var slot in bagSlots)
@@ -237,7 +215,6 @@ public class BagManager : MonoBehaviour
     }
 
     // ------------------ AUTO PLACE (portales) ---------------------
-
     public void PlaceStickerInBagSlot_Auto(BaseSticker s, BagZone slot)
     {
         if (s.currentBagZone != null)
@@ -279,7 +256,6 @@ public class BagManager : MonoBehaviour
     }
 
     // ------------------ FREE (al empezar drag) ---------------------
-
     public void FreeBagSlot(BaseSticker s)
     {
         if (s.currentBagZone != null)
@@ -300,8 +276,7 @@ public class BagManager : MonoBehaviour
         }
     }
 
-    // ---------- HELPERS PARA COLOCACIÓN MANUAL EN SLOTS ----------
-
+    // ---------- COLOCACIÓN MANUAL EN SLOTS ----------
     public bool TryPlaceInSlotManual(BaseSticker s, BagZone slot, Vector3 dropPos, int maxTries = 80)
     {
         if (slot == null || slot.zoneCollider == null) return false;
@@ -354,6 +329,63 @@ public class BagManager : MonoBehaviour
         return false;
     }
 
+    // ---------- NUEVO: COLOCACIÓN LIBRE EN ÁREA (sin solapar) ----------
+    public bool TryPlaceInGameplayAreaFree(BaseSticker s, Vector3 dropPos, int areaIndex, int maxTries = 100)
+    {
+        if (areaIndex < 0 || areaIndex >= gameplayAreas.Count) return false;
+        var area = gameplayAreas[areaIndex];
+        if (area == null || area.areaCollider == null || area.contentRoot == null) return false;
+
+        Transform selfRoot = s.transform.parent != null ? s.transform.parent : s.transform;
+
+        float r = ApproxRadius(s);
+        if (r <= 0f) r = 0.25f;
+
+        Bounds b = area.areaCollider.bounds;
+        Vector3 seed = new Vector3(
+            Mathf.Clamp(dropPos.x, b.min.x + r, b.max.x - r),
+            Mathf.Clamp(dropPos.y, b.min.y + r, b.max.y - r),
+            selfRoot.position.z
+        );
+
+        float stepR = Mathf.Max(r * 0.6f, 0.1f);
+        float stepA = 18f;
+        float maxRadius = Mathf.Min(b.extents.x, b.extents.y) - r;
+
+        var others = area.contentRoot.GetComponentsInChildren<Collider2D>(true);
+
+        int tries = 0;
+        for (float rad = 0f; rad <= maxRadius + 0.0001f; rad += stepR)
+        {
+            for (float a = 0; a < 360f; a += stepA)
+            {
+                if (tries++ > maxTries) break;
+
+                Vector3 candidate = new Vector3(
+                    seed.x + Mathf.Cos(a * Mathf.Deg2Rad) * rad,
+                    seed.y + Mathf.Sin(a * Mathf.Deg2Rad) * rad,
+                    selfRoot.position.z
+                );
+
+                // Dentro del collider del área con margen r
+                if (!PointInsideWithMargin(area.areaCollider, candidate, r))
+                    continue;
+
+                if (OverlapsAny(candidate, r, others, s, selfRoot))
+                    continue;
+
+                selfRoot.SetParent(area.contentRoot, true);
+                selfRoot.position = candidate;
+                selfRoot.rotation = Quaternion.identity;
+                return true;
+            }
+            if (tries > maxTries) break;
+        }
+
+        return false;
+    }
+
+    // ---------- HELPERS COMUNES ----------
     float ApproxRadius(BaseSticker s)
     {
         var c = s.GetComponent<Collider2D>();
@@ -376,6 +408,7 @@ public class BagManager : MonoBehaviour
         {
             if (o == null) continue;
 
+            // Ignorar nuestros propios colliders (mismo root)
             if (o.transform.IsChildOf(selfRoot))
                 continue;
 
