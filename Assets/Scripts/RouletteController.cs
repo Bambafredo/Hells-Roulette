@@ -30,11 +30,7 @@ public class RouletteController : MonoBehaviour
     public float extraDeceleration = 300f;
     public int bloodCostPerSecond = 1;
     private bool isBraking = false;
-
     private float bloodTimer = 0f;
-
-    public event Action OnSpinStart;
-    public event Action OnSpinEnd;
 
     private bool dragging = false;
     private float lastAngleDeg = 0f;
@@ -48,6 +44,9 @@ public class RouletteController : MonoBehaviour
 
     public bool SpinInProgress { get; private set; } = false;
 
+    public event Action OnSpinStart;
+    public event Action OnSpinEnd;
+
     public void SetInputBlocked(bool v)
     {
         inputBlocked = v;
@@ -59,6 +58,9 @@ public class RouletteController : MonoBehaviour
         ApplySpin();
     }
 
+    // ---------------------------------------------------------
+    // INPUT
+    // ---------------------------------------------------------
     void HandlePointer()
     {
         if (inputBlocked)
@@ -68,7 +70,7 @@ public class RouletteController : MonoBehaviour
         bool down, held, up;
         ReadPointer(out pos, out down, out held, out up);
 
-        // ✅ NUEVO: Si click en un portal → ignorar ruleta
+        // Nuevo: si presiona encima de un portal, NO interactúa con la ruleta
         if (BagManager.Instance != null)
         {
             if (BagManager.Instance.IsPointOnBagPortal(pos) ||
@@ -76,7 +78,7 @@ public class RouletteController : MonoBehaviour
                 return;
         }
 
-        // 🔴 Durante la tirada, solo frenar
+        // Si está girando: solo freno
         if (SpinInProgress)
         {
 #if UNITY_EDITOR || UNITY_STANDALONE
@@ -97,10 +99,13 @@ public class RouletteController : MonoBehaviour
             return;
         }
 
+        // --------------------------------------------
+        // INICIO DEL DRAG
+        // --------------------------------------------
         if (down)
         {
-            Vector2 mouseWorld = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-            if (Physics2D.OverlapPoint(mouseWorld, blockInputMask))
+            Vector2 world = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            if (Physics2D.OverlapPoint(world, blockInputMask))
                 return;
 
             if (Vector2.Distance(pos, (Vector2)wheel.position) >= minDragRadius)
@@ -112,10 +117,14 @@ public class RouletteController : MonoBehaviour
             }
         }
 
+        // --------------------------------------------
+        // DRAGGING
+        // --------------------------------------------
         if (held && dragging)
         {
             float currentAngle = WorldAngleFromCenter(pos);
             float delta = Mathf.DeltaAngle(lastAngleDeg, currentAngle);
+
             wheel.Rotate(0f, 0f, delta);
 
             float dt = Mathf.Max(0.0001f, Time.time - lastSampleTime);
@@ -128,13 +137,13 @@ public class RouletteController : MonoBehaviour
             instVel = Mathf.Clamp(instVel, -maxSpinSpeed, maxSpinSpeed);
             spinSpeed = Mathf.Lerp(spinSpeed, instVel, 1f - velocitySmoothing);
 
-            if (Mathf.Abs(spinSpeed) > maxSpinSpeed * 0.9f)
-                spinSpeed = Mathf.Lerp(spinSpeed, Mathf.Sign(spinSpeed) * maxSpinSpeed * 0.9f, 0.3f);
-
             lastAngleDeg = currentAngle;
             lastSampleTime = Time.time;
         }
 
+        // --------------------------------------------
+        // SUELTA
+        // --------------------------------------------
         if (up && dragging)
         {
             dragging = false;
@@ -150,7 +159,6 @@ public class RouletteController : MonoBehaviour
                 spinSpeed = Mathf.Clamp(weightedSpeed, -maxSpinSpeed, maxSpinSpeed);
 
                 startSegmentIndex = GetCurrentSegmentIndex();
-                Debug.Log($"🎬 Empieza la tirada. Segmento inicial: {startSegmentIndex}");
 
                 OnSpinStart?.Invoke();
                 SpinInProgress = true;
@@ -165,6 +173,7 @@ public class RouletteController : MonoBehaviour
         }
     }
 
+    // ---------------------------------------------------------
     void ReadPointer(out Vector2 worldPos, out bool down, out bool held, out bool up)
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
@@ -192,18 +201,22 @@ public class RouletteController : MonoBehaviour
         return Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
     }
 
+    // ---------------------------------------------------------
+    // SPIN PHYSICS
+    // ---------------------------------------------------------
     void ApplySpin()
     {
         if (!dragging && Mathf.Abs(spinSpeed) > 0.1f)
         {
             wheel.Rotate(0f, 0f, spinSpeed * Time.deltaTime);
+
             float adjustedDecel = deceleration / wheelWeight;
 
             if (enableBrake && isBraking && BloodManager.Instance != null)
             {
                 bloodTimer += Time.deltaTime;
-                bool hasBlood = BloodManager.Instance.currentBlood > 0;
 
+                bool hasBlood = BloodManager.Instance.currentBlood > 0;
                 if (hasBlood)
                 {
                     float interval = 1f / bloodCostPerSecond;
@@ -238,19 +251,24 @@ public class RouletteController : MonoBehaviour
             SpinInProgress = false;
 
             endSegmentIndex = GetCurrentSegmentIndex();
-            Debug.Log($"🏁 Tirada finalizada. Segmento ganador: {endSegmentIndex}");
 
             TriggerStickersOnWinningSegment();
         }
     }
 
+    // ---------------------------------------------------------
+    // SEGMENT DETECTION
+    // ---------------------------------------------------------
     int GetCurrentSegmentIndex()
     {
-        if (generator == null || wheel == null || flapperTip == null) return 0;
+        if (generator == null || wheel == null || flapperTip == null)
+            return 0;
+
         if (generator.segments == null || generator.segments.Count == 0)
             return GetCurrentSegmentIndexByAngle();
 
         Vector2 tip = flapperTip.position;
+
         foreach (var seg in generator.segments)
         {
             if (seg.collider != null && seg.collider.OverlapPoint(tip))
@@ -268,6 +286,7 @@ public class RouletteController : MonoBehaviour
         Vector3 local = wheel.InverseTransformPoint(flapperTip.position);
         float ang = Mathf.Atan2(local.y, local.x) * Mathf.Rad2Deg;
         if (ang < 0f) ang += 360f;
+
         ang = (ang - 90f + 360f) % 360f;
 
         float step = 360f / segs;
@@ -277,6 +296,9 @@ public class RouletteController : MonoBehaviour
 
     public float GetCurrentAngularVelocity() => spinSpeed;
 
+    // ---------------------------------------------------------
+    // STICKERS
+    // ---------------------------------------------------------
     void TriggerStickersOnWinningSegment()
     {
         if (generator == null || generator.segments == null) return;
@@ -290,7 +312,5 @@ public class RouletteController : MonoBehaviour
         var stickers = winningTransform.GetComponentsInChildren<BaseSticker>(true);
         foreach (var sticker in stickers)
             sticker.OnSegmentWin();
-
-        Debug.Log($"✨ {stickers.Length} stickers activados en el segmento {winningTransform.name}");
     }
 }

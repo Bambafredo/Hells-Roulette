@@ -52,6 +52,7 @@ public class SegmentMesh : MonoBehaviour
             var mat = new Material(Shader.Find("Sprites/Default"));
             mr.sharedMaterial = mat;
         }
+
         mr.sharedMaterial.color = color;
     }
 }

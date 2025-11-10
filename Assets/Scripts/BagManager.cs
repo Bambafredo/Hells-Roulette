@@ -10,9 +10,27 @@ public class BagManager : MonoBehaviour
     public GameObject bagScreen;
     public GameObject gameplayScreen;
 
-    [Header("Areas")]
+    // ---------------------------------------------------------
+    //          NUEVO SISTEMA MULTI-ÁREA DE GAMEPLAY
+    // ---------------------------------------------------------
+
+    [System.Serializable]
+    public class GameplayArea
+    {
+        public string name;
+        public Collider2D areaCollider;
+        public Transform contentRoot;
+    }
+
+    [Header("Gameplay Areas (MULTIPLE)")]
+    public List<GameplayArea> gameplayAreas = new List<GameplayArea>();     // NEW
+
+    // ---------------------------------------------------------
+    //                     SISTEMA BAG
+    // ---------------------------------------------------------
+
+    [Header("Bag Area")]
     public Collider2D bagAreaCollider;
-    public Collider2D gameplayAreaCollider;
 
     [Header("Portals")]
     public Collider2D bagPortalCollider;        // Gameplay → Bag
@@ -20,6 +38,9 @@ public class BagManager : MonoBehaviour
 
     [Header("Roots")]
     public Transform bagContentRoot;
+
+    // ¡OJO! gameplayContentRoot ya NO se usa como único root
+    // pero lo dejo para compatibilidad (por si algo aún lo referencia).
     public Transform gameplayContentRoot;
 
     [Header("Slots")]
@@ -30,17 +51,20 @@ public class BagManager : MonoBehaviour
     {
         Instance = this;
 
-        // Si el diseñador ya asignó los slots en el editor, no hacemos nada.
-        // Sólo autodescubrir si las listas están vacías (fallback).
+        // Auto-descubrir slots si las listas están vacías
         if (bagSlots.Count == 0 || gameplaySlots.Count == 0)
         {
             var allZones = FindObjectsOfType<BagZone>(true);
             foreach (var z in allZones)
             {
                 if (bagScreen != null && z.transform.IsChildOf(bagScreen.transform))
+                {
                     if (!bagSlots.Contains(z)) bagSlots.Add(z);
+                }
                 else if (gameplayScreen != null && z.transform.IsChildOf(gameplayScreen.transform))
+                {
                     if (!gameplaySlots.Contains(z)) gameplaySlots.Add(z);
+                }
             }
         }
     }
@@ -95,8 +119,10 @@ public class BagManager : MonoBehaviour
     public bool IsPointInsideBag(Vector2 p)
         => bagAreaCollider != null && bagAreaCollider.OverlapPoint(p);
 
+    // ya no usamos gameplayAreaCollider único
+    // pero lo mantengo por compatibilidad
     public bool IsPointInsideGameplay(Vector2 p)
-        => gameplayAreaCollider != null && gameplayAreaCollider.OverlapPoint(p);
+        => IsPointInsideAnyGameplayArea(p);
 
     public bool IsPointOnBagPortal(Vector2 p)
         => bagPortalCollider != null && bagPortalCollider.OverlapPoint(p);
@@ -115,15 +141,67 @@ public class BagManager : MonoBehaviour
         );
     }
 
+    // ---------- MULTI-ÁREA: CLAMP REAL AL ÁREA CORRECTA ----------
+
     public Vector3 ClampToGameplay(Vector3 p)
     {
-        if (gameplayAreaCollider == null) return p;
-        Bounds b = gameplayAreaCollider.bounds;
+        int idx = GetGameplayAreaIndexAtPoint(p);
+        if (idx >= 0) return ClampToGameplay(p, idx);
+
+        // fallback: usa área 0 si existe
+        if (gameplayAreas.Count > 0)
+            return ClampToGameplay(p, 0);
+
+        return p;
+    }
+
+    public Vector3 ClampToGameplay(Vector3 p, int areaIndex)
+    {
+        if (areaIndex < 0 || areaIndex >= gameplayAreas.Count)
+            return p;
+
+        var area = gameplayAreas[areaIndex];
+        if (area == null || area.areaCollider == null)
+            return p;
+
+        Bounds b = area.areaCollider.bounds;
         return new Vector3(
             Mathf.Clamp(p.x, b.min.x, b.max.x),
             Mathf.Clamp(p.y, b.min.y, b.max.y),
             p.z
         );
+    }
+
+    // ---------- MULTI-ÁREA: DETECTAR QUÉ ÁREA ESTÁ BAJO UN PUNTO ----------
+
+    public int GetGameplayAreaIndexAtPoint(Vector2 p)
+    {
+        for (int i = 0; i < gameplayAreas.Count; i++)
+        {
+            var area = gameplayAreas[i];
+            if (area != null && area.areaCollider != null && area.areaCollider.OverlapPoint(p))
+                return i;
+        }
+        return -1;
+    }
+
+    // ---------- MULTI-ÁREA: ¿EL PUNTO ESTÁ EN ALGUNA ÁREA? ----------
+
+    public bool IsPointInsideAnyGameplayArea(Vector2 p)
+    {
+        foreach (var area in gameplayAreas)
+        {
+            if (area == null || area.areaCollider == null) continue;
+            if (area.areaCollider.OverlapPoint(p))
+                return true;
+        }
+
+        // Los slots también cuentan como "área válida"
+        foreach (var slot in gameplaySlots)
+            if (slot != null && slot.zoneCollider != null && slot.zoneCollider.OverlapPoint(p))
+                return true;
+
+        return false;
     }
 
     // ------------------ SLOT QUERIES ---------------------
@@ -162,7 +240,6 @@ public class BagManager : MonoBehaviour
 
     public void PlaceStickerInBagSlot_Auto(BaseSticker s, BagZone slot)
     {
-        // Liberar slot anterior si existía
         if (s.currentBagZone != null)
         {
             s.currentBagZone.occupied = false;
@@ -197,7 +274,7 @@ public class BagManager : MonoBehaviour
         root.localPosition = Vector3.zero;
         root.localRotation = Quaternion.identity;
 
-        s.isPlaced = false;  // no está en ruleta
+        s.isPlaced = false;
         s.currentSegment = null;
     }
 
@@ -223,20 +300,17 @@ public class BagManager : MonoBehaviour
         }
     }
 
-    // ---------- HELPERS PARA COLOCACIÓN MANUAL EN SLOTS (sin solaparse) ----------
+    // ---------- HELPERS PARA COLOCACIÓN MANUAL EN SLOTS ----------
 
     public bool TryPlaceInSlotManual(BaseSticker s, BagZone slot, Vector3 dropPos, int maxTries = 80)
     {
         if (slot == null || slot.zoneCollider == null) return false;
 
-        // Root del sticker según tu jerarquía (el "padre" contenedor)
         Transform selfRoot = s.transform.parent != null ? s.transform.parent : s.transform;
 
-        // Radio de seguridad aproximado desde su collider
         float r = ApproxRadius(s);
-        if (r <= 0f) r = 0.25f; // fallback
+        if (r <= 0f) r = 0.25f;
 
-        // Centro inicial: clamp dentro del bounds del slot
         Bounds b = slot.zoneCollider.bounds;
         Vector3 seed = new Vector3(
             Mathf.Clamp(dropPos.x, b.min.x + r, b.max.x - r),
@@ -244,12 +318,10 @@ public class BagManager : MonoBehaviour
             selfRoot.position.z
         );
 
-        // Búsqueda espiral
         float stepR = Mathf.Max(r * 0.6f, 0.1f);
-        float stepA = 18f; // grados
+        float stepA = 18f;
         float maxRadius = Mathf.Min(b.extents.x, b.extents.y) - r;
 
-        // Colliders actuales dentro del slot (de otros stickers)
         var others = slot.contentRoot.GetComponentsInChildren<Collider2D>(true);
 
         int tries = 0;
@@ -273,7 +345,7 @@ public class BagManager : MonoBehaviour
 
                 selfRoot.SetParent(slot.contentRoot, true);
                 selfRoot.position = candidate;
-                selfRoot.rotation = Quaternion.identity; // sin giro en slot
+                selfRoot.rotation = Quaternion.identity;
                 return true;
             }
             if (tries > maxTries) break;
@@ -298,39 +370,23 @@ public class BagManager : MonoBehaviour
                 p.y >= b.min.y + margin && p.y <= b.max.y - margin);
     }
 
-    // *** ARREGLO CLAVE: sólo ignoramos el PROPIO sticker (su root), no a sus hermanos ***
     bool OverlapsAny(Vector3 candidate, float r, Collider2D[] others, BaseSticker self, Transform selfRoot)
     {
         foreach (var o in others)
         {
             if (o == null) continue;
 
-            // Ignorar colliders que pertenezcan al mismo sticker (mismo root)
             if (o.transform.IsChildOf(selfRoot))
                 continue;
 
-            // Si el collider no pertenece a ningún sticker, lo ignoramos (por ejemplo decoraciones)
             var otherSticker = o.GetComponentInParent<BaseSticker>();
             if (otherSticker == null) continue;
 
-            // Distancia centro a centro con radio aproximado del otro
             float d = Vector2.Distance(candidate, o.bounds.center);
             float ro = Mathf.Max(o.bounds.extents.x, o.bounds.extents.y);
             if (d < (r + ro) * 0.98f)
                 return true;
         }
-        return false;
-    }
-    public bool IsPointInsideAnyGameplayArea(Vector2 p)
-    {
-        if (gameplayAreaCollider != null && gameplayAreaCollider.OverlapPoint(p))
-            return true;
-
-        // Cualquier BagZone de gameplay cuenta como “área de gameplay”
-        foreach (var slot in gameplaySlots)
-            if (slot != null && slot.zoneCollider != null && slot.zoneCollider.OverlapPoint(p))
-                return true;
-
         return false;
     }
 }

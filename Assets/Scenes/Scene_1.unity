@@ -2652,8 +2652,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   bagScreen: {fileID: 917612633}
   gameplayScreen: {fileID: 1595519882}
+  gameplayAreas:
+  - name: GameplayArea_1
+    areaCollider: {fileID: 1958939435}
+    contentRoot: {fileID: 1099505660}
+  - name: GameplayArea_2
+    areaCollider: {fileID: 836167152}
+    contentRoot: {fileID: 1948041339}
+  - name: GameplayArea_3
+    areaCollider: {fileID: 860441222}
+    contentRoot: {fileID: 346694833}
   bagAreaCollider: {fileID: 666598718}
-  gameplayAreaCollider: {fileID: 1958939435}
   bagPortalCollider: {fileID: 2110517320}
   gameplayPortalCollider: {fileID: 1309564428}
   bagContentRoot: {fileID: 178776834}

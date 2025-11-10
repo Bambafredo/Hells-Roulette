@@ -28,9 +28,12 @@ public class WheelGenerator : MonoBehaviour
     public bool pinsAreTriggers = true;
     public string pinsParentName = "Pins";
 
-    // 🔸 Lista de segmentos accesible para la ruleta
-    [HideInInspector] public List<WheelSegmentData> segments = new List<WheelSegmentData>();
+    [HideInInspector]
+    public List<WheelSegmentData> segments = new List<WheelSegmentData>();
 
+    // --------------------------------------------------------------------
+    // GENERATE WHEEL
+    // --------------------------------------------------------------------
     [ContextMenu("Generate Wheel")]
     public void GenerateWheel()
     {
@@ -41,23 +44,27 @@ public class WheelGenerator : MonoBehaviour
         Transform segmentsRoot = new GameObject("Segments").transform;
         segmentsRoot.SetParent(transform, false);
 
-        // 🔹 Obtener capas (si existen)
+        // Layers opcionales
         int segmentLayer = LayerMask.NameToLayer("Segment");
         int pinLayer = LayerMask.NameToLayer("Pin");
 
 #if UNITY_EDITOR
         if (segmentLayer == -1)
-            Debug.LogWarning("⚠️ No existe la capa 'Segment'. Créala manualmente desde Project Settings > Tags & Layers.");
+            Debug.LogWarning("⚠️ Layer 'Segment' no existe. No pasa nada, pero deberías crearla.");
         if (pinLayer == -1)
-            Debug.LogWarning("⚠️ No existe la capa 'Pin'. Créala manualmente desde Project Settings > Tags & Layers.");
+            Debug.LogWarning("⚠️ Layer 'Pin' no existe. No pasa nada, pero deberías crearla.");
 #endif
 
+        // ------------------------------------------------------------
+        // CREAR SEGMENTOS
+        // ------------------------------------------------------------
         for (int i = 0; i < segmentCount; i++)
         {
             GameObject seg = new GameObject($"Segment_{i}");
             seg.transform.SetParent(segmentsRoot, false);
             seg.transform.localRotation = Quaternion.Euler(0, 0, -i * step);
 
+            // Mesh
             var mf = seg.AddComponent<MeshFilter>();
             var mr = seg.AddComponent<MeshRenderer>();
             var sm = seg.AddComponent<SegmentMesh>();
@@ -71,11 +78,15 @@ public class WheelGenerator : MonoBehaviour
             mr.sortingLayerName = sortingLayerName;
             mr.sortingOrder = sortingOrder;
 
-            // Crear collider del segmento
+            // ------------------------------------------------------------
+            // Collider del segmento
+            // ------------------------------------------------------------
             PolygonCollider2D poly = seg.AddComponent<PolygonCollider2D>();
             poly.isTrigger = true;
 
-            List<Vector2> pts = new List<Vector2> { Vector2.zero };
+            List<Vector2> pts = new List<Vector2>();
+            pts.Add(Vector2.zero);
+
             int res = Mathf.Max(3, meshResolution);
             for (int k = 0; k <= res; k++)
             {
@@ -83,68 +94,98 @@ public class WheelGenerator : MonoBehaviour
                 float a = Mathf.Deg2Rad * (t * step);
                 pts.Add(new Vector2(Mathf.Cos(a) * radius, Mathf.Sin(a) * radius));
             }
+
             poly.SetPath(0, pts.ToArray());
 
-            // 🔹 Asignar capa "Segment"
+            // Asignar capa segment
             if (segmentLayer != -1)
                 seg.layer = segmentLayer;
 
-            segments.Add(new WheelSegmentData { index = i, collider = poly });
+            segments.Add(new WheelSegmentData
+            {
+                index = i,
+                collider = poly
+            });
         }
 
+        // ------------------------------------------------------------
+        // GENERAR PINS
+        // ------------------------------------------------------------
         if (generatePins)
             GeneratePins(step, pinLayer);
     }
 
+    // --------------------------------------------------------------------
+    // GENERATE PINS
+    // --------------------------------------------------------------------
     void GeneratePins(float step, int pinLayer)
     {
         Transform old = transform.Find(pinsParentName);
-        if (old != null) DestroyImmediate(old.gameObject);
+        if (old != null)
+        {
+#if UNITY_EDITOR
+            DestroyImmediate(old.gameObject);
+#else
+            Destroy(old.gameObject);
+#endif
+        }
 
         Transform pinsRoot = new GameObject(pinsParentName).transform;
         pinsRoot.SetParent(transform, false);
 
         float useRadius = radius + pinRadiusOffset;
+
         for (int i = 0; i < segmentCount; i++)
         {
             float angleDeg = i * step;
             float rad = angleDeg * Mathf.Deg2Rad;
-            Vector3 pos = new Vector3(Mathf.Cos(rad) * useRadius, Mathf.Sin(rad) * useRadius, 0f);
+
+            Vector3 pos = new Vector3(
+                Mathf.Cos(rad) * useRadius,
+                Mathf.Sin(rad) * useRadius,
+                0f
+            );
 
             GameObject pin = new GameObject($"Pin_{i}");
             pin.transform.SetParent(pinsRoot, false);
             pin.transform.localPosition = pos;
             pin.transform.localRotation = Quaternion.Euler(0, 0, -angleDeg);
 
-            var bc = pin.AddComponent<BoxCollider2D>();
+            BoxCollider2D bc = pin.AddComponent<BoxCollider2D>();
             bc.size = pinSize;
             bc.isTrigger = pinsAreTriggers;
 
-            // 🔹 Asignar capa "Pin"
             if (pinLayer != -1)
                 pin.layer = pinLayer;
         }
     }
 
+    // --------------------------------------------------------------------
+    // HELPERS
+    // --------------------------------------------------------------------
     public int GetSegmentUnderPoint(Vector2 worldPoint)
     {
-        foreach (var seg in segments)
+        foreach (WheelSegmentData seg in segments)
         {
-            if (seg.collider == null) continue;
-            if (seg.collider.OverlapPoint(worldPoint))
+            if (seg.collider != null && seg.collider.OverlapPoint(worldPoint))
                 return seg.index;
         }
 
-        // fallback angular si algo falla
-        if (segments.Count == 0) return 0;
-        return 0;
+        if (segments.Count == 0)
+            return 0;
+
+        return 0; // fallback
     }
 
     void Start()
     {
-        if (regenerateOnPlay) GenerateWheel();
+        if (regenerateOnPlay)
+            GenerateWheel();
     }
 
+    // --------------------------------------------------------------------
+    // CLEANUP
+    // --------------------------------------------------------------------
     void ClearChildren()
     {
 #if UNITY_EDITOR
@@ -155,10 +196,12 @@ public class WheelGenerator : MonoBehaviour
         }
         else
         {
-            foreach (Transform t in transform) Destroy(t.gameObject);
+            foreach (Transform t in transform)
+                Destroy(t.gameObject);
         }
 #else
-        foreach (Transform t in transform) Destroy(t.gameObject);
+        foreach (Transform t in transform)
+            Destroy(t.gameObject);
 #endif
     }
 }
