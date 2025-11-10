@@ -328,6 +328,71 @@ public class BagManager : MonoBehaviour
 
         return false;
     }
+        // ---------------------------------------------------------------------
+    //      MANUAL PLACE EN GAMEPLAY AREA (SIN SLOTS, MULTIPLE STICKERS)
+    // ---------------------------------------------------------------------
+    public bool TryPlaceInGameplayAreaManual(BaseSticker s, int areaIndex, Vector3 dropPos, int maxTries = 80)
+    {
+        if (areaIndex < 0 || areaIndex >= gameplayAreas.Count)
+            return false;
+
+        var area = gameplayAreas[areaIndex];
+        if (area == null || area.areaCollider == null || area.contentRoot == null)
+            return false;
+
+        Transform selfRoot = s.transform.parent != null ? s.transform.parent : s.transform;
+
+        float r = ApproxRadius(s);
+        if (r <= 0f) r = 0.25f;
+
+        Bounds b = area.areaCollider.bounds;
+
+        // punto inicial (clamped) para empezar la búsqueda
+        Vector3 seed = new Vector3(
+            Mathf.Clamp(dropPos.x, b.min.x + r, b.max.x - r),
+            Mathf.Clamp(dropPos.y, b.min.y + r, b.max.y - r),
+            selfRoot.position.z
+        );
+
+        float stepR = Mathf.Max(r * 0.6f, 0.1f);
+        float stepA = 18f;
+        float maxRadius = Mathf.Min(b.extents.x, b.extents.y) - r;
+
+        // recoger colliders de stickers ya puestos en esa área
+        var others = area.contentRoot.GetComponentsInChildren<Collider2D>(true);
+
+        int tries = 0;
+        for (float rad = 0f; rad <= maxRadius + 0.0001f; rad += stepR)
+        {
+            for (float a = 0; a < 360f; a += stepA)
+            {
+                if (tries++ > maxTries) break;
+
+                Vector3 candidate = new Vector3(
+                    seed.x + Mathf.Cos(a * Mathf.Deg2Rad) * rad,
+                    seed.y + Mathf.Sin(a * Mathf.Deg2Rad) * rad,
+                    selfRoot.position.z
+                );
+
+                // 1. Debe quedar dentro del area
+                if (!PointInsideWithMargin(area.areaCollider, candidate, r))
+                    continue;
+
+                // 2. Debe evitar solapes
+                if (OverlapsAny(candidate, r, others, s, selfRoot))
+                    continue;
+
+                // SUCCESS
+                selfRoot.SetParent(area.contentRoot, true);
+                selfRoot.position = candidate;
+                selfRoot.rotation = Quaternion.identity;
+                return true;
+            }
+            if (tries > maxTries) break;
+        }
+
+        return false;
+    }
 
     // ---------- NUEVO: COLOCACIÓN LIBRE EN ÁREA (sin solapar) ----------
     public bool TryPlaceInGameplayAreaFree(BaseSticker s, Vector3 dropPos, int areaIndex, int maxTries = 100)
