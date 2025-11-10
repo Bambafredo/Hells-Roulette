@@ -55,10 +55,6 @@ public class BaseSticker : MonoBehaviour
     protected virtual void Update()
     {
         HandleDragging();
-
-        // Si está en ruleta, seguir la rotación del segmento
-        if (isPlaced && currentSegment != null)
-            root.rotation = currentSegment.rotation;
     }
 
     // ---------------- DRAG -----------------------
