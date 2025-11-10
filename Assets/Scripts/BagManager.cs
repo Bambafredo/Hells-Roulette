@@ -487,4 +487,44 @@ public class BagManager : MonoBehaviour
         }
         return false;
     }
+    public int FindFirstEmptyGameplayArea()
+    {
+        for (int i = 0; i < gameplayAreas.Count; i++)
+        {
+            var area = gameplayAreas[i];
+            if (area == null || area.contentRoot == null) continue;
+
+            // Si no hay stickers dentro, está libre
+            if (area.contentRoot.childCount == 0)
+                return i;
+        }
+
+        // Todas llenas
+        return -1;
+    }
+    public void PlaceStickerInGameplayArea_Auto(BaseSticker s, int areaIndex)
+    {
+        if (areaIndex < 0 || areaIndex >= gameplayAreas.Count) return;
+
+        var area = gameplayAreas[areaIndex];
+        if (area == null || area.contentRoot == null) return;
+
+        Transform stickerRoot = s.transform.parent != null ? s.transform.parent : s.transform;
+
+        // 1) Parent directo al contentRoot SIN mantener offsets
+        stickerRoot.SetParent(area.contentRoot, false);
+
+        // 2) Posicionar EXACTAMENTE en el centro del contentRoot
+        stickerRoot.localPosition = Vector3.zero;
+
+        // 3) Por si quieres clamping, pero desde el propio centro
+        Vector3 worldPos = stickerRoot.position;
+        Vector3 clamped = ClampToGameplay(worldPos, areaIndex);
+        stickerRoot.position = new Vector3(clamped.x, clamped.y, stickerRoot.position.z);
+
+        // 4) Reset flags del sticker
+        s.isPlaced = false;
+        s.currentSegment = null;
+        s.currentGameplayZone = null;
+    }
 }

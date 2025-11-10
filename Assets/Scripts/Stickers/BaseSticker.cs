@@ -143,12 +143,15 @@ public class BaseSticker : MonoBehaviour
         // PORTAL → GAMEPLAY (auto-slot único)
         if (BagManager.Instance.IsPointOnGameplayPortal(p))
         {
-            var free = BagManager.Instance.FindFirstFreeGameplaySlot();
-            if (free != null)
+            int targetArea = BagManager.Instance.FindFirstEmptyGameplayArea();
+
+            if (targetArea >= 0)
             {
-                BagManager.Instance.PlaceStickerInGameplaySlot_Auto(this, free);
+                BagManager.Instance.PlaceStickerInGameplayArea_Auto(this, targetArea);
                 return;
             }
+
+            // Si todas las áreas están ocupadas, movimiento inválido
             ReturnToOrigin();
             return;
         }
