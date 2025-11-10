@@ -22,7 +22,7 @@ public class BagManager : MonoBehaviour
     }
 
     [Header("Gameplay Areas (MULTIPLE)")]
-    public List<GameplayArea> gameplayAreas = new List<GameplayArea>();     // NEW
+    public List<GameplayArea> gameplayAreas = new List<GameplayArea>();
 
     // ---------------------------------------------------------
     //                     SISTEMA BAG
@@ -328,7 +328,8 @@ public class BagManager : MonoBehaviour
 
         return false;
     }
-        // ---------------------------------------------------------------------
+
+    // ---------------------------------------------------------------------
     //      MANUAL PLACE EN GAMEPLAY AREA (SIN SLOTS, MULTIPLE STICKERS)
     // ---------------------------------------------------------------------
     public bool TryPlaceInGameplayAreaManual(BaseSticker s, int areaIndex, Vector3 dropPos, int maxTries = 80)
@@ -450,6 +451,68 @@ public class BagManager : MonoBehaviour
         return false;
     }
 
+    // ---------- NUEVO: ENVIAR DESDE BAG AL SIGUIENTE GAMEPLAY AREA VACÍO ----------
+    public bool PlaceStickerInNextEmptyGameplayArea_FromBag(BaseSticker s, int startIndex = 0)
+    {
+        if (gameplayAreas == null || gameplayAreas.Count == 0) return false;
+
+        Transform stickerRoot = s.transform.parent != null ? s.transform.parent : s.transform;
+
+        int n = gameplayAreas.Count;
+        for (int k = 0; k < n; k++)
+        {
+            int i = (startIndex + k) % n;
+            var area = gameplayAreas[i];
+            if (area == null || area.contentRoot == null) continue;
+
+            if (ContentRootHasAnySticker(area.contentRoot, exclude: s) == false)
+            {
+                // Liberar flags de auto-slot si los hubiera
+                if (s.currentBagZone != null)
+                {
+                    s.currentBagZone.occupied = false;
+                    s.currentBagZone.autoSticker = null;
+                    s.currentBagZone = null;
+                }
+                if (s.currentGameplayZone != null)
+                {
+                    s.currentGameplayZone.occupied = false;
+                    s.currentGameplayZone.autoSticker = null;
+                    s.currentGameplayZone = null;
+                }
+
+                // Parent al CONTENT ROOT (¡no tocamos el contentRoot!)
+                stickerRoot.SetParent(area.contentRoot, true);
+                stickerRoot.localPosition = Vector3.zero;
+                stickerRoot.localRotation = Quaternion.identity;
+
+                s.isPlaced = false;
+                s.currentSegment = null;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Devuelve true si en ese contentRoot hay algún sticker distinto de "exclude"
+    private bool ContentRootHasAnySticker(Transform contentRoot, BaseSticker exclude)
+    {
+        if (contentRoot == null) return false;
+
+        var stickers = contentRoot.GetComponentsInChildren<BaseSticker>(true);
+        foreach (var bs in stickers)
+        {
+            if (bs == null) continue;
+            if (bs == exclude) continue;
+
+            // Contamos por ROOT de cada sticker (porque tu BaseSticker va en un hijo)
+            Transform bsRoot = bs.transform.parent != null ? bs.transform.parent : bs.transform;
+            if (bsRoot != null && bsRoot.IsChildOf(contentRoot))
+                return true;
+        }
+        return false;
+    }
+
     // ---------- HELPERS COMUNES ----------
     float ApproxRadius(BaseSticker s)
     {
@@ -486,45 +549,5 @@ public class BagManager : MonoBehaviour
                 return true;
         }
         return false;
-    }
-    public int FindFirstEmptyGameplayArea()
-    {
-        for (int i = 0; i < gameplayAreas.Count; i++)
-        {
-            var area = gameplayAreas[i];
-            if (area == null || area.contentRoot == null) continue;
-
-            // Si no hay stickers dentro, está libre
-            if (area.contentRoot.childCount == 0)
-                return i;
-        }
-
-        // Todas llenas
-        return -1;
-    }
-    public void PlaceStickerInGameplayArea_Auto(BaseSticker s, int areaIndex)
-    {
-        if (areaIndex < 0 || areaIndex >= gameplayAreas.Count) return;
-
-        var area = gameplayAreas[areaIndex];
-        if (area == null || area.contentRoot == null) return;
-
-        Transform stickerRoot = s.transform.parent != null ? s.transform.parent : s.transform;
-
-        // 1) Parent directo al contentRoot SIN mantener offsets
-        stickerRoot.SetParent(area.contentRoot, false);
-
-        // 2) Posicionar EXACTAMENTE en el centro del contentRoot
-        stickerRoot.localPosition = Vector3.zero;
-
-        // 3) Por si quieres clamping, pero desde el propio centro
-        Vector3 worldPos = stickerRoot.position;
-        Vector3 clamped = ClampToGameplay(worldPos, areaIndex);
-        stickerRoot.position = new Vector3(clamped.x, clamped.y, stickerRoot.position.z);
-
-        // 4) Reset flags del sticker
-        s.isPlaced = false;
-        s.currentSegment = null;
-        s.currentGameplayZone = null;
     }
 }
