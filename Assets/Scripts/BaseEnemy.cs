@@ -39,7 +39,10 @@ public class BaseEnemy : MonoBehaviour
     {
         if (isDead) return;
 
-        // Si sigue vivo al terminar la tirada, daña al jugador
+        // Animación de ataque
+        StartCoroutine(AttackAnimation());
+
+        // Daño al jugador
         if (BloodManager.Instance != null)
         {
             BloodManager.Instance.ConsumeBlood(damageToPlayer);
@@ -60,7 +63,7 @@ public class BaseEnemy : MonoBehaviour
             Die();
     }
 
-    // 💥 Efecto visual de golpe (opcional)
+    // 💥 Efecto visual de golpe
     private IEnumerator HitFlash()
     {
         if (sprite != null)
@@ -70,6 +73,38 @@ public class BaseEnemy : MonoBehaviour
             yield return new WaitForSeconds(0.1f);
             sprite.color = original;
         }
+    }
+
+    // 👊 Nueva animación: ataque con pequeño zoom in / zoom out
+    private IEnumerator AttackAnimation()
+    {
+        Transform t = transform;
+
+        Vector3 original = t.localScale;
+        Vector3 big = original * 1.12f;  // Zoom pequeño pero contundente
+
+        float speed = 0.1f;
+
+        // Zoom-in
+        float timer = 0f;
+        while (timer < speed)
+        {
+            t.localScale = Vector3.Lerp(original, big, timer / speed);
+            timer += Time.deltaTime;
+            yield return null;
+        }
+        t.localScale = big;
+
+        // Zoom-out
+        timer = 0f;
+        while (timer < speed)
+        {
+            t.localScale = Vector3.Lerp(big, original, timer / speed);
+            timer += Time.deltaTime;
+            yield return null;
+        }
+
+        t.localScale = original;
     }
 
     private void Die()

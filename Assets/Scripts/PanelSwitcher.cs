@@ -5,32 +5,55 @@ using UnityEngine;
 public class PanelSwitcher : MonoBehaviour
 {
     [Header("Panels")]
-    public GameObject stickerSlotsPanel;   // Sticker_Slots
-    public GameObject enemyPanel;          // Enemy_Panel
+    public GameObject stickerSlotsPanel;
+    public GameObject enemyPanel;
 
     [Header("Icons")]
-    public SpriteRenderer iconEnemyPanel;      // Icono que muestra "ir al panel enemigo"
-    public SpriteRenderer iconStickerSlots;    // Icono que muestra "volver a stickers"
+    public SpriteRenderer iconShowEnemies;    // aparece cuando el panel actual es el de stickers
+    public SpriteRenderer iconShowStickers;   // aparece cuando el panel actual es el de enemigos
 
-    private Camera cam;
+    [Header("Input")]
+    public Collider2D switchCollider;   // el BoxCollider2D del propio botón
 
-    private void Awake()
+    private RouletteController controller;
+
+    void Start()
     {
-        cam = Camera.main;
+        controller = FindObjectOfType<RouletteController>();
 
-        // Asegurarse de que el estado inicial esté actualizado
-        UpdateIcons();
+        if (controller != null)
+        {
+            controller.OnSpinStart += HandleSpinStart;
+            controller.OnSpinEnd += HandleSpinEnd;
+        }
+
+        // Estado inicial → mostramos Sticker Slots
+        ShowStickerSlots();
     }
 
-    private void Update()
+    private void OnDestroy()
+    {
+        if (controller != null)
+        {
+            controller.OnSpinStart -= HandleSpinStart;
+            controller.OnSpinEnd -= HandleSpinEnd;
+        }
+    }
+
+    // ---------------------------------------------------------
+    //       CLICK EN EL PANEL SWITCHER (solo si no hay spin)
+    // ---------------------------------------------------------
+    void Update()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
         if (Input.GetMouseButtonDown(0))
         {
-            Vector2 pos = cam.ScreenToWorldPoint(Input.mousePosition);
+            if (controller != null && controller.SpinInProgress)
+                return; // 🔒 Bloqueado mientras la ruleta gira
 
-            // Si el click está sobre este objeto
-            if (GetComponent<Collider2D>().OverlapPoint(pos))
+            Vector2 pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+
+            if (switchCollider != null && switchCollider.OverlapPoint(pos))
             {
                 TogglePanels();
             }
@@ -38,26 +61,51 @@ public class PanelSwitcher : MonoBehaviour
 #endif
     }
 
-    private void TogglePanels()
+    // ---------------------------------------------------------
+    //                SPIN EVENTS
+    // ---------------------------------------------------------
+    private void HandleSpinStart()
     {
-        bool stickersActive = stickerSlotsPanel.activeSelf;
+        // Durante la tirada → siempre mostramos enemigos
+        ShowEnemyPanel();
 
-        // Alternar paneles
-        stickerSlotsPanel.SetActive(!stickersActive);
-        enemyPanel.SetActive(stickersActive);
-
-        // Actualizar iconos
-        UpdateIcons();
+        // Bloquear visual del botón si quieres (opcional)
+        if (iconShowEnemies != null) iconShowEnemies.enabled = false;
+        if (iconShowStickers != null) iconShowStickers.enabled = true;
     }
 
-    private void UpdateIcons()
+    private void HandleSpinEnd()
     {
-        bool stickersActive = stickerSlotsPanel.activeSelf;
+        // Al terminar la tirada, NO cambiamos nada.
+        // Enemy panel sigue visible hasta que el jugador lo cambie manualmente.
+    }
 
-        // Si están los stickers → mostrar icono para cambiar al EnemyPanel
-        iconEnemyPanel.enabled = stickersActive;
+    // ---------------------------------------------------------
+    //                PANEL MANAGEMENT
+    // ---------------------------------------------------------
+    private void TogglePanels()
+    {
+        if (enemyPanel.activeSelf)
+            ShowStickerSlots();
+        else
+            ShowEnemyPanel();
+    }
 
-        // Si está el EnemyPanel → mostrar icono para volver a StickerSlots
-        iconStickerSlots.enabled = !stickersActive;
+    private void ShowStickerSlots()
+    {
+        stickerSlotsPanel.SetActive(true);
+        enemyPanel.SetActive(false);
+
+        if (iconShowEnemies != null) iconShowEnemies.enabled = true;
+        if (iconShowStickers != null) iconShowStickers.enabled = false;
+    }
+
+    private void ShowEnemyPanel()
+    {
+        stickerSlotsPanel.SetActive(false);
+        enemyPanel.SetActive(true);
+
+        if (iconShowEnemies != null) iconShowEnemies.enabled = false;
+        if (iconShowStickers != null) iconShowStickers.enabled = true;
     }
 }

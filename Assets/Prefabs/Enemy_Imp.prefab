@@ -166,7 +166,7 @@ MonoBehaviour:
   maxHP: 10
   damageToPlayer: 10
   hpText: {fileID: 4695612484063555935}
-  sprite: {fileID: 0}
+  sprite: {fileID: 8621462763584552993}
 --- !u!1 &9009554841982820289
 GameObject:
   m_ObjectHideFlags: 0

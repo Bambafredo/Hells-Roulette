@@ -992,8 +992,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   stickerSlotsPanel: {fileID: 149807662}
   enemyPanel: {fileID: 476912394}
-  iconEnemyPanel: {fileID: 737069202}
-  iconStickerSlots: {fileID: 1272747665}
+  iconShowEnemies: {fileID: 737069202}
+  iconShowStickers: {fileID: 1272747665}
+  switchCollider: {fileID: 300028124}
 --- !u!1 &330587630
 GameObject:
   m_ObjectHideFlags: 0
