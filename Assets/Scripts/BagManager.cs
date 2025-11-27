@@ -122,6 +122,24 @@ public class BagManager : MonoBehaviour
     public bool IsPointOnGameplayPortal(Vector2 p)
         => gameplayPortalCollider != null && gameplayPortalCollider.OverlapPoint(p);
 
+    private bool SlotHasAnySticker(BagZone slot, BaseSticker exclude = null)
+    {
+        if (slot == null || slot.contentRoot == null)
+            return false;
+
+        var stickers = slot.contentRoot.GetComponentsInChildren<BaseSticker>(true);
+
+        foreach (var st in stickers)
+        {
+            if (st == null) continue;
+            if (st == exclude) continue;
+
+            return true; // slot contiene algo
+        }
+
+        return false;
+    }
+
     public Vector3 ClampToBag(Vector3 p)
     {
         if (bagAreaCollider == null) return p;
@@ -187,7 +205,10 @@ public class BagManager : MonoBehaviour
     public BagZone FindFirstFreeBagSlot()
     {
         foreach (var slot in bagSlots)
-            if (!slot.occupied) return slot;
+        {
+            if (!SlotHasAnySticker(slot))
+                return slot;
+        }
         return null;
     }
 
@@ -217,12 +238,18 @@ public class BagManager : MonoBehaviour
     // ------------------ AUTO PLACE (portales) ---------------------
     public void PlaceStickerInBagSlot_Auto(BaseSticker s, BagZone slot)
     {
+        // NO AUTOPLACEAR si ya hay stickers dentro
+        if (SlotHasAnySticker(slot, exclude: s))
+            return;
+
+        // Limpieza de flags previos
         if (s.currentBagZone != null)
         {
             s.currentBagZone.occupied = false;
             s.currentBagZone.autoSticker = null;
         }
 
+        // Marcamos este slot como ocupado automáticamente
         slot.occupied = true;
         slot.autoSticker = s;
         s.currentBagZone = slot;
@@ -231,6 +258,7 @@ public class BagManager : MonoBehaviour
         root.SetParent(slot.contentRoot, false);
         root.localPosition = Vector3.zero;
         root.localRotation = Quaternion.identity;
+
         s.isPlaced = true;
     }
 
