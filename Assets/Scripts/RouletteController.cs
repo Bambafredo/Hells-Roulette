@@ -58,9 +58,6 @@ public class RouletteController : MonoBehaviour
         ApplySpin();
     }
 
-    // ---------------------------------------------------------
-    // INPUT
-    // ---------------------------------------------------------
     void HandlePointer()
     {
         if (inputBlocked)
@@ -70,7 +67,6 @@ public class RouletteController : MonoBehaviour
         bool down, held, up;
         ReadPointer(out pos, out down, out held, out up);
 
-        // Nuevo: si presiona encima de un portal, NO interactúa con la ruleta
         if (BagManager.Instance != null)
         {
             if (BagManager.Instance.IsPointOnBagPortal(pos) ||
@@ -78,7 +74,6 @@ public class RouletteController : MonoBehaviour
                 return;
         }
 
-        // Si está girando: solo freno
         if (SpinInProgress)
         {
 #if UNITY_EDITOR || UNITY_STANDALONE
@@ -99,9 +94,6 @@ public class RouletteController : MonoBehaviour
             return;
         }
 
-        // --------------------------------------------
-        // INICIO DEL DRAG
-        // --------------------------------------------
         if (down)
         {
             Vector2 world = Camera.main.ScreenToWorldPoint(Input.mousePosition);
@@ -117,9 +109,6 @@ public class RouletteController : MonoBehaviour
             }
         }
 
-        // --------------------------------------------
-        // DRAGGING
-        // --------------------------------------------
         if (held && dragging)
         {
             float currentAngle = WorldAngleFromCenter(pos);
@@ -141,9 +130,6 @@ public class RouletteController : MonoBehaviour
             lastSampleTime = Time.time;
         }
 
-        // --------------------------------------------
-        // SUELTA
-        // --------------------------------------------
         if (up && dragging)
         {
             dragging = false;
@@ -161,6 +147,8 @@ public class RouletteController : MonoBehaviour
                 startSegmentIndex = GetCurrentSegmentIndex();
 
                 OnSpinStart?.Invoke();
+                RoundManager.Instance?.NotifySpinStart();
+
                 SpinInProgress = true;
                 bloodTimer = 0f;
             }
@@ -173,7 +161,6 @@ public class RouletteController : MonoBehaviour
         }
     }
 
-    // ---------------------------------------------------------
     void ReadPointer(out Vector2 worldPos, out bool down, out bool held, out bool up)
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
@@ -201,9 +188,6 @@ public class RouletteController : MonoBehaviour
         return Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
     }
 
-    // ---------------------------------------------------------
-    // SPIN PHYSICS
-    // ---------------------------------------------------------
     void ApplySpin()
     {
         if (!dragging && Mathf.Abs(spinSpeed) > 0.1f)
@@ -247,7 +231,11 @@ public class RouletteController : MonoBehaviour
         else if (!dragging && wasMoving && Mathf.Abs(spinSpeed) <= 0.1f)
         {
             wasMoving = false;
-            OnSpinEnd?.Invoke();
+
+            // ORDEN CORRECTO
+            RoundManager.Instance?.NotifySpinEnd();  // primero evalúa ronda
+            OnSpinEnd?.Invoke();                      // luego enemigo reacciona
+
             SpinInProgress = false;
 
             endSegmentIndex = GetCurrentSegmentIndex();
@@ -256,9 +244,6 @@ public class RouletteController : MonoBehaviour
         }
     }
 
-    // ---------------------------------------------------------
-    // SEGMENT DETECTION
-    // ---------------------------------------------------------
     int GetCurrentSegmentIndex()
     {
         if (generator == null || wheel == null || flapperTip == null)
@@ -296,9 +281,6 @@ public class RouletteController : MonoBehaviour
 
     public float GetCurrentAngularVelocity() => spinSpeed;
 
-    // ---------------------------------------------------------
-    // STICKERS
-    // ---------------------------------------------------------
     void TriggerStickersOnWinningSegment()
     {
         if (generator == null || generator.segments == null) return;

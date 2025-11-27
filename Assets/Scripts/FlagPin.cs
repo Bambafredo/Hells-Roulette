@@ -5,18 +5,28 @@ using UnityEngine;
 public class FlagPin : BaseFlagPin
 {
     [Header("Rewards")]
-    [Tooltip("Cantidad de dinero que otorga este pin al ser golpeado durante una tirada activa.")]
     public int moneyReward = 1;
+
+    [Header("Round Logic")]
+    public RoundManager roundManager;
+
+    protected override void Awake()
+    {
+        base.Awake();
+
+        if (roundManager == null)
+            roundManager = FindObjectOfType<RoundManager>();
+    }
 
     public override void RegisterHit()
     {
         base.RegisterHit();
 
-        // 💵 Solo sumar dinero si la ruleta está girando
-        if (controller != null && controller.SpinInProgress && CurrencyManager.Instance != null)
-        {
-            CurrencyManager.Instance.AddDollar(moneyReward);
-            Debug.Log($"💰 +{moneyReward}$ (Total: {CurrencyManager.Instance.dollars})");
-        }
+        if (controller == null || CurrencyManager.Instance == null)
+            return;
+
+        CurrencyManager.Instance.AddPending(moneyReward);
+
+        Debug.Log($"💰 Pending +{moneyReward} (pending total: {CurrencyManager.Instance.pendingDollars})");
     }
 }

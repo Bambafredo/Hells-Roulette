@@ -16,6 +16,13 @@ public class StickerEffect : ScriptableObject
 
     public virtual void ApplyEffect()
     {
+        // Si hay RoundManager y la última tirada NO es válida, no damos recompensa
+        if (RoundManager.Instance != null && !RoundManager.Instance.WasLastSpinValid)
+        {
+            Debug.Log($"Sticker '{stickerName}' no otorga recompensa: ronda no válida.");
+            return;
+        }
+
         if (CurrencyManager.Instance != null && dollarReward != 0)
         {
             CurrencyManager.Instance.AddDollar(dollarReward);

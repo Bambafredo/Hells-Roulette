@@ -10,11 +10,11 @@ public class BaseFlagPin : MonoBehaviour
     public bool isPlaced = false;
 
     [Header("References")]
-    public Round1Manager round;
+    public RoundManager round;
     public RouletteController controller;
 
     [Header("Safety")]
-    public float selfMinInterval = 0.07f; // micro-seguro local
+    public float selfMinInterval = 0.07f;
 
     protected Camera cam;
     protected bool isDragging = false;
@@ -24,11 +24,18 @@ public class BaseFlagPin : MonoBehaviour
     protected virtual void Awake()
     {
         cam = Camera.main;
+
         if (wheelCenter == null)
         {
             var w = GameObject.Find("Wheel");
             if (w) wheelCenter = w.transform;
         }
+
+        if (controller == null)
+            controller = FindObjectOfType<RouletteController>();
+
+        if (round == null)
+            round = FindObjectOfType<RoundManager>();
     }
 
     protected virtual void Update()
@@ -68,14 +75,11 @@ public class BaseFlagPin : MonoBehaviour
             if (wheelCenter != null)
                 UpdateOrientation();
 
-            if (wheelCenter != null)
+            Collider2D wheelCol = wheelCenter.GetComponent<CircleCollider2D>();
+            if (wheelCol && wheelCol.OverlapPoint(mouseWorld))
             {
-                Collider2D wheelCol = wheelCenter.GetComponent<Collider2D>();
-                if (wheelCol && wheelCol.OverlapPoint(mouseWorld))
-                {
-                    PlaceOnWheel();
-                    return;
-                }
+                PlaceOnWheel();
+                return;
             }
 
             if (Input.GetMouseButtonUp(0))
@@ -107,6 +111,7 @@ public class BaseFlagPin : MonoBehaviour
         transform.position = wheelCenter.position + (Vector3)dir * radius;
 
         UpdateOrientation();
+
         Debug.Log($"📍 {name} clavado correctamente en la rueda");
     }
 
@@ -118,7 +123,6 @@ public class BaseFlagPin : MonoBehaviour
         transform.rotation = Quaternion.Euler(0, 0, ang + 90f);
     }
 
-    // ✅ Versión segura y tipada (usa tu Round1Manager)
     public virtual void RegisterHit()
     {
         if (Time.time - _lastHitTime < selfMinInterval) return;

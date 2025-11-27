@@ -11,8 +11,8 @@ public class BaseEnemy : MonoBehaviour
     public int damageToPlayer = 1;
 
     [Header("References")]
-    public TextMeshPro hpText;        // Número encima del sprite
-    public SpriteRenderer sprite;     // Para efectos visuales opcionales
+    public TextMeshPro hpText;
+    public SpriteRenderer sprite;
 
     private int currentHP;
     private bool isDead = false;
@@ -34,15 +34,19 @@ public class BaseEnemy : MonoBehaviour
             roulette.OnSpinEnd -= OnSpinEnd;
     }
 
-    // 🔔 Cuando termina la tirada
     private void OnSpinEnd()
     {
         if (isDead) return;
 
-        // Animación de ataque
+        if (RoundManager.Instance != null &&
+            !RoundManager.Instance.WasLastSpinValid)
+        {
+            Debug.Log($"⚠️ {enemyName} NO ataca (ronda no válida).");
+            return;
+        }
+
         StartCoroutine(AttackAnimation());
 
-        // Daño al jugador
         if (BloodManager.Instance != null)
         {
             BloodManager.Instance.ConsumeBlood(damageToPlayer);
@@ -50,7 +54,6 @@ public class BaseEnemy : MonoBehaviour
         }
     }
 
-    // ⚔️ Recibir daño
     public void TakeDamage(int dmg)
     {
         if (isDead) return;
@@ -63,7 +66,6 @@ public class BaseEnemy : MonoBehaviour
             Die();
     }
 
-    // 💥 Efecto visual de golpe
     private IEnumerator HitFlash()
     {
         if (sprite != null)
@@ -75,17 +77,15 @@ public class BaseEnemy : MonoBehaviour
         }
     }
 
-    // 👊 Nueva animación: ataque con pequeño zoom in / zoom out
     private IEnumerator AttackAnimation()
     {
         Transform t = transform;
 
         Vector3 original = t.localScale;
-        Vector3 big = original * 1.12f;  // Zoom pequeño pero contundente
+        Vector3 big = original * 1.12f;
 
         float speed = 0.1f;
 
-        // Zoom-in
         float timer = 0f;
         while (timer < speed)
         {
@@ -95,7 +95,6 @@ public class BaseEnemy : MonoBehaviour
         }
         t.localScale = big;
 
-        // Zoom-out
         timer = 0f;
         while (timer < speed)
         {
