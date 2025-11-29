@@ -7,12 +7,17 @@ public class WheelSegmentData
 {
     public int index;
     public PolygonCollider2D collider;
+    public SegmentMesh meshComponent;
 }
 
 public class WheelGenerator : MonoBehaviour
 {
     [Header("Segments")]
     [Range(2, 36)] public int segmentCount = 8;
+
+    [Tooltip("Ángulos individuales de cada segmento (en grados).")]
+    public List<float> segmentAngles = new List<float>();
+
     [Min(0.1f)] public float radius = 2.5f;
     [Min(3)] public int meshResolution = 20;
 
@@ -31,57 +36,114 @@ public class WheelGenerator : MonoBehaviour
     [HideInInspector]
     public List<WheelSegmentData> segments = new List<WheelSegmentData>();
 
-    // --------------------------------------------------------------------
-    // GENERATE WHEEL
-    // --------------------------------------------------------------------
+    // =====================================================================
+    // NORMALIZACIÓN DE ÁNGULOS = SIEMPRE 360º
+    // =====================================================================
+    void NormalizeAngles()
+    {
+        if (segmentAngles == null) segmentAngles = new List<float>();
+
+        // Si el tamaño de la lista no coincide con el número de segmentos, la reseteamos
+        if (segmentAngles.Count != segmentCount)
+        {
+            segmentAngles.Clear();
+            float def = 360f / segmentCount;
+            for (int i = 0; i < segmentCount; i++)
+                segmentAngles.Add(def);
+            return;
+        }
+
+        float sum = 0f;
+        foreach (var a in segmentAngles) sum += a;
+
+        // Si ya suman 360 (con tolerancia), no tocamos nada
+        if (Mathf.Abs(sum - 360f) < 0.01f)
+            return;
+
+        // Reescalamos proporcionalmente
+        float correction = 360f / sum;
+        for (int i = 0; i < segmentAngles.Count; i++)
+            segmentAngles[i] *= correction;
+    }
+
+    // =====================================================================
+    // SCALE SEGMENT
+    // =====================================================================
+    public void ScaleSegmentAngle(int index, float factor)
+    {
+        if (index < 0 || index >= segmentAngles.Count) return;
+
+        segmentAngles[index] *= factor;
+        NormalizeAngles();
+        GenerateWheel();
+    }
+
+    // =====================================================================
+    // MAIN GENERATION
+    // =====================================================================
     [ContextMenu("Generate Wheel")]
     public void GenerateWheel()
     {
-        ClearChildren();
+        NormalizeAngles();
+
+        ForceDestroyChildren();
         segments.Clear();
 
-        float step = 360f / segmentCount;
-        Transform segmentsRoot = new GameObject("Segments").transform;
-        segmentsRoot.SetParent(transform, false);
+        Transform root = new GameObject("Segments").transform;
+        root.SetParent(transform, false);
 
-        // Layers opcionales
         int segmentLayer = LayerMask.NameToLayer("Segment");
         int pinLayer = LayerMask.NameToLayer("Pin");
 
-#if UNITY_EDITOR
-        if (segmentLayer == -1)
-            Debug.LogWarning("⚠️ Layer 'Segment' no existe. No pasa nada, pero deberías crearla.");
-        if (pinLayer == -1)
-            Debug.LogWarning("⚠️ Layer 'Pin' no existe. No pasa nada, pero deberías crearla.");
-#endif
+        float angleStart = 0f; // ángulo acumulado (inicio del segmento actual)
 
-        // ------------------------------------------------------------
-        // CREAR SEGMENTOS
-        // ------------------------------------------------------------
         for (int i = 0; i < segmentCount; i++)
         {
-            GameObject seg = new GameObject($"Segment_{i}");
-            seg.transform.SetParent(segmentsRoot, false);
-            seg.transform.localRotation = Quaternion.Euler(0, 0, -i * step);
+            float angle = segmentAngles[i];
 
-            // Mesh
-            var mf = seg.AddComponent<MeshFilter>();
-            var mr = seg.AddComponent<MeshRenderer>();
-            var sm = seg.AddComponent<SegmentMesh>();
+            GameObject segGO = new GameObject("Segment_" + i);
+            segGO.transform.SetParent(root, false);
 
+            // ❗ AQUÍ EL CAMBIO IMPORTANTE: ROTAMOS EN POSITIVO
+            segGO.transform.localRotation = Quaternion.Euler(0, 0, angleStart);
+
+            // ------------------------
+            // MESH FILTER
+            // ------------------------
+            MeshFilter mf = segGO.GetComponent<MeshFilter>();
+            if (mf == null)
+                mf = segGO.AddComponent<MeshFilter>();
+
+            // ------------------------
+            // MESH RENDERER
+            // ------------------------
+            MeshRenderer mr = segGO.GetComponent<MeshRenderer>();
+            if (mr == null)
+                mr = segGO.AddComponent<MeshRenderer>();
+
+            // ------------------------
+            // SEGMENT MESH
+            // ------------------------
+            SegmentMesh sm = segGO.GetComponent<SegmentMesh>();
+            if (sm == null)
+                sm = segGO.AddComponent<SegmentMesh>();
+
+            sm.angle = angle;
             sm.radius = radius;
-            sm.angle = step;
             sm.resolution = meshResolution;
-            sm.color = Color.HSVToRGB((float)i / segmentCount, 0.85f, 1f);
+            sm.color = Color.HSVToRGB(i / (float)segmentCount, 0.85f, 1f);
             sm.GenerateMesh();
 
             mr.sortingLayerName = sortingLayerName;
             mr.sortingOrder = sortingOrder;
 
-            // ------------------------------------------------------------
-            // Collider del segmento
-            // ------------------------------------------------------------
-            PolygonCollider2D poly = seg.AddComponent<PolygonCollider2D>();
+            // ------------------------
+            // COLLIDER
+            // ------------------------
+            PolygonCollider2D poly = segGO.GetComponent<PolygonCollider2D>();
+            if (poly == null)
+                poly = segGO.AddComponent<PolygonCollider2D>();
+
             poly.isTrigger = true;
 
             List<Vector2> pts = new List<Vector2>();
@@ -91,117 +153,90 @@ public class WheelGenerator : MonoBehaviour
             for (int k = 0; k <= res; k++)
             {
                 float t = k / (float)res;
-                float a = Mathf.Deg2Rad * (t * step);
+                float a = t * angle * Mathf.Deg2Rad;
                 pts.Add(new Vector2(Mathf.Cos(a) * radius, Mathf.Sin(a) * radius));
             }
 
             poly.SetPath(0, pts.ToArray());
 
-            // Asignar capa segment
             if (segmentLayer != -1)
-                seg.layer = segmentLayer;
+                segGO.layer = segmentLayer;
 
             segments.Add(new WheelSegmentData
             {
                 index = i,
-                collider = poly
+                collider = poly,
+                meshComponent = sm
             });
+
+            angleStart += angle;
         }
 
-        // ------------------------------------------------------------
-        // GENERAR PINS
-        // ------------------------------------------------------------
-        if (generatePins)
-            GeneratePins(step, pinLayer);
+        if (generatePins) GeneratePins(pinLayer);
     }
 
-    // --------------------------------------------------------------------
-    // GENERATE PINS
-    // --------------------------------------------------------------------
-    void GeneratePins(float step, int pinLayer)
+    // =====================================================================
+    // GENERAR PINS AL CENTRO DE CADA SEGMENTO
+    // =====================================================================
+    void GeneratePins(int pinLayer)
     {
         Transform old = transform.Find(pinsParentName);
         if (old != null)
-        {
-#if UNITY_EDITOR
             DestroyImmediate(old.gameObject);
-#else
-            Destroy(old.gameObject);
-#endif
-        }
 
         Transform pinsRoot = new GameObject(pinsParentName).transform;
         pinsRoot.SetParent(transform, false);
 
-        float useRadius = radius + pinRadiusOffset;
+        float angleAccum = 0f;
+        float r = radius + pinRadiusOffset;
 
         for (int i = 0; i < segmentCount; i++)
         {
-            float angleDeg = i * step;
-            float rad = angleDeg * Mathf.Deg2Rad;
+            float mid = angleAccum + segmentAngles[i] * 0.5f;
+            float rad = mid * Mathf.Deg2Rad;
 
-            Vector3 pos = new Vector3(
-                Mathf.Cos(rad) * useRadius,
-                Mathf.Sin(rad) * useRadius,
-                0f
-            );
+            Vector3 pos = new Vector3(Mathf.Cos(rad) * r, Mathf.Sin(rad) * r, 0f);
 
-            GameObject pin = new GameObject($"Pin_{i}");
+            GameObject pin = new GameObject("Pin_" + i);
             pin.transform.SetParent(pinsRoot, false);
             pin.transform.localPosition = pos;
-            pin.transform.localRotation = Quaternion.Euler(0, 0, -angleDeg);
+
+            // También en positivo para que “mire” hacia afuera coherentemente
+            pin.transform.localRotation = Quaternion.Euler(0, 0, mid);
 
             BoxCollider2D bc = pin.AddComponent<BoxCollider2D>();
-            bc.size = pinSize;
             bc.isTrigger = pinsAreTriggers;
+            bc.size = pinSize;
 
             if (pinLayer != -1)
                 pin.layer = pinLayer;
+
+            angleAccum += segmentAngles[i];
         }
     }
 
-    // --------------------------------------------------------------------
-    // HELPERS
-    // --------------------------------------------------------------------
-    public int GetSegmentUnderPoint(Vector2 worldPoint)
+    // =====================================================================
+    // DESTROY CHILDREN (EDIT Y PLAY)
+    // =====================================================================
+    void ForceDestroyChildren()
     {
-        foreach (WheelSegmentData seg in segments)
+        List<Transform> toDestroy = new List<Transform>();
+        foreach (Transform t in transform)
+            toDestroy.Add(t);
+
+        foreach (var t in toDestroy)
         {
-            if (seg.collider != null && seg.collider.OverlapPoint(worldPoint))
-                return seg.index;
+#if UNITY_EDITOR
+            DestroyImmediate(t.gameObject);
+#else
+            Destroy(t.gameObject);
+#endif
         }
-
-        if (segments.Count == 0)
-            return 0;
-
-        return 0; // fallback
     }
 
     void Start()
     {
         if (regenerateOnPlay)
             GenerateWheel();
-    }
-
-    // --------------------------------------------------------------------
-    // CLEANUP
-    // --------------------------------------------------------------------
-    void ClearChildren()
-    {
-#if UNITY_EDITOR
-        if (!Application.isPlaying)
-        {
-            while (transform.childCount > 0)
-                DestroyImmediate(transform.GetChild(0).gameObject);
-        }
-        else
-        {
-            foreach (Transform t in transform)
-                Destroy(t.gameObject);
-        }
-#else
-        foreach (Transform t in transform)
-            Destroy(t.gameObject);
-#endif
     }
 }
