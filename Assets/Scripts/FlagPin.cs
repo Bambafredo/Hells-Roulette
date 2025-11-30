@@ -10,12 +10,32 @@ public class FlagPin : BaseFlagPin
     [Header("Round Logic")]
     public RoundManager roundManager;
 
+    // --------------------------------------------
+    // NUEVO: guardar posición y rotación original
+    // --------------------------------------------
+    [HideInInspector] public Vector3 originalPosition;
+    [HideInInspector] public Quaternion originalRotation;
+    [HideInInspector] public Transform originalParent;
+
     protected override void Awake()
     {
         base.Awake();
 
         if (roundManager == null)
             roundManager = FindObjectOfType<RoundManager>();
+
+        // Guardamos su posición real al empezar
+        originalPosition = transform.position;
+        originalRotation = transform.rotation;
+        originalParent = transform.parent;
+    }
+
+    // Este método lo usará WheelGenerator al restaurarlo
+    public void RestoreToOriginal()
+    {
+        transform.SetParent(originalParent, true);
+        transform.position = originalPosition;
+        transform.rotation = originalRotation;
     }
 
     public override void RegisterHit()

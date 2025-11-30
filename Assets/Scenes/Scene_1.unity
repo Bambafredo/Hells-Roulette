@@ -1014,6 +1014,37 @@ MonoBehaviour:
   iconShowEnemies: {fileID: 737069202}
   iconShowStickers: {fileID: 1272747665}
   switchCollider: {fileID: 300028124}
+--- !u!1 &316292564
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 316292565}
+  m_Layer: 0
+  m_Name: DynamicStickerContainer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &316292565
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 316292564}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1075813795}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &330587630
 GameObject:
   m_ObjectHideFlags: 0
@@ -3566,6 +3597,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1971410562}
+  - {fileID: 316292565}
   - {fileID: 1915987787}
   - {fileID: 934489006}
   m_Father: {fileID: 1595519883}
@@ -7706,6 +7738,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   segmentCount: 6
+  segmentAngles: []
   radius: 2.5
   meshResolution: 20
   regenerateOnPlay: 1
@@ -7716,19 +7749,26 @@ MonoBehaviour:
   pinSize: {x: 0.08, y: 0.3}
   pinsAreTriggers: 1
   pinsParentName: Pins
+  dynamicStickerContainer: {fileID: 316292565}
   segments:
   - index: 0
     collider: {fileID: 1269127760}
+    meshComponent: {fileID: 0}
   - index: 1
     collider: {fileID: 1522350729}
+    meshComponent: {fileID: 0}
   - index: 2
     collider: {fileID: 60537292}
+    meshComponent: {fileID: 0}
   - index: 3
     collider: {fileID: 1633382973}
+    meshComponent: {fileID: 0}
   - index: 4
     collider: {fileID: 1009172660}
+    meshComponent: {fileID: 0}
   - index: 5
     collider: {fileID: 482484559}
+    meshComponent: {fileID: 0}
 --- !u!58 &1971410564
 CircleCollider2D:
   m_ObjectHideFlags: 0
