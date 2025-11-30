@@ -33,23 +33,35 @@ public class WheelGenerator : MonoBehaviour
     public bool pinsAreTriggers = true;
     public string pinsParentName = "Pins";
 
-    [Header("Sticker Handling")]
-    public Transform dynamicStickerContainer;   // Asignado por ti en editor
+    [Header("Runtime Stickers")]
+    [Tooltip("Contenedor fuera de la rueda donde aparcamos stickers al regenerar.")]
+    public Transform dynamicStickerContainer;
+
+    [Tooltip("Referencia al FlagPin para NO destruirlo al regenerar.")]
+    public FlagPin flagPin;
 
     [HideInInspector]
     public List<WheelSegmentData> segments = new List<WheelSegmentData>();
 
-    // Para restaurar el pin correctamente
-    private FlagPin cachedFlagPin;
+    // ------------------------------------------------------------
+    // Info temporal para restaurar stickers tras regenerar
+    // ------------------------------------------------------------
+    private struct StickerRegenInfo
+    {
+        public Transform root;       // root del prefab de sticker (GO vacío de arriba del todo)
+        public int segmentIndex;     // índice de segmento donde estaba
+    }
 
-    // ================================================================
-    // NORMALIZACIÓN DE ÁNGULOS
-    // ================================================================
+    private readonly List<StickerRegenInfo> stickerRegenInfos = new List<StickerRegenInfo>();
+
+    // =====================================================================
+    // NORMALIZACIÓN DE ÁNGULOS = SIEMPRE 360º
+    // =====================================================================
     void NormalizeAngles()
     {
-        if (segmentAngles == null) 
-            segmentAngles = new List<float>();
+        if (segmentAngles == null) segmentAngles = new List<float>();
 
+        // Si el tamaño de la lista no coincide con el número de segmentos, la reseteamos
         if (segmentAngles.Count != segmentCount)
         {
             segmentAngles.Clear();
@@ -62,17 +74,19 @@ public class WheelGenerator : MonoBehaviour
         float sum = 0f;
         foreach (var a in segmentAngles) sum += a;
 
+        // Si ya suman 360 (con tolerancia), no tocamos nada
         if (Mathf.Abs(sum - 360f) < 0.01f)
             return;
 
+        // Reescalamos proporcionalmente
         float correction = 360f / sum;
         for (int i = 0; i < segmentAngles.Count; i++)
             segmentAngles[i] *= correction;
     }
 
-    // ================================================================
-    // ESCALAR ÁNGULO
-    // ================================================================
+    // =====================================================================
+    // SCALE SEGMENT
+    // =====================================================================
     public void ScaleSegmentAngle(int index, float factor)
     {
         if (index < 0 || index >= segmentAngles.Count) return;
@@ -82,102 +96,21 @@ public class WheelGenerator : MonoBehaviour
         GenerateWheel();
     }
 
-    // ================================================================
-    // PRESERVAR STICKERS
-    // ================================================================
-    struct StickerBackup
-    {
-        public BaseSticker sticker;
-        public Transform root;
-        public Vector3 position;
-        public Quaternion rotation;
-        public Transform segment; // null si no estaba colocado
-    }
-
-    List<StickerBackup> PreserveStickerRoots()
-    {
-        List<StickerBackup> list = new List<StickerBackup>();
-
-        if (dynamicStickerContainer == null)
-        {
-            Debug.LogError("❌ DynamicStickerContainer no asignado.");
-            return list;
-        }
-
-        BaseSticker[] stickers = FindObjectsOfType<BaseSticker>(true);
-
-        foreach (var s in stickers)
-        {
-            Transform r = (s.transform.parent != null) ? s.transform.parent : s.transform;
-
-            list.Add(new StickerBackup
-            {
-                sticker = s,
-                root = r,
-                position = r.position,
-                rotation = r.rotation,
-                segment = s.currentSegment
-            });
-
-            // Sacar stickers del Wheel
-            r.SetParent(dynamicStickerContainer, true);
-        }
-
-        return list;
-    }
-
-    void RestoreStickersAfterGeneration(List<StickerBackup> list)
-    {
-        foreach (var entry in list)
-        {
-            if (entry.sticker == null || entry.root == null)
-                continue;
-
-            entry.root.position = entry.position;
-            entry.root.rotation = entry.rotation;
-
-            if (entry.segment != null)
-            {
-                entry.root.SetParent(entry.segment, true);
-                entry.sticker.currentSegment = entry.segment;
-                entry.sticker.isPlaced = true;
-            }
-            else
-            {
-                entry.root.SetParent(dynamicStickerContainer, true);
-                entry.sticker.currentSegment = null;
-                entry.sticker.isPlaced = false;
-            }
-        }
-    }
-
-    // ================================================================
-    // GENERAR RULETA
-    // ================================================================
+    // =====================================================================
+    // MAIN GENERATION
+    // =====================================================================
     [ContextMenu("Generate Wheel")]
     public void GenerateWheel()
     {
         NormalizeAngles();
 
-        if (dynamicStickerContainer == null)
-        {
-            Debug.LogError("⛔ dynamicStickerContainer no está asignado en el inspector.");
-            return;
-        }
+        // 1) Guardar stickers y flagpin ANTES de destruir la rueda actual
+        SaveStickersBeforeGeneration();
 
-        // Guardar referencia al FlagPin
-        if (cachedFlagPin == null)
-            cachedFlagPin = FindObjectOfType<FlagPin>();
-
-        // Sacar FlagPin antes de destruir la ruleta
-        if (cachedFlagPin != null)
-            cachedFlagPin.transform.SetParent(dynamicStickerContainer, true);
-
-        // Guardar stickers
-        List<StickerBackup> preserved = PreserveStickerRoots();
-
-        // Destruir ruleta
+        // 2) Destruir hijos actuales (segmentos, pins, etc), respetando el FlagPin
         ForceDestroyChildren();
+
+        // 3) Limpiar y regenerar segmentos nuevos
         segments.Clear();
 
         Transform root = new GameObject("Segments").transform;
@@ -186,7 +119,7 @@ public class WheelGenerator : MonoBehaviour
         int segmentLayer = LayerMask.NameToLayer("Segment");
         int pinLayer = LayerMask.NameToLayer("Pin");
 
-        float angleStart = 0f;
+        float angleStart = 0f; // ángulo acumulado (inicio del segmento actual)
 
         for (int i = 0; i < segmentCount; i++)
         {
@@ -194,11 +127,30 @@ public class WheelGenerator : MonoBehaviour
 
             GameObject segGO = new GameObject("Segment_" + i);
             segGO.transform.SetParent(root, false);
+
+            // Rotamos en sentido positivo
             segGO.transform.localRotation = Quaternion.Euler(0, 0, angleStart);
 
-            MeshFilter mf = segGO.AddComponent<MeshFilter>();
-            MeshRenderer mr = segGO.AddComponent<MeshRenderer>();
-            SegmentMesh sm = segGO.AddComponent<SegmentMesh>();
+            // ------------------------
+            // MESH FILTER
+            // ------------------------
+            MeshFilter mf = segGO.GetComponent<MeshFilter>();
+            if (mf == null)
+                mf = segGO.AddComponent<MeshFilter>();
+
+            // ------------------------
+            // MESH RENDERER
+            // ------------------------
+            MeshRenderer mr = segGO.GetComponent<MeshRenderer>();
+            if (mr == null)
+                mr = segGO.AddComponent<MeshRenderer>();
+
+            // ------------------------
+            // SEGMENT MESH
+            // ------------------------
+            SegmentMesh sm = segGO.GetComponent<SegmentMesh>();
+            if (sm == null)
+                sm = segGO.AddComponent<SegmentMesh>();
 
             sm.angle = angle;
             sm.radius = radius;
@@ -209,7 +161,13 @@ public class WheelGenerator : MonoBehaviour
             mr.sortingLayerName = sortingLayerName;
             mr.sortingOrder = sortingOrder;
 
-            PolygonCollider2D poly = segGO.AddComponent<PolygonCollider2D>();
+            // ------------------------
+            // COLLIDER
+            // ------------------------
+            PolygonCollider2D poly = segGO.GetComponent<PolygonCollider2D>();
+            if (poly == null)
+                poly = segGO.AddComponent<PolygonCollider2D>();
+
             poly.isTrigger = true;
 
             List<Vector2> pts = new List<Vector2>();
@@ -238,25 +196,207 @@ public class WheelGenerator : MonoBehaviour
             angleStart += angle;
         }
 
-        if (generatePins)
-            GeneratePins(pinLayer);
+        // 4) Generar pins
+        if (generatePins) GeneratePins(pinLayer);
 
-        // Restaurar stickers
-        RestoreStickersAfterGeneration(preserved);
-
-        // Restaurar FlagPin a su posición real
-        if (cachedFlagPin != null)
-            cachedFlagPin.RestoreToOriginal();
+        // 5) Restaurar stickers y flagpin sobre la nueva rueda
+        RestoreStickersAfterGeneration();
     }
 
-    // ================================================================
-    // GENERAR PINS
-    // ================================================================
+    // =====================================================================
+    // GUARDAR STICKERS ANTES DE REGENERAR
+    // =====================================================================
+    void SaveStickersBeforeGeneration()
+    {
+        stickerRegenInfos.Clear();
+
+        // Recolectamos todos los stickers de la escena
+        BaseSticker[] allStickers = FindObjectsOfType<BaseSticker>(true);
+
+        foreach (BaseSticker s in allStickers)
+        {
+            if (s == null) continue;
+
+            // Solo nos interesan los que están colocados en la ruleta
+            if (!s.isPlaced || s.currentSegment == null)
+                continue;
+
+            // Nos aseguramos de que el segmento pertenece a ESTA rueda
+            if (!s.currentSegment.IsChildOf(transform))
+                continue;
+
+            int segIdx = GetSegmentIndexFromSegmentTransform(s.currentSegment);
+            if (segIdx < 0) continue;
+
+            // Root del sticker = GO vacío superior (como en tu jerarquía)
+            Transform stickerRoot = s.transform.parent != null ? s.transform.parent : s.transform;
+
+            // Guardamos root + índice de segmento
+            stickerRegenInfos.Add(new StickerRegenInfo
+            {
+                root = stickerRoot,
+                segmentIndex = segIdx
+            });
+
+            // Lo aparcamos en el DynamicStickerContainer o suelto en la escena
+            if (dynamicStickerContainer != null)
+                stickerRoot.SetParent(dynamicStickerContainer, true);
+            else
+                stickerRoot.SetParent(null, true);
+        }
+    }
+
+    // Obtener el índice de segmento a partir del transform del collider antiguo
+    int GetSegmentIndexFromSegmentTransform(Transform segTransform)
+    {
+        if (segTransform == null) return -1;
+
+        for (int i = 0; i < segments.Count; i++)
+        {
+            if (segments[i].collider == null) continue;
+            if (segments[i].collider.transform == segTransform)
+                return segments[i].index;
+        }
+
+        // Si la lista de segmentos está vacía o no coincide, devolvemos -1
+        return -1;
+    }
+
+    // =====================================================================
+    // RESTAURAR STICKERS DESPUÉS DE REGENERAR
+    // =====================================================================
+    void RestoreStickersAfterGeneration()
+    {
+        foreach (var info in stickerRegenInfos)
+        {
+            Transform stickerRoot = info.root;
+            if (stickerRoot == null) continue;
+
+            BaseSticker s = stickerRoot.GetComponentInChildren<BaseSticker>();
+            if (s == null) continue;
+
+            if (info.segmentIndex < 0 || info.segmentIndex >= segments.Count)
+            {
+                Debug.LogWarning($"Sticker '{s.name}' lost its segment index after wheel regen.");
+                continue;
+            }
+
+            WheelSegmentData segData = segments[info.segmentIndex];
+            if (segData.collider == null)
+            {
+                Debug.LogWarning($"Sticker '{s.name}' has invalid segment collider after wheel regen.");
+                continue;
+            }
+
+            Transform segTransform = segData.collider.transform;
+
+            // Re-parent al nuevo segmento (manteniendo posición mundial)
+            stickerRoot.SetParent(segTransform, true);
+
+            // Actualizamos estado del sticker
+            s.currentSegment = segTransform;
+            s.isPlaced = true;
+
+            // Validamos si sigue bien colocado
+            bool inside = IsStickerMostlyInsideSegment(s, segData.collider);
+            bool overlaps = StickerOverlapsOthersInSegment(s, segData.collider);
+
+            if (!inside || overlaps)
+            {
+                Debug.LogWarning(
+                    $"Sticker '{s.name}' is not correctly placed after wheel resize. " +
+                    $"(inside={inside}, overlaps={overlaps})"
+                );
+            }
+
+            // Le damos oportunidad de hacer micro-ajuste interno si quieres
+            s.OnRestoredAfterWheelRegen();
+        }
+
+        // Limpieza por si acaso
+        stickerRegenInfos.Clear();
+    }
+
+    // =====================================================================
+    // VALIDACIÓN DE STICKER EN SEGMENTO (similar a BaseSticker)
+    // =====================================================================
+    bool IsStickerMostlyInsideSegment(BaseSticker sticker, PolygonCollider2D segment)
+    {
+        if (sticker == null || segment == null) return false;
+
+        Collider2D col = sticker.GetComponent<Collider2D>();
+        if (col == null) return false;
+
+        float tolerance = sticker.tolerance;
+        float threshold = sticker.coverageThreshold;
+
+        Bounds b = col.bounds;
+        Vector3 min = b.min - new Vector3(tolerance, tolerance, 0f);
+        Vector3 max = b.max + new Vector3(tolerance, tolerance, 0f);
+
+        int total = 9;
+        int inside = 0;
+
+        for (int ix = 0; ix < 3; ix++)
+        {
+            for (int iy = 0; iy < 3; iy++)
+            {
+                float x = Mathf.Lerp(min.x, max.x, ix / 2f);
+                float y = Mathf.Lerp(min.y, max.y, iy / 2f);
+                if (segment.OverlapPoint(new Vector2(x, y)))
+                    inside++;
+            }
+        }
+
+        return inside / (float)total >= threshold;
+    }
+
+    bool StickerOverlapsOthersInSegment(BaseSticker sticker, PolygonCollider2D segment)
+    {
+        if (sticker == null || segment == null) return false;
+
+        Collider2D myCol = sticker.GetComponent<Collider2D>();
+        if (myCol == null) return false;
+
+        // Radio aproximado para comprobar solapes
+        Vector2 center = myCol.bounds.center;
+        float r = Mathf.Max(myCol.bounds.extents.x, myCol.bounds.extents.y) * 0.9f;
+
+        // Usamos la misma máscara de stickers que usa el propio sticker
+        LayerMask mask = sticker.stickerMask;
+        Collider2D[] overlaps = Physics2D.OverlapCircleAll(center, r, mask);
+
+        foreach (var o in overlaps)
+        {
+            if (o == null) continue;
+            if (o == myCol) continue;
+
+            // Debe pertenecer al mismo segmento
+            if (!o.transform.IsChildOf(segment.transform))
+                continue;
+
+            BaseSticker other = o.GetComponentInParent<BaseSticker>();
+            if (other == null || other == sticker) continue;
+
+            // Encontramos otro sticker en este mismo segmento → solape lógico
+            return true;
+        }
+
+        return false;
+    }
+
+    // =====================================================================
+    // GENERAR PINS AL CENTRO DE CADA SEGMENTO
+    // =====================================================================
     void GeneratePins(int pinLayer)
     {
         Transform old = transform.Find(pinsParentName);
         if (old != null)
+#if UNITY_EDITOR
             DestroyImmediate(old.gameObject);
+#else
+            Destroy(old.gameObject);
+#endif
 
         Transform pinsRoot = new GameObject(pinsParentName).transform;
         pinsRoot.SetParent(transform, false);
@@ -274,6 +414,7 @@ public class WheelGenerator : MonoBehaviour
             GameObject pin = new GameObject("Pin_" + i);
             pin.transform.SetParent(pinsRoot, false);
             pin.transform.localPosition = pos;
+
             pin.transform.localRotation = Quaternion.Euler(0, 0, mid);
 
             BoxCollider2D bc = pin.AddComponent<BoxCollider2D>();
@@ -287,19 +428,29 @@ public class WheelGenerator : MonoBehaviour
         }
     }
 
-    // ================================================================
-    // DESTRUIR HIJOS
-    // ================================================================
+    // =====================================================================
+    // DESTROY CHILDREN (EDIT Y PLAY) SIN CARGARSE EL FLAGPIN
+    // =====================================================================
     void ForceDestroyChildren()
     {
         List<Transform> toDestroy = new List<Transform>();
+
         foreach (Transform t in transform)
+        {
+            // No destruir nada que contenga un FlagPin en su jerarquía
+            if (t.GetComponentInChildren<FlagPin>(true) != null)
+                continue;
+
             toDestroy.Add(t);
+        }
 
         foreach (var t in toDestroy)
         {
 #if UNITY_EDITOR
-            DestroyImmediate(t.gameObject);
+            if (!Application.isPlaying)
+                DestroyImmediate(t.gameObject);
+            else
+                Destroy(t.gameObject);
 #else
             Destroy(t.gameObject);
 #endif
