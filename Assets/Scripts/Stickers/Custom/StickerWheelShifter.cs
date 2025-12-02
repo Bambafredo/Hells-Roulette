@@ -9,27 +9,27 @@ public class StickerWheelShifter : StickerEffect
     public float selfIncrease = 10f;
     public float adjacentDecrease = 5f;
 
-    public override void ApplyEffect()
+    public override void ApplyEffect(BaseSticker owner)
     {
-        // 1. Validación de ronda
+        // 1. Validación de ronda (como antes)
         if (RoundManager.Instance != null && !RoundManager.Instance.WasLastSpinValid)
         {
             Debug.Log("❌ StickerWheelShifter no activa porque la ronda no fue válida.");
             return;
         }
 
-        // 2. Encontrar el sticker que lo activó
-        // Como funciona 1 sticker = 1 SegmentWin = 1 ApplyEffect(),
-        // el que lo active será el que está en el segmento ganador
-        BaseSticker sticker = FindTriggeringSticker();
-
-        if (sticker == null)
+        if (owner == null)
         {
-            Debug.LogWarning("StickerWheelShifter: No se pudo identificar el sticker que lo activó.");
+            Debug.LogWarning("StickerWheelShifter: owner == null, no hay contexto del sticker.");
             return;
         }
 
-        WheelGenerator generator = sticker.generator;
+        // 2. Obtener el WheelGenerator desde el owner
+        WheelGenerator generator = owner.generator;
+        if (generator == null)
+        {
+            generator = Object.FindObjectOfType<WheelGenerator>();
+        }
 
         if (generator == null)
         {
@@ -37,24 +37,32 @@ public class StickerWheelShifter : StickerEffect
             return;
         }
 
-        if (!sticker.isPlaced || sticker.currentSegment == null)
+        if (!owner.isPlaced || owner.currentSegment == null)
         {
             Debug.LogWarning("StickerWheelShifter: Sticker no está colocado en la ruleta.");
             return;
         }
 
         // 3. Obtener índice del segmento actual
-        int index = GetSegmentIndex(generator, sticker.currentSegment);
+        int index = GetSegmentIndex(generator, owner.currentSegment);
         if (index < 0)
         {
             Debug.LogError("StickerWheelShifter: No se pudo identificar el segmento del sticker.");
             return;
         }
 
-        int leftIndex = (index - 1 + generator.segmentCount) % generator.segmentCount;
-        int rightIndex = (index + 1) % generator.segmentCount;
+        int segCount = generator.segmentCount;
+        if (segCount <= 0 || generator.segmentAngles == null ||
+            generator.segmentAngles.Count != segCount)
+        {
+            Debug.LogError("StickerWheelShifter: segmentAngles no está bien configurado.");
+            return;
+        }
 
-        // 4. Aplicar cambios
+        int leftIndex = (index - 1 + segCount) % segCount;
+        int rightIndex = (index + 1) % segCount;
+
+        // 4. Aplicar cambios de ángulo
         generator.segmentAngles[index] += selfIncrease;
         generator.segmentAngles[leftIndex] -= adjacentDecrease;
         generator.segmentAngles[rightIndex] -= adjacentDecrease;
@@ -64,30 +72,14 @@ public class StickerWheelShifter : StickerEffect
             $"{selfIncrease}, -{adjacentDecrease} a {leftIndex} y {rightIndex}"
         );
 
-        // 5. Regenerar la ruleta
+        // 5. Regenerar la ruleta (esto ya hace NormalizeAngles internamente)
         generator.GenerateWheel();
-    }
-
-    private BaseSticker FindTriggeringSticker()
-    {
-        // Busca todos los stickers en escena
-        BaseSticker[] all = GameObject.FindObjectsOfType<BaseSticker>();
-
-        foreach (var s in all)
-        {
-            if (s.isPlaced && s.currentSegment != null)
-            {
-                // Si está en el segmento ganador, la ruleta ya habrá disparado OnSegmentWin en él
-                // y ApplyEffect se está ejecutando para su propio ScriptableObject
-                if (s.effect == this)
-                    return s;
-            }
-        }
-        return null;
     }
 
     private int GetSegmentIndex(WheelGenerator gen, Transform segmentTransform)
     {
+        if (gen == null || gen.segments == null) return -1;
+
         for (int i = 0; i < gen.segments.Count; i++)
         {
             if (gen.segments[i].collider != null &&

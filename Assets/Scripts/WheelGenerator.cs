@@ -225,7 +225,8 @@ public class WheelGenerator : MonoBehaviour
             if (!s.currentSegment.IsChildOf(transform))
                 continue;
 
-            int segIdx = GetSegmentIndexFromSegmentTransform(s.currentSegment);
+            // 🔴 Nuevo: sacamos el índice del nombre "Segment_X"
+            int segIdx = ExtractIndexFromName(s.currentSegment.name);
             if (segIdx < 0) continue;
 
             // Root del sticker = GO vacío superior (como en tu jerarquía)
@@ -246,7 +247,7 @@ public class WheelGenerator : MonoBehaviour
         }
     }
 
-    // Obtener el índice de segmento a partir del transform del collider antiguo
+    // (la dejamos por si quieres usarla para debug en algún momento)
     int GetSegmentIndexFromSegmentTransform(Transform segTransform)
     {
         if (segTransform == null) return -1;
@@ -258,7 +259,6 @@ public class WheelGenerator : MonoBehaviour
                 return segments[i].index;
         }
 
-        // Si la lista de segmentos está vacía o no coincide, devolvemos -1
         return -1;
     }
 
@@ -309,7 +309,7 @@ public class WheelGenerator : MonoBehaviour
                 );
             }
 
-            // Le damos oportunidad de hacer micro-ajuste interno si quieres
+            // Micro-ajuste del propio sticker (tu método)
             s.OnRestoredAfterWheelRegen();
         }
 
@@ -461,5 +461,23 @@ public class WheelGenerator : MonoBehaviour
     {
         if (regenerateOnPlay)
             GenerateWheel();
+    }
+
+    // =====================================================================
+    // NUEVO: SACAR ÍNDICE DEL NOMBRE "Segment_X"
+    // =====================================================================
+    int ExtractIndexFromName(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return -1;
+
+        if (!name.StartsWith("Segment_"))
+            return -1;
+
+        string number = name.Substring("Segment_".Length);
+        if (int.TryParse(number, out int idx))
+            return idx;
+
+        return -1;
     }
 }

@@ -26,6 +26,10 @@ public class BaseSticker : MonoBehaviour
     [Range(0f, 0.2f)] public float tolerance = 0.05f;
     [Range(0.5f, 1f)] public float coverageThreshold = 0.75f;
 
+    [Header("Internal")]
+    [Tooltip("GO raíz del sticker (prefab). Si no se asigna, se detecta en Awake una vez.")]
+    public Transform stickerRoot;
+
     private Camera cam;
     private bool isDragging = false;
     private Vector3 offset;
@@ -33,13 +37,16 @@ public class BaseSticker : MonoBehaviour
     private Quaternion originalRotation;
     private Transform originalParent;
     private Collider2D myCollider;
-    private Transform root;
 
     protected virtual void Awake()
     {
         cam = Camera.main;
         myCollider = GetComponent<Collider2D>();
-        root = transform.parent != null ? transform.parent : transform;
+
+        // Root fijo del sticker: se decide una vez y ya no depende
+        // de cambios de parent posteriores (slots, ruleta, etc).
+        if (stickerRoot == null)
+            stickerRoot = transform.parent != null ? transform.parent : transform;
 
         if (wheelCenter == null)
         {
@@ -76,9 +83,9 @@ public class BaseSticker : MonoBehaviour
             {
                 isDragging = true;
 
-                originalPosition = root.position;
-                originalRotation = root.rotation;
-                originalParent = root.parent;
+                originalPosition = stickerRoot.position;
+                originalRotation = stickerRoot.rotation;
+                originalParent = stickerRoot.parent;
 
                 if (BagManager.Instance != null)
                 {
@@ -90,10 +97,10 @@ public class BaseSticker : MonoBehaviour
                 {
                     isPlaced = false;
                     currentSegment = null;
-                    root.SetParent(null, true);
+                    stickerRoot.SetParent(null, true);
                 }
 
-                offset = root.position - (Vector3)mouseWorld;
+                offset = stickerRoot.position - (Vector3)mouseWorld;
                 SetAlpha(0.6f);
                 controller?.SetInputBlocked(true);
             }
@@ -101,7 +108,7 @@ public class BaseSticker : MonoBehaviour
 
         if (isDragging)
         {
-            root.position = (Vector3)mouseWorld + offset;
+            stickerRoot.position = (Vector3)mouseWorld + offset;
 
             if (Input.GetMouseButtonUp(0))
             {
@@ -125,7 +132,7 @@ public class BaseSticker : MonoBehaviour
             return;
         }
 
-        Vector2 p = root.position;
+        Vector2 p = stickerRoot.position;
 
         // BAG PORTAL
         if (BagManager.Instance.IsPointOnBagPortal(p))
@@ -156,7 +163,7 @@ public class BaseSticker : MonoBehaviour
             var slot = BagManager.Instance.GetBagSlotAtPosition(p);
             if (slot != null)
             {
-                if (BagManager.Instance.TryPlaceInSlotManual(this, slot, root.position))
+                if (BagManager.Instance.TryPlaceInSlotManual(this, slot, stickerRoot.position))
                     return;
 
                 ReturnToOrigin();
@@ -171,7 +178,7 @@ public class BaseSticker : MonoBehaviour
         var gSlot = BagManager.Instance.GetGameplaySlotAtPosition(p);
         if (gSlot != null)
         {
-            if (BagManager.Instance.TryPlaceInSlotManual(this, gSlot, root.position))
+            if (BagManager.Instance.TryPlaceInSlotManual(this, gSlot, stickerRoot.position))
                 return;
 
             if (TryPlaceOnWheel(p))
@@ -227,7 +234,7 @@ public class BaseSticker : MonoBehaviour
             return false;
         }
 
-        root.SetParent(segCol.transform, true);
+        stickerRoot.SetParent(segCol.transform, true);
         currentSegment = segCol.transform;
         isPlaced = true;
 
@@ -237,7 +244,7 @@ public class BaseSticker : MonoBehaviour
     // Fallback
     protected virtual void TryPlaceSticker()
     {
-        Vector2 worldPos = root.position;
+        Vector2 worldPos = stickerRoot.position;
         Collider2D segCol = Physics2D.OverlapPoint(worldPos, segmentMask);
 
         if (segCol == null)
@@ -265,7 +272,7 @@ public class BaseSticker : MonoBehaviour
             return;
         }
 
-        root.SetParent(segCol.transform, true);
+        stickerRoot.SetParent(segCol.transform, true);
         currentSegment = segCol.transform;
         isPlaced = true;
     }
@@ -302,16 +309,14 @@ public class BaseSticker : MonoBehaviour
     // ===========================================================
     public void OnRestoredAfterWheelRegen()
     {
-        // seguridad
         if (currentSegment == null)
             return;
 
         isPlaced = true;
 
-        // micro ajuste para actualizar físicas
-        Vector3 p = transform.position;
-        transform.position = p + new Vector3(0.001f, 0, 0);
-        transform.position = p;
+        Vector3 p = stickerRoot.position;
+        stickerRoot.position = p + new Vector3(0.001f, 0, 0);
+        stickerRoot.position = p;
     }
 
     // ===========================================================
@@ -319,14 +324,14 @@ public class BaseSticker : MonoBehaviour
     // ===========================================================
     protected virtual void ReturnToOrigin()
     {
-        root.SetParent(originalParent);
-        root.position = originalPosition;
-        root.rotation = originalRotation;
+        stickerRoot.SetParent(originalParent);
+        stickerRoot.position = originalPosition;
+        stickerRoot.rotation = originalRotation;
     }
 
     private void SetAlpha(float a)
     {
-        var sr = root.GetComponentInChildren<SpriteRenderer>();
+        var sr = stickerRoot.GetComponentInChildren<SpriteRenderer>();
         if (sr)
         {
             Color c = sr.color;
@@ -335,14 +340,15 @@ public class BaseSticker : MonoBehaviour
         }
     }
 
+    // 🔴 IMPORTANTE: ahora el ScriptableObject recibe el contexto del sticker
     public virtual void OnSegmentWin()
     {
         if (effect == null) return;
-        effect.ApplyEffect();
+        effect.ApplyEffect(this);
     }
 
     // ===========================================================
-    // GAMEPLAY FREE AREA LOGIC (sin cambios)
+    // GAMEPLAY FREE AREA LOGIC (sin cambios, solo root→stickerRoot)
     // ===========================================================
     private bool TryPlaceFreelyInGameplayArea(Vector2 dropPos)
     {
@@ -358,15 +364,15 @@ public class BaseSticker : MonoBehaviour
         if (!PointInsideAreaWithMargin(area.areaCollider, dropPos, r))
             return false;
 
-        var areaRoot = area.contentRoot != null ? area.contentRoot : root.parent;
+        var areaRoot = area.contentRoot != null ? area.contentRoot : stickerRoot.parent;
         if (OverlapsAnyInArea(areaRoot, dropPos, r))
             return false;
 
-        root.SetParent(areaRoot, true);
+        stickerRoot.SetParent(areaRoot, true);
 
         Vector3 clamped = BagManager.Instance.ClampToGameplay(dropPos, idx);
-        root.position = new Vector3(clamped.x, clamped.y, root.position.z);
-        root.rotation = Quaternion.identity;
+        stickerRoot.position = new Vector3(clamped.x, clamped.y, stickerRoot.position.z);
+        stickerRoot.rotation = Quaternion.identity;
         isPlaced = false;
         currentSegment = null;
 
@@ -397,7 +403,7 @@ public class BaseSticker : MonoBehaviour
         if (areaRoot == null) return false;
 
         var others = areaRoot.GetComponentsInChildren<Collider2D>(true);
-        Transform selfRoot = root;
+        Transform selfRoot = stickerRoot;
 
         foreach (var o in others)
         {

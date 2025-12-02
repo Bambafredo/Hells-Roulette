@@ -12,8 +12,9 @@ public class StickerEffect : ScriptableObject
     [Header("Reward")]
     public int dollarReward = 0;
 
-    // Aquí puedes añadir más propiedades (XP, multiplicadores, etc.)
-
+    // ================================
+    //  API CLÁSICA (SIN OWNER)
+    // ================================
     public virtual void ApplyEffect()
     {
         // Si hay RoundManager y la última tirada NO es válida, no damos recompensa
@@ -28,5 +29,15 @@ public class StickerEffect : ScriptableObject
             CurrencyManager.Instance.AddDollar(dollarReward);
             Debug.Log($"💵 Sticker '{stickerName}' dio {dollarReward}$!");
         }
+    }
+
+    // ==========================================
+    //  NUEVA API CON CONTEXTO DEL STICKER OWNER
+    // ==========================================
+    public virtual void ApplyEffect(BaseSticker owner)
+    {
+        // Implementación por defecto:
+        // ignoramos owner y usamos el comportamiento clásico.
+        ApplyEffect();
     }
 }
