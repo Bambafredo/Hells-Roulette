@@ -21,6 +21,9 @@ public class Flapper : MonoBehaviour
     private Dictionary<Collider2D, float> lastHitTime = new Dictionary<Collider2D, float>();
     private float lastFlagHitTime = -999f;
 
+    // 🔥 Referencia interna al controller (no afecta nada del resto del sistema)
+    private RouletteController controller;
+
     void Awake()
     {
         _baseLocalZ = transform.localEulerAngles.z;
@@ -32,10 +35,16 @@ public class Flapper : MonoBehaviour
         rb.bodyType = RigidbodyType2D.Kinematic;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+
+        controller = FindObjectOfType<RouletteController>();
     }
 
     void OnTriggerEnter2D(Collider2D other)
     {
+        // 🔥🔥🔥 BLOQUEAR FALSOS TICKS — EVITA EL BUG DE ACTIVAR STICKERS ARRASTRANDO 🔥🔥🔥
+        if (controller != null && !controller.SpinInProgress)
+            return;
+
         if (!other.isTrigger) return;
 
         float now = Time.time;
@@ -68,7 +77,6 @@ public class Flapper : MonoBehaviour
         if (tickClip && audioSource)
             audioSource.PlayOneShot(tickClip);
 
-        // deja que la animación se solape, no bloquea hits
         StartCoroutine(NudgeRoutine());
     }
 

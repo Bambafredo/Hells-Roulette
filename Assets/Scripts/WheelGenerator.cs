@@ -406,7 +406,7 @@ public class WheelGenerator : MonoBehaviour
 
         for (int i = 0; i < segmentCount; i++)
         {
-            float mid = angleAccum + segmentAngles[i] * 0.5f;
+            float mid = angleAccum;
             float rad = mid * Mathf.Deg2Rad;
 
             Vector3 pos = new Vector3(Mathf.Cos(rad) * r, Mathf.Sin(rad) * r, 0f);
