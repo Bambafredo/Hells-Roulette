@@ -25,6 +25,12 @@ public class RouletteController : MonoBehaviour
     public LayerMask blockInputMask;
     public bool inputBlocked = false;
 
+    // ---- Fake spin prevention ----
+    [Header("Anti-Fake Spin")]
+    public float minDragDistanceToAllowSpin = 15f; // distancia angular acumulada
+    private float accumulatedDragDistance = 0f;
+
+    // Brake
     [Header("Brake System")]
     public bool enableBrake = true;
     public float extraDeceleration = 300f;
@@ -106,6 +112,7 @@ public class RouletteController : MonoBehaviour
                 lastAngleDeg = WorldAngleFromCenter(pos);
                 lastSampleTime = Time.time;
                 recentSpeeds.Clear();
+                accumulatedDragDistance = 0f;
             }
         }
 
@@ -114,8 +121,13 @@ public class RouletteController : MonoBehaviour
             float currentAngle = WorldAngleFromCenter(pos);
             float delta = Mathf.DeltaAngle(lastAngleDeg, currentAngle);
 
+            // --- Always rotate wheel freely ---
             wheel.Rotate(0f, 0f, delta);
 
+            // Anti-fake spin movement accumulation
+            accumulatedDragDistance += Mathf.Abs(delta);
+
+            // Velocity sampling
             float dt = Mathf.Max(0.0001f, Time.time - lastSampleTime);
             float instVel = (delta / dt) * gestureToSpin;
 
@@ -123,17 +135,27 @@ public class RouletteController : MonoBehaviour
             if (recentSpeeds.Count > velocitySamples)
                 recentSpeeds.Dequeue();
 
-            instVel = Mathf.Clamp(instVel, -maxSpinSpeed, maxSpinSpeed);
-            spinSpeed = Mathf.Lerp(spinSpeed, instVel, 1f - velocitySmoothing);
-
             lastAngleDeg = currentAngle;
             lastSampleTime = Time.time;
+            return;
         }
 
         if (up && dragging)
         {
             dragging = false;
 
+            // 🔥 Anti-fake spin: si no ha habido movimiento real → NO spin
+            if (accumulatedDragDistance < minDragDistanceToAllowSpin)
+            {
+                accumulatedDragDistance = 0f;
+                recentSpeeds.Clear();
+                spinSpeed = 0f;
+                return;
+            }
+
+            accumulatedDragDistance = 0f;
+
+            // ---- TRUE SPIN ----
             float avgSpeed = 0f;
             foreach (float v in recentSpeeds) avgSpeed += v;
             avgSpeed /= Mathf.Max(1, recentSpeeds.Count);
@@ -146,10 +168,10 @@ public class RouletteController : MonoBehaviour
 
                 startSegmentIndex = GetCurrentSegmentIndex();
 
+                SpinInProgress = true;
                 OnSpinStart?.Invoke();
                 RoundManager.Instance?.NotifySpinStart();
 
-                SpinInProgress = true;
                 bloodTimer = 0f;
             }
             else
@@ -232,9 +254,8 @@ public class RouletteController : MonoBehaviour
         {
             wasMoving = false;
 
-            // ORDEN CORRECTO
-            RoundManager.Instance?.NotifySpinEnd();  // primero evalúa ronda
-            OnSpinEnd?.Invoke();                      // luego enemigo reacciona
+            RoundManager.Instance?.NotifySpinEnd();
+            OnSpinEnd?.Invoke();
 
             SpinInProgress = false;
 

@@ -3019,7 +3019,6 @@ GameObject:
   - component: {fileID: 996127459}
   - component: {fileID: 996127460}
   - component: {fileID: 996127461}
-  - component: {fileID: 996127462}
   m_Layer: 0
   m_Name: GameManagers
   m_TagString: Untagged
@@ -3057,6 +3056,7 @@ MonoBehaviour:
   controller: {fileID: 1075813796}
   flagPin: {fileID: 934489007}
   minHitsRequired: 2
+  minSpinDuration: 0.25
   roundText: {fileID: 1455258518}
 --- !u!114 &996127460
 MonoBehaviour:
@@ -3113,20 +3113,6 @@ MonoBehaviour:
   gameplaySlots:
   - {fileID: 1958939434}
   - {fileID: 836167151}
---- !u!114 &996127462
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 996127457}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3f76fbdbf9e6ea54cb80b9b140b4a77a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  wrongStickerPanel: {fileID: 1866646970}
-  blockAllInput: 0
 --- !u!1 &1009172658
 GameObject:
   m_ObjectHideFlags: 0
@@ -3590,6 +3576,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   inputBlocked: 0
+  minDragDistanceToAllowSpin: 15
   enableBrake: 1
   extraDeceleration: 800
   bloodCostPerSecond: 10

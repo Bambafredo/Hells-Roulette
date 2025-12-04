@@ -14,6 +14,9 @@ public class RoundManager : MonoBehaviour
     [Header("Condiciones de ronda válida")]
     public int minHitsRequired = 2;
 
+    [Tooltip("Duración mínima (en segundos) que debe durar el spin para considerarse válido.")]
+    public float minSpinDuration = 0.25f;
+
     [Header("UI")]
     public TMP_Text roundText;
 
@@ -22,6 +25,8 @@ public class RoundManager : MonoBehaviour
 
     private int currentRound = 0;
     private bool lastSpinWasValid = false;
+
+    private float spinStartTime = 0f;   // ⬅️ nuevo: para medir duración de la tirada
 
     // ---------------------------------------------------------
     void Awake()
@@ -56,6 +61,7 @@ public class RoundManager : MonoBehaviour
         spinActive = true;
         hitsThisSpin = 0;
         lastSpinWasValid = false;
+        spinStartTime = Time.time;   // ⬅️ empezamos a contar
     }
 
     private void EndSpin()
@@ -79,7 +85,8 @@ public class RoundManager : MonoBehaviour
         if (CurrencyManager.Instance != null)
             CurrencyManager.Instance.pendingDollars = 0;
 
-        Debug.Log($"[ROUND] Spin ended. Valid = {lastSpinWasValid}, hits = {hitsThisSpin}, isPlaced = {flagPin.isPlaced}");
+        Debug.Log($"[ROUND] Spin ended. Valid = {lastSpinWasValid}, hits = {hitsThisSpin}, " +
+                  $"isPlaced = {flagPin.isPlaced}, duration = {Time.time - spinStartTime:F2}s");
     }
 
     // ---------------------------------------------------------
@@ -88,7 +95,11 @@ public class RoundManager : MonoBehaviour
         bool pinPlaced = (flagPin == null) || flagPin.isPlaced;
         bool enoughHits = hitsThisSpin >= minHitsRequired;
 
-        return pinPlaced && enoughHits;
+        float duration = Time.time - spinStartTime;
+        bool enoughDuration = duration >= minSpinDuration;
+
+        // 🔴 AHORA: hace falta pin colocado, hits suficientes *y* duración mínima
+        return pinPlaced && enoughHits && enoughDuration;
     }
 
     // Sumamos hits desde FlagPin
