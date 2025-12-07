@@ -58,6 +58,13 @@ public class RouletteController : MonoBehaviour
         inputBlocked = v;
     }
 
+    public static RouletteController Instance;
+
+    void Awake()
+    {
+        Instance = this;
+    }
+
     void Update()
     {
         HandlePointer();
@@ -66,6 +73,10 @@ public class RouletteController : MonoBehaviour
 
     void HandlePointer()
     {
+        if (StickerPlacementValidator.Instance != null &&
+            StickerPlacementValidator.Instance.InputBlocked)
+            return;
+
         if (inputBlocked)
             return;
 

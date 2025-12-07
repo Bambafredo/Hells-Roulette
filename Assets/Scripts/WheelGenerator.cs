@@ -201,6 +201,8 @@ public class WheelGenerator : MonoBehaviour
 
         // 5) Restaurar stickers y flagpin sobre la nueva rueda
         RestoreStickersAfterGeneration();
+
+        StickerPlacementValidator.Instance?.ValidateAfterWheelRegeneration();
     }
 
     // =====================================================================
@@ -209,6 +211,13 @@ public class WheelGenerator : MonoBehaviour
     void SaveStickersBeforeGeneration()
     {
         stickerRegenInfos.Clear();
+
+        // Asegurar que existe un contenedor dinámico
+        if (dynamicStickerContainer == null)
+        {
+            var go = new GameObject("DynamicStickerContainer");
+            dynamicStickerContainer = go.transform;
+        }
 
         // Recolectamos todos los stickers de la escena
         BaseSticker[] allStickers = FindObjectsOfType<BaseSticker>(true);
@@ -221,29 +230,24 @@ public class WheelGenerator : MonoBehaviour
             if (!s.isPlaced || s.currentSegment == null)
                 continue;
 
-            // Nos aseguramos de que el segmento pertenece a ESTA rueda
-            if (!s.currentSegment.IsChildOf(transform))
-                continue;
-
-            // 🔴 Nuevo: sacamos el índice del nombre "Segment_X"
+            // Extraer índice del nombre del segmento
             int segIdx = ExtractIndexFromName(s.currentSegment.name);
             if (segIdx < 0) continue;
 
-            // Root del sticker = GO vacío superior (como en tu jerarquía)
-            Transform stickerRoot = s.transform.parent != null ? s.transform.parent : s.transform;
+            // Root del sticker
+            Transform stickerRoot =
+                s.stickerRoot != null ? s.stickerRoot :
+                (s.transform.parent != null ? s.transform.parent : s.transform);
 
-            // Guardamos root + índice de segmento
+            // Guardamos info para restaurar
             stickerRegenInfos.Add(new StickerRegenInfo
             {
                 root = stickerRoot,
                 segmentIndex = segIdx
             });
 
-            // Lo aparcamos en el DynamicStickerContainer o suelto en la escena
-            if (dynamicStickerContainer != null)
-                stickerRoot.SetParent(dynamicStickerContainer, true);
-            else
-                stickerRoot.SetParent(null, true);
+            // SACAMOS el sticker fuera de la rueda SIEMPRE
+            stickerRoot.SetParent(dynamicStickerContainer, true);
         }
     }
 

@@ -116,6 +116,12 @@ public class BaseSticker : MonoBehaviour
                 isDragging = false;
                 controller?.SetInputBlocked(false);
                 SetAlpha(1f);
+
+                if (StickerPlacementValidator.Instance != null &&
+                    StickerPlacementValidator.Instance.InputBlocked)
+                {
+                    StickerPlacementValidator.Instance.NotifyStickerDropped(this);
+                }
             }
         }
 #endif
@@ -302,6 +308,37 @@ public class BaseSticker : MonoBehaviour
         }
 
         return inside / (float)total >= threshold;
+    }
+
+    public bool DebugCheckSegment(Collider2D segmentCol)
+    {
+        if (segmentCol == null)
+            return false;
+
+        Collider2D myCol = GetComponent<Collider2D>();
+        if (myCol == null)
+            return false;
+
+        // Igual que la validación normal
+        bool inside = IsMostlyInsideSegment(myCol, segmentCol, tolerance, coverageThreshold);
+        if (!inside) return false;
+
+        Vector2 center = myCol.bounds.center;
+        float r = Mathf.Max(myCol.bounds.extents.x, myCol.bounds.extents.y) * 0.9f;
+
+        Collider2D[] overlaps = Physics2D.OverlapCircleAll(center, r, stickerMask);
+
+        foreach (var o in overlaps)
+        {
+            if (o == myCol) continue;
+            if (!o.transform.IsChildOf(segmentCol.transform)) continue;
+
+            BaseSticker other = o.GetComponentInParent<BaseSticker>();
+            if (other != null && other != this)
+                return false;
+        }
+
+        return true;
     }
 
     // ===========================================================

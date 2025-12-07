@@ -48,6 +48,10 @@ public class BaseFlagPin : MonoBehaviour
 
     protected virtual void HandleDragging()
     {
+        if (StickerPlacementValidator.Instance != null &&
+            StickerPlacementValidator.Instance.InputBlocked)
+            return;
+            
 #if UNITY_EDITOR || UNITY_STANDALONE
         Vector2 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
 
