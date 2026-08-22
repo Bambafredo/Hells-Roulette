@@ -5,21 +5,47 @@ using UnityEngine;
 public class PanelSwitcher : MonoBehaviour
 {
     [Header("Panels")]
+
+    [Tooltip(
+        "Panel antiguo de Sticker Slots. " +
+        "Puede dejarse vacío en la escena PC."
+    )]
     public GameObject stickerSlotsPanel;
+
     public GameObject enemyPanel;
 
+
     [Header("Icons")]
-    public SpriteRenderer iconShowEnemies;    // aparece cuando el panel actual es el de stickers
-    public SpriteRenderer iconShowStickers;   // aparece cuando el panel actual es el de enemigos
+
+    /*
+     * Conservamos estos nombres para no romper
+     * referencias serializadas de la escena mobile.
+     *
+     * En PC:
+     *
+     * iconShowEnemies  = icono para mostrar enemigos
+     * iconShowStickers = icono para ocultar enemigos / volver
+     */
+    public SpriteRenderer iconShowEnemies;
+    public SpriteRenderer iconShowStickers;
+
 
     [Header("Input")]
-    public Collider2D switchCollider;   // el BoxCollider2D del propio botón
+
+    public Collider2D switchCollider;
+
 
     private RouletteController controller;
 
-    void Start()
+
+    // =========================================================
+    // UNITY
+    // =========================================================
+
+    private void Start()
     {
-        controller = FindObjectOfType<RouletteController>();
+        controller =
+            FindObjectOfType<RouletteController>();
 
         if (controller != null)
         {
@@ -27,9 +53,33 @@ public class PanelSwitcher : MonoBehaviour
             controller.OnSpinEnd += HandleSpinEnd;
         }
 
-        // Estado inicial → mostramos Sticker Slots
-        ShowStickerSlots();
+        /*
+         * MOBILE / LEGACY
+         *
+         * Si existe StickerSlotsPanel,
+         * conservamos exactamente el comportamiento anterior:
+         * comenzamos mostrando los stickers.
+         */
+        if (stickerSlotsPanel != null)
+        {
+            ShowStickerSlots();
+        }
+
+        /*
+         * PC
+         *
+         * Si StickerSlotsPanel no existe,
+         * EnemyPanel es el único panel controlado
+         * por este switcher.
+         *
+         * Lo dejamos visible inicialmente.
+         */
+        else
+        {
+            ShowEnemyPanel();
+        }
     }
+
 
     private void OnDestroy()
     {
@@ -40,72 +90,195 @@ public class PanelSwitcher : MonoBehaviour
         }
     }
 
-    // ---------------------------------------------------------
-    //       CLICK EN EL PANEL SWITCHER (solo si no hay spin)
-    // ---------------------------------------------------------
-    void Update()
+
+    // =========================================================
+    // INPUT
+    // =========================================================
+
+    private void Update()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
-        if (Input.GetMouseButtonDown(0))
+
+        if (!Input.GetMouseButtonDown(0))
+            return;
+
+        if (controller != null &&
+            controller.SpinInProgress)
         {
-            if (controller != null && controller.SpinInProgress)
-                return; // 🔒 Bloqueado mientras la ruleta gira
-
-            Vector2 pos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-
-            if (switchCollider != null && switchCollider.OverlapPoint(pos))
-            {
-                TogglePanels();
-            }
+            return;
         }
+
+        Camera cam = Camera.main;
+
+        if (cam == null)
+            return;
+
+        Vector2 pos =
+            cam.ScreenToWorldPoint(
+                Input.mousePosition
+            );
+
+        if (switchCollider != null &&
+            switchCollider.OverlapPoint(pos))
+        {
+            TogglePanels();
+        }
+
 #endif
     }
 
-    // ---------------------------------------------------------
-    //                SPIN EVENTS
-    // ---------------------------------------------------------
+
+    // =========================================================
+    // SPIN EVENTS
+    // =========================================================
+
     private void HandleSpinStart()
     {
-        // Durante la tirada → siempre mostramos enemigos
+        /*
+         * Durante una tirada los enemigos siempre
+         * deben ser visibles.
+         *
+         * Funciona tanto en PC como en mobile.
+         */
         ShowEnemyPanel();
-
-        // Bloquear visual del botón si quieres (opcional)
-        if (iconShowEnemies != null) iconShowEnemies.enabled = false;
-        if (iconShowStickers != null) iconShowStickers.enabled = true;
     }
+
 
     private void HandleSpinEnd()
     {
-        // Al terminar la tirada, NO cambiamos nada.
-        // Enemy panel sigue visible hasta que el jugador lo cambie manualmente.
+        /*
+         * No cambiamos nada automáticamente.
+         *
+         * EnemyPanel permanece como haya quedado
+         * hasta que el jugador pulse el botón.
+         */
     }
 
-    // ---------------------------------------------------------
-    //                PANEL MANAGEMENT
-    // ---------------------------------------------------------
+
+    // =========================================================
+    // PANEL MANAGEMENT
+    // =========================================================
+
     private void TogglePanels()
     {
+        if (enemyPanel == null)
+            return;
+
+
+        // -----------------------------------------------------
+        // MOBILE / LEGACY
+        // -----------------------------------------------------
+        //
+        // Si existe StickerSlotsPanel seguimos alternando
+        // exactamente entre ambos paneles.
+        // -----------------------------------------------------
+
+        if (stickerSlotsPanel != null)
+        {
+            if (enemyPanel.activeSelf)
+                ShowStickerSlots();
+            else
+                ShowEnemyPanel();
+
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // PC
+        // -----------------------------------------------------
+        //
+        // No existe panel de stickers:
+        // simplemente mostramos/ocultamos enemigos.
+        // -----------------------------------------------------
+
         if (enemyPanel.activeSelf)
-            ShowStickerSlots();
+            HideEnemyPanel();
         else
             ShowEnemyPanel();
     }
 
+
+    // =========================================================
+    // LEGACY STICKER PANEL
+    // =========================================================
+
     private void ShowStickerSlots()
     {
-        stickerSlotsPanel.SetActive(true);
-        enemyPanel.SetActive(false);
+        /*
+         * Si estamos en PC y este panel no existe,
+         * simplemente ocultamos enemigos.
+         */
+        if (stickerSlotsPanel == null)
+        {
+            HideEnemyPanel();
+            return;
+        }
 
-        if (iconShowEnemies != null) iconShowEnemies.enabled = true;
-        if (iconShowStickers != null) iconShowStickers.enabled = false;
+        stickerSlotsPanel.SetActive(true);
+
+        if (enemyPanel != null)
+            enemyPanel.SetActive(false);
+
+        SetIcons(
+            showEnemiesIcon: true
+        );
     }
+
+
+    // =========================================================
+    // ENEMY PANEL
+    // =========================================================
 
     private void ShowEnemyPanel()
     {
-        stickerSlotsPanel.SetActive(false);
-        enemyPanel.SetActive(true);
+        if (stickerSlotsPanel != null)
+            stickerSlotsPanel.SetActive(false);
 
-        if (iconShowEnemies != null) iconShowEnemies.enabled = false;
-        if (iconShowStickers != null) iconShowStickers.enabled = true;
+        if (enemyPanel != null)
+            enemyPanel.SetActive(true);
+
+        SetIcons(
+            showEnemiesIcon: false
+        );
+    }
+
+
+    private void HideEnemyPanel()
+    {
+        if (enemyPanel != null)
+            enemyPanel.SetActive(false);
+
+        /*
+         * En mobile este método normalmente no se utiliza,
+         * pero si existe el panel antiguo lo devolvemos.
+         */
+        if (stickerSlotsPanel != null)
+            stickerSlotsPanel.SetActive(true);
+
+        SetIcons(
+            showEnemiesIcon: true
+        );
+    }
+
+
+    // =========================================================
+    // ICONS
+    // =========================================================
+
+    private void SetIcons(
+        bool showEnemiesIcon)
+    {
+        if (iconShowEnemies != null)
+        {
+            iconShowEnemies.enabled =
+                showEnemiesIcon;
+        }
+
+        if (iconShowStickers != null)
+        {
+            iconShowStickers.enabled =
+                !showEnemiesIcon;
+        }
     }
 }
