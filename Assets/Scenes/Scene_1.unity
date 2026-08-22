@@ -3349,7 +3349,7 @@ MonoBehaviour:
   currentRound: 0
   tokensRemaining: 0
   startingDebt: 10
-  debtIncreasePerRound: 5
+  debtIncreasePerRound: 20
   currentDebt: 0
   debtPending: 0
   roundText: {fileID: 1455258518}
