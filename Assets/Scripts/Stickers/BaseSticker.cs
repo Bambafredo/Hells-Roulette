@@ -56,23 +56,72 @@ public class BaseSticker : MonoBehaviour
         cam = Camera.main;
         myCollider = GetComponent<Collider2D>();
 
-        // Root fijo del sticker: se decide una vez y ya no depende
-        // de cambios de parent posteriores (slots, ruleta, etc).
+        // Root fijo del sticker.
         if (stickerRoot == null)
             stickerRoot = transform.parent != null ? transform.parent : transform;
 
-        if (wheelCenter == null)
-        {
-            var w = GameObject.Find("Wheel");
-            if (w)
-                wheelCenter = w.transform;
-        }
+        EnsureSceneReferences();
+    }
+
+    protected virtual void OnEnable()
+    {
+        /*
+        * Especialmente importante para stickers que comienzan
+        * bajo BagScreen, porque ese GameObject empieza inactive.
+        */
+        EnsureSceneReferences();
+    }
+
+    private void EnsureSceneReferences()
+    {
+        /*
+        * FindObjectOfType normal ignora GameObjects inactive.
+        *
+        * Buscamos incluyendo inactive porque GameplayScreen puede
+        * estar apagada justo cuando se activa BagScreen.
+        */
 
         if (controller == null)
-            controller = FindObjectOfType<RouletteController>();
+        {
+            RouletteController[] controllers =
+                FindObjectsOfType<RouletteController>(true);
 
+            if (controllers.Length > 0)
+                controller = controllers[0];
+        }
+
+        /*
+        * Si RouletteController ya conoce estas referencias,
+        * es mejor utilizarlas directamente.
+        */
+        if (controller != null)
+        {
+            if (wheelCenter == null && controller.wheel != null)
+                wheelCenter = controller.wheel;
+
+            if (generator == null && controller.generator != null)
+                generator = controller.generator;
+        }
+
+        /*
+        * Fallback para Generator, también incluyendo inactive.
+        */
         if (generator == null)
-            generator = FindObjectOfType<WheelGenerator>();
+        {
+            WheelGenerator[] generators =
+                FindObjectsOfType<WheelGenerator>(true);
+
+            if (generators.Length > 0)
+                generator = generators[0];
+        }
+
+        /*
+        * Último fallback para Wheel.
+        *
+        * Si tenemos controller, normalmente ya estará resuelto arriba.
+        */
+        if (wheelCenter == null && controller != null)
+            wheelCenter = controller.wheel;
     }
 
     protected virtual void Update()
@@ -87,6 +136,8 @@ public class BaseSticker : MonoBehaviour
     protected virtual void HandleDragging()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
+
+        EnsureSceneReferences();
 
         if (cam == null)
             cam = Camera.main;

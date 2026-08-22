@@ -10,8 +10,15 @@ public class StickerPlacementValidator : MonoBehaviour
     [Header("UI")]
     public GameObject wrongStickerPanel;
 
-    // Bloqueo global
+    // Estado global:
+    // true = hay al menos un sticker de la ruleta colocado incorrectamente.
     private bool hardInputLock = false;
+
+    private RouletteController controller;
+
+    // =========================================================
+    // UNITY
+    // =========================================================
 
     private void Awake()
     {
@@ -23,27 +30,43 @@ public class StickerPlacementValidator : MonoBehaviour
 
         Instance = this;
 
+        controller = FindObjectOfType<RouletteController>();
+
         if (wrongStickerPanel != null)
             wrongStickerPanel.SetActive(false);
     }
 
-    // Para que otros scripts consulten el estado
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+    }
+
+    // Otros scripts pueden consultar si estamos bloqueados.
     public bool InputBlocked => hardInputLock;
 
     // =========================================================
     // HOOKS PÚBLICOS
     // =========================================================
 
-    // Llamado desde WheelGenerator al terminar GenerateWheel()
+    /// <summary>
+    /// Llamado desde WheelGenerator cuando termina de regenerar
+    /// segmentos y restaurar stickers.
+    /// </summary>
     public void ValidateAfterWheelRegeneration()
     {
         ValidateAllStickers();
     }
 
-    // Llamado desde BaseSticker al soltarlo (mouse up)
-    public void NotifyStickerDropped(BaseSticker s)
+    /// <summary>
+    /// Llamado desde BaseSticker cuando el jugador suelta
+    /// un sticker mientras existe un bloqueo de colocación.
+    ///
+    /// No intentamos validar solo ese sticker:
+    /// puede haber varios inválidos tras un resize.
+    /// </summary>
+    public void NotifyStickerDropped(BaseSticker sticker)
     {
-        // No intentamos ser listos: revalidamos TODO
         ValidateAllStickers();
     }
 
@@ -53,96 +76,218 @@ public class StickerPlacementValidator : MonoBehaviour
 
     private void ValidateAllStickers()
     {
-        BaseSticker[] all = FindObjectsOfType<BaseSticker>(true);
+        /*
+         * Aseguramos que cualquier cambio reciente de parent,
+         * posición o collider esté reflejado en Physics2D.
+         */
+        Physics2D.SyncTransforms();
+
+        BaseSticker[] allStickers =
+            FindObjectsOfType<BaseSticker>(true);
+
         bool anyWrong = false;
 
-        foreach (var s in all)
+        foreach (BaseSticker sticker in allStickers)
         {
-            if (!IsStickerValid(s))
+            if (!IsStickerValid(sticker))
             {
                 anyWrong = true;
+                break;
             }
         }
 
-        if (anyWrong)
-            ActivateBlock();
-        else
-            DeactivateBlock();
+        SetBlockState(anyWrong);
     }
 
     /// <summary>
-    /// Un sticker es "válido" si:
-    /// - No está en la ruleta (bolsa, gameplay, etc.) -> true
-    /// - Está en la ruleta y DebugCheckSegment dice que está bien -> true
-    /// - Está en la ruleta y DebugCheckSegment dice que está mal -> false
+    /// Un sticker es válido si:
+    ///
+    /// - Está fuera de la ruleta -> no nos importa.
+    ///
+    /// - Está colocado en la ruleta -> debe tener un segmento
+    ///   lógico válido, estar realmente parentado a ese segmento
+    ///   y pasar StickerPlacementUtility.
+    ///
+    /// - Está visualmente dentro de Segment_X pero su estado lógico
+    ///   dice que NO está colocado -> lo consideramos inconsistente.
     /// </summary>
-    private bool IsStickerValid(BaseSticker s)
+    private bool IsStickerValid(BaseSticker sticker)
     {
-        if (s == null) return true;
-
-        // ¿De qué segmento cuelga REALMENTE?
-        Transform segTransform = s.currentSegment;
-
-        // Caso especial: visualmente está en un Segment_X, pero lógicamente isPlaced == false
-        if (segTransform == null)
-        {
-            Transform root = s.stickerRoot != null ? s.stickerRoot : s.transform;
-            Transform parent = root.parent;
-
-            if (parent == null)
-                return true; // está suelto en la escena / UI, no nos importa
-
-            var poly = parent.GetComponent<PolygonCollider2D>();
-            if (poly == null)
-                return true; // padre no es un segmento, tampoco nos importa
-
-            segTransform = parent;
-        }
-
-        Collider2D segCol = segTransform.GetComponent<Collider2D>();
-        if (segCol == null)
+        if (sticker == null)
             return true;
 
-        // Aquí usamos tu validador real del sticker
-        return s.DebugCheckSegment(segCol);
+        Transform root =
+            sticker.stickerRoot != null
+                ? sticker.stickerRoot
+                : sticker.transform;
+
+        if (root == null)
+            return true;
+
+        // ---------------------------------------------------------
+        // STICKER LÓGICAMENTE COLOCADO EN LA RULETA
+        // ---------------------------------------------------------
+
+        if (sticker.isPlaced)
+        {
+            /*
+             * Si dice estar colocado pero no sabe en qué segmento,
+             * tenemos un estado inconsistente.
+             */
+            if (sticker.currentSegment == null)
+                return false;
+
+            /*
+             * El Transform real también debe pertenecer al segmento
+             * que BaseSticker considera currentSegment.
+             */
+            if (root.parent != sticker.currentSegment)
+                return false;
+
+            Collider2D segmentCollider =
+                sticker.currentSegment.GetComponent<Collider2D>();
+
+            if (segmentCollider == null)
+                return false;
+
+            /*
+             * ÚNICA FUENTE DE VERDAD GEOMÉTRICA.
+             *
+             * Aquí se comprueba:
+             * - collider real dentro del segmento
+             * - ausencia de solape real con otros stickers
+             */
+            return StickerPlacementUtility.CanPlaceOnSegment(
+                sticker,
+                segmentCollider,
+                sticker.tolerance
+            );
+        }
+
+        // ---------------------------------------------------------
+        // STICKER QUE DICE NO ESTAR EN LA RULETA
+        // ---------------------------------------------------------
+
+        /*
+         * Normalmente esto significa que está:
+         * - en la bolsa
+         * - en un gameplay area
+         * - en un slot
+         * - suelto fuera de la ruleta
+         *
+         * Todo eso es correcto.
+         *
+         * Pero comprobamos que no esté visualmente parentado
+         * a un segmento mientras isPlaced == false.
+         */
+
+        Transform parent = root.parent;
+
+        if (parent == null)
+            return true;
+
+        if (IsWheelSegment(parent))
+        {
+            /*
+             * Visualmente está en la ruleta pero lógicamente dice
+             * que no. No queremos tolerar este estado silenciosamente.
+             */
+            return false;
+        }
+
+        return true;
     }
 
     // =========================================================
-    // BLOQUEO / DESBLOQUEO GLOBAL
+    // SEGMENT IDENTIFICATION
     // =========================================================
 
-    private void ActivateBlock()
+    private bool IsWheelSegment(Transform t)
     {
-        if (hardInputLock)
-            return;
+        if (t == null)
+            return false;
 
-        hardInputLock = true;
+        /*
+         * Los segmentos generados por WheelGenerator tienen:
+         *
+         * - PolygonCollider2D
+         * - nombre Segment_X
+         *
+         * Comprobamos ambas cosas para no confundir cualquier
+         * PolygonCollider2D de la escena con un segmento.
+         */
 
-        if (wrongStickerPanel != null)
-            wrongStickerPanel.SetActive(true);
+        if (!t.name.StartsWith("Segment_"))
+            return false;
 
-        // Bloquear ruleta por redundancia
-        var controller = FindObjectOfType<RouletteController>();
-        if (controller != null)
-            controller.inputBlocked = true;
-
-        Debug.Log("[Validator] 🔒 Bloqueo activado: hay stickers mal colocados");
+        return t.GetComponent<PolygonCollider2D>() != null;
     }
 
-    private void DeactivateBlock()
-    {
-        if (!hardInputLock)
-            return;
+    // =========================================================
+    // BLOQUEO / DESBLOQUEO
+    // =========================================================
 
-        hardInputLock = false;
+    private void SetBlockState(bool shouldBlock)
+    {
+        /*
+         * IMPORTANTE:
+         *
+         * No hacemos simplemente:
+         *
+         * if (hardInputLock) return;
+         *
+         * Queremos REAPLICAR siempre el estado al RouletteController.
+         *
+         * BaseSticker desbloquea temporalmente el input al terminar
+         * un drag. Si todavía queda otro sticker inválido, necesitamos
+         * volver a bloquearlo inmediatamente.
+         */
+
+        bool stateChanged =
+            hardInputLock != shouldBlock;
+
+        hardInputLock =
+            shouldBlock;
+
+        // ---------------------------------------------------------
+        // UI
+        // ---------------------------------------------------------
 
         if (wrongStickerPanel != null)
-            wrongStickerPanel.SetActive(false);
+        {
+            if (wrongStickerPanel.activeSelf != shouldBlock)
+                wrongStickerPanel.SetActive(shouldBlock);
+        }
 
-        var controller = FindObjectOfType<RouletteController>();
+        // ---------------------------------------------------------
+        // ROULETTE INPUT
+        // ---------------------------------------------------------
+
+        if (controller == null)
+            controller = FindObjectOfType<RouletteController>();
+
         if (controller != null)
-            controller.inputBlocked = false;
+            controller.SetInputBlocked(shouldBlock);
 
-        Debug.Log("[Validator] ✅ Bloqueo desactivado: todos los stickers correctos");
+        // ---------------------------------------------------------
+        // DEBUG
+        // ---------------------------------------------------------
+
+        if (!stateChanged)
+            return;
+
+        if (shouldBlock)
+        {
+            Debug.Log(
+                "[Validator] 🔒 Hay stickers mal colocados. " +
+                "La ruleta queda bloqueada hasta corregirlos."
+            );
+        }
+        else
+        {
+            Debug.Log(
+                "[Validator] ✅ Todos los stickers están correctamente colocados."
+            );
+        }
     }
 }
