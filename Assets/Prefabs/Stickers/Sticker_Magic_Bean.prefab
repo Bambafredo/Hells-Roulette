@@ -152,8 +152,9 @@ MonoBehaviour:
   stickerMask:
     serializedVersion: 2
     m_Bits: 256
-  tolerance: 0.05
+  tolerance: 0.01
   coverageThreshold: 0.75
+  stickerRoot: {fileID: 0}
 --- !u!60 &8295343081182667351
 PolygonCollider2D:
   m_ObjectHideFlags: 0

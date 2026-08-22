@@ -3127,7 +3127,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   wrongStickerPanel: {fileID: 1866646970}
-  blockAllInput: 0
 --- !u!1 &1009172658
 GameObject:
   m_ObjectHideFlags: 0

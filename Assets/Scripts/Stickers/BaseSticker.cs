@@ -12,19 +12,24 @@ public class BaseSticker : MonoBehaviour
     public RouletteController controller;
 
     [Header("Placement")]
-    public bool isPlaced = false;         
+    public bool isPlaced = false;
     public Transform currentSegment;
 
-    [HideInInspector] public BagZone currentBagZone;        
-    [HideInInspector] public BagZone currentGameplayZone;   
+    [HideInInspector] public BagZone currentBagZone;
+    [HideInInspector] public BagZone currentGameplayZone;
 
     [Header("Validation Masks")]
     public LayerMask segmentMask;
     public LayerMask stickerMask;
 
     [Header("Placement Tuning")]
-    [Range(0f, 0.2f)] public float tolerance = 0.05f;
-    [Range(0.5f, 1f)] public float coverageThreshold = 0.75f;
+    [Range(0f, 0.2f)]
+    public float tolerance = 0.01f;
+
+    // Se mantiene para no romper datos serializados ni referencias antiguas.
+    // La nueva validación ya no utiliza un porcentaje aproximado de cobertura.
+    [Range(0.5f, 1f)]
+    public float coverageThreshold = 0.75f;
 
     [Header("Internal")]
     [Tooltip("GO raíz del sticker (prefab). Si no se asigna, se detecta en Awake una vez.")]
@@ -33,9 +38,17 @@ public class BaseSticker : MonoBehaviour
     private Camera cam;
     private bool isDragging = false;
     private Vector3 offset;
+
     private Vector3 originalPosition;
     private Quaternion originalRotation;
     private Transform originalParent;
+
+    // Estado lógico antes de empezar el drag.
+    // Necesario para restaurar correctamente un sticker
+    // si intentamos colocarlo en una posición inválida.
+    private bool originalIsPlaced;
+    private Transform originalSegment;
+
     private Collider2D myCollider;
 
     protected virtual void Awake()
@@ -51,7 +64,8 @@ public class BaseSticker : MonoBehaviour
         if (wheelCenter == null)
         {
             var w = GameObject.Find("Wheel");
-            if (w) wheelCenter = w.transform;
+            if (w)
+                wheelCenter = w.transform;
         }
 
         if (controller == null)
@@ -69,9 +83,17 @@ public class BaseSticker : MonoBehaviour
     // ===========================================================
     // DRAGGING
     // ===========================================================
+
     protected virtual void HandleDragging()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
+
+        if (cam == null)
+            cam = Camera.main;
+
+        if (cam == null || myCollider == null || stickerRoot == null)
+            return;
+
         Vector2 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
 
         if (Input.GetMouseButtonDown(0))
@@ -83,9 +105,13 @@ public class BaseSticker : MonoBehaviour
             {
                 isDragging = true;
 
+                // Guardamos TODO el estado anterior antes de modificar nada.
                 originalPosition = stickerRoot.position;
                 originalRotation = stickerRoot.rotation;
                 originalParent = stickerRoot.parent;
+
+                originalIsPlaced = isPlaced;
+                originalSegment = currentSegment;
 
                 if (BagManager.Instance != null)
                 {
@@ -97,11 +123,14 @@ public class BaseSticker : MonoBehaviour
                 {
                     isPlaced = false;
                     currentSegment = null;
+
                     stickerRoot.SetParent(null, true);
                 }
 
                 offset = stickerRoot.position - (Vector3)mouseWorld;
+
                 SetAlpha(0.6f);
+
                 controller?.SetInputBlocked(true);
             }
         }
@@ -113,8 +142,11 @@ public class BaseSticker : MonoBehaviour
             if (Input.GetMouseButtonUp(0))
             {
                 HandleDrop();
+
                 isDragging = false;
+
                 controller?.SetInputBlocked(false);
+
                 SetAlpha(1f);
 
                 if (StickerPlacementValidator.Instance != null &&
@@ -124,12 +156,14 @@ public class BaseSticker : MonoBehaviour
                 }
             }
         }
+
 #endif
     }
 
     // ===========================================================
     // DROP LOGIC
     // ===========================================================
+
     private void HandleDrop()
     {
         if (BagManager.Instance == null)
@@ -140,20 +174,28 @@ public class BaseSticker : MonoBehaviour
 
         Vector2 p = stickerRoot.position;
 
+        // -------------------------------------------------------
         // BAG PORTAL
+        // -------------------------------------------------------
+
         if (BagManager.Instance.IsPointOnBagPortal(p))
         {
             var free = BagManager.Instance.FindFirstFreeBagSlot();
+
             if (free != null)
             {
                 BagManager.Instance.PlaceStickerInBagSlot_Auto(this, free);
                 return;
             }
+
             ReturnToOrigin();
             return;
         }
 
+        // -------------------------------------------------------
         // GAMEPLAY PORTAL
+        // -------------------------------------------------------
+
         if (BagManager.Instance.IsPointOnGameplayPortal(p))
         {
             if (BagManager.Instance.PlaceStickerInNextEmptyGameplayArea_FromBag(this))
@@ -163,14 +205,23 @@ public class BaseSticker : MonoBehaviour
             return;
         }
 
+        // -------------------------------------------------------
         // BAG SCREEN
+        // -------------------------------------------------------
+
         if (BagManager.Instance.IsBagActive())
         {
             var slot = BagManager.Instance.GetBagSlotAtPosition(p);
+
             if (slot != null)
             {
-                if (BagManager.Instance.TryPlaceInSlotManual(this, slot, stickerRoot.position))
+                if (BagManager.Instance.TryPlaceInSlotManual(
+                        this,
+                        slot,
+                        stickerRoot.position))
+                {
                     return;
+                }
 
                 ReturnToOrigin();
                 return;
@@ -180,12 +231,21 @@ public class BaseSticker : MonoBehaviour
             return;
         }
 
+        // -------------------------------------------------------
         // GAMEPLAY SCREEN
+        // -------------------------------------------------------
+
         var gSlot = BagManager.Instance.GetGameplaySlotAtPosition(p);
+
         if (gSlot != null)
         {
-            if (BagManager.Instance.TryPlaceInSlotManual(this, gSlot, stickerRoot.position))
+            if (BagManager.Instance.TryPlaceInSlotManual(
+                    this,
+                    gSlot,
+                    stickerRoot.position))
+            {
                 return;
+            }
 
             if (TryPlaceOnWheel(p))
                 return;
@@ -197,11 +257,11 @@ public class BaseSticker : MonoBehaviour
             return;
         }
 
-        // Try wheel
+        // Primero intentamos colocarlo sobre la ruleta.
         if (TryPlaceOnWheel(p))
             return;
 
-        // Free gameplay area
+        // Después, en una zona libre de gameplay.
         if (BagManager.Instance.IsPointInsideAnyGameplayArea(p))
         {
             if (TryPlaceFreelyInGameplayArea(p))
@@ -211,139 +271,117 @@ public class BaseSticker : MonoBehaviour
             return;
         }
 
+        // Fallback.
         TryPlaceSticker();
     }
 
     // ===========================================================
     // ROULETTE LOGIC
     // ===========================================================
+
     private bool TryPlaceOnWheel(Vector3 dropPos)
     {
-        Collider2D segCol = Physics2D.OverlapPoint(dropPos, segmentMask);
+        if (myCollider == null)
+            myCollider = GetComponent<Collider2D>();
 
-        if (segCol == null)
+        if (myCollider == null)
             return false;
 
-        if (!IsMostlyInsideSegment(myCollider, segCol, tolerance, coverageThreshold))
+        /*
+         * IMPORTANTE:
+         *
+         * Ya no usamos:
+         *
+         * Physics2D.OverlapPoint(dropPos)
+         * +
+         * IsMostlyInsideSegment()
+         * +
+         * OverlapCircleAll()
+         *
+         * Buscamos los segmentos candidatos debajo de la geometría
+         * del sticker y StickerPlacementUtility decide si realmente
+         * cabe entero y no colisiona con otro sticker.
+         */
+
+        Collider2D validSegment =
+            StickerPlacementUtility.FindValidSegment(
+                this,
+                segmentMask,
+                tolerance
+            );
+
+        if (validSegment == null)
             return false;
 
-        Collider2D[] overlaps =
-            Physics2D.OverlapCircleAll(dropPos, myCollider.bounds.extents.x * 0.9f, stickerMask);
+        stickerRoot.SetParent(validSegment.transform, true);
 
-        foreach (var o in overlaps)
-        {
-            if (o == myCollider) continue;
-
-            if (!o.transform.IsChildOf(segCol.transform))
-                continue;
-
-            return false;
-        }
-
-        stickerRoot.SetParent(segCol.transform, true);
-        currentSegment = segCol.transform;
+        currentSegment = validSegment.transform;
         isPlaced = true;
 
         return true;
     }
 
-    // Fallback
+    // ===========================================================
+    // FALLBACK PLACEMENT
+    // ===========================================================
+
     protected virtual void TryPlaceSticker()
     {
-        Vector2 worldPos = stickerRoot.position;
-        Collider2D segCol = Physics2D.OverlapPoint(worldPos, segmentMask);
+        if (myCollider == null)
+            myCollider = GetComponent<Collider2D>();
 
-        if (segCol == null)
+        if (myCollider == null)
         {
             ReturnToOrigin();
             return;
         }
 
-        if (!IsMostlyInsideSegment(myCollider, segCol, tolerance, coverageThreshold))
+        Collider2D validSegment =
+            StickerPlacementUtility.FindValidSegment(
+                this,
+                segmentMask,
+                tolerance
+            );
+
+        if (validSegment == null)
         {
             ReturnToOrigin();
             return;
         }
 
-        Collider2D[] overlaps =
-            Physics2D.OverlapCircleAll(worldPos, myCollider.bounds.extents.x * 0.9f, stickerMask);
+        stickerRoot.SetParent(validSegment.transform, true);
 
-        foreach (var o in overlaps)
-        {
-            if (o == myCollider) continue;
-            if (!o.transform.IsChildOf(segCol.transform))
-                continue;
-
-            ReturnToOrigin();
-            return;
-        }
-
-        stickerRoot.SetParent(segCol.transform, true);
-        currentSegment = segCol.transform;
+        currentSegment = validSegment.transform;
         isPlaced = true;
     }
 
     // ===========================================================
     // SEGMENT VALIDATION
     // ===========================================================
-    private bool IsMostlyInsideSegment(Collider2D sticker, Collider2D segment, float tolerance, float threshold)
-    {
-        Bounds b = sticker.bounds;
-        Vector3 min = b.min - new Vector3(tolerance, tolerance, 0f);
-        Vector3 max = b.max + new Vector3(tolerance, tolerance, 0f);
 
-        int total = 9;
-        int inside = 0;
-
-        for (int ix = 0; ix < 3; ix++)
-        {
-            for (int iy = 0; iy < 3; iy++)
-            {
-                float x = Mathf.Lerp(min.x, max.x, ix / 2f);
-                float y = Mathf.Lerp(min.y, max.y, iy / 2f);
-
-                if (segment.OverlapPoint(new Vector2(x, y)))
-                    inside++;
-            }
-        }
-
-        return inside / (float)total >= threshold;
-    }
-
+    /// <summary>
+    /// Se mantiene público porque StickerPlacementValidator
+    /// ya utiliza este método.
+    ///
+    /// Ahora utiliza exactamente la misma validación geométrica
+    /// que utilizamos durante el drop.
+    /// </summary>
     public bool DebugCheckSegment(Collider2D segmentCol)
     {
         if (segmentCol == null)
             return false;
 
-        Collider2D myCol = GetComponent<Collider2D>();
-        if (myCol == null)
-            return false;
-
-        // Igual que la validación normal
-        bool inside = IsMostlyInsideSegment(myCol, segmentCol, tolerance, coverageThreshold);
-        if (!inside) return false;
-
-        Vector2 center = myCol.bounds.center;
-        float r = Mathf.Max(myCol.bounds.extents.x, myCol.bounds.extents.y) * 0.9f;
-
-        Collider2D[] overlaps = Physics2D.OverlapCircleAll(center, r, stickerMask);
-
-        foreach (var o in overlaps)
-        {
-            if (o == myCol) continue;
-            if (!o.transform.IsChildOf(segmentCol.transform)) continue;
-
-            BaseSticker other = o.GetComponentInParent<BaseSticker>();
-            if (other != null && other != this)
-                return false;
-        }
-
-        return true;
+        return StickerPlacementUtility.CanPlaceOnSegment(
+            this,
+            segmentCol,
+            tolerance
+        );
     }
 
     // ===========================================================
     // RESTORE AFTER WHEEL REGEN
     // ===========================================================
+
     public void OnRestoredAfterWheelRegen()
     {
         if (currentSegment == null)
@@ -351,24 +389,51 @@ public class BaseSticker : MonoBehaviour
 
         isPlaced = true;
 
+        /*
+         * Conservamos este pequeño refresh porque ya existía
+         * y puede ayudar a Unity a actualizar la geometría
+         * después de regenerar la rueda.
+         */
         Vector3 p = stickerRoot.position;
-        stickerRoot.position = p + new Vector3(0.001f, 0, 0);
+
+        stickerRoot.position =
+            p + new Vector3(0.001f, 0f, 0f);
+
         stickerRoot.position = p;
     }
 
     // ===========================================================
     // UTILITIES
     // ===========================================================
+
     protected virtual void ReturnToOrigin()
     {
-        stickerRoot.SetParent(originalParent);
+        if (stickerRoot == null)
+            return;
+
+        stickerRoot.SetParent(originalParent, true);
+
         stickerRoot.position = originalPosition;
         stickerRoot.rotation = originalRotation;
+
+        /*
+         * Antes el Transform volvía al segmento,
+         * pero isPlaced/currentSegment NO volvían.
+         *
+         * Eso dejaba stickers visualmente colocados
+         * pero lógicamente fuera de la ruleta.
+         */
+        isPlaced = originalIsPlaced;
+        currentSegment = originalSegment;
     }
 
     private void SetAlpha(float a)
     {
+        if (stickerRoot == null)
+            return;
+
         var sr = stickerRoot.GetComponentInChildren<SpriteRenderer>();
+
         if (sr)
         {
             Color c = sr.color;
@@ -377,39 +442,81 @@ public class BaseSticker : MonoBehaviour
         }
     }
 
-    // 🔴 IMPORTANTE: ahora el ScriptableObject recibe el contexto del sticker
+    // ===========================================================
+    // EFFECT
+    // ===========================================================
+
+    // El ScriptableObject recibe el contexto del sticker.
     public virtual void OnSegmentWin()
     {
-        if (effect == null) return;
+        if (effect == null)
+            return;
+
         effect.ApplyEffect(this);
     }
 
     // ===========================================================
-    // GAMEPLAY FREE AREA LOGIC (sin cambios, solo root→stickerRoot)
+    // GAMEPLAY FREE AREA LOGIC
+    //
+    // Esta sección permanece esencialmente igual.
+    // NO estamos refactorizando todavía la colocación de la bolsa
+    // o las áreas libres de gameplay.
     // ===========================================================
+
     private bool TryPlaceFreelyInGameplayArea(Vector2 dropPos)
     {
-        int idx = BagManager.Instance.GetGameplayAreaIndexAtPoint(dropPos);
-        if (idx < 0) return false;
+        int idx =
+            BagManager.Instance.GetGameplayAreaIndexAtPoint(dropPos);
 
-        var area = BagManager.Instance.gameplayAreas[idx];
+        if (idx < 0)
+            return false;
+
+        var area =
+            BagManager.Instance.gameplayAreas[idx];
+
         if (area == null || area.areaCollider == null)
             return false;
 
         float r = ApproxRadiusWorld();
 
-        if (!PointInsideAreaWithMargin(area.areaCollider, dropPos, r))
+        if (!PointInsideAreaWithMargin(
+                area.areaCollider,
+                dropPos,
+                r))
+        {
             return false;
+        }
 
-        var areaRoot = area.contentRoot != null ? area.contentRoot : stickerRoot.parent;
-        if (OverlapsAnyInArea(areaRoot, dropPos, r))
+        var areaRoot =
+            area.contentRoot != null
+                ? area.contentRoot
+                : stickerRoot.parent;
+
+        if (OverlapsAnyInArea(
+                areaRoot,
+                dropPos,
+                r))
+        {
             return false;
+        }
 
         stickerRoot.SetParent(areaRoot, true);
 
-        Vector3 clamped = BagManager.Instance.ClampToGameplay(dropPos, idx);
-        stickerRoot.position = new Vector3(clamped.x, clamped.y, stickerRoot.position.z);
+        Vector3 clamped =
+            BagManager.Instance.ClampToGameplay(
+                dropPos,
+                idx
+            );
+
+        stickerRoot.position =
+            new Vector3(
+                clamped.x,
+                clamped.y,
+                stickerRoot.position.z
+            );
+
         stickerRoot.rotation = Quaternion.identity;
+
         isPlaced = false;
         currentSegment = null;
 
@@ -418,40 +525,75 @@ public class BaseSticker : MonoBehaviour
 
     private float ApproxRadiusWorld()
     {
-        if (myCollider == null) myCollider = GetComponent<Collider2D>();
-        var e = myCollider.bounds.extents;
-        return Mathf.Max(e.x, e.y);
-    }
+        if (myCollider == null)
+            myCollider = GetComponent<Collider2D>();
 
-    private bool PointInsideAreaWithMargin(Collider2D areaCol, Vector2 p, float margin)
-    {
-        if (!areaCol.OverlapPoint(p)) return false;
-        Bounds b = areaCol.bounds;
-        return (
-            p.x >= b.min.x + margin &&
-            p.x <= b.max.x - margin &&
-            p.y >= b.min.y + margin &&
-            p.y <= b.max.y - margin
+        if (myCollider == null)
+            return 0f;
+
+        var e = myCollider.bounds.extents;
+
+        return Mathf.Max(
+            e.x,
+            e.y
         );
     }
 
-    private bool OverlapsAnyInArea(Transform areaRoot, Vector2 candidate, float r)
+    private bool PointInsideAreaWithMargin(
+        Collider2D areaCol,
+        Vector2 p,
+        float margin)
     {
-        if (areaRoot == null) return false;
+        if (!areaCol.OverlapPoint(p))
+            return false;
 
-        var others = areaRoot.GetComponentsInChildren<Collider2D>(true);
+        Bounds b = areaCol.bounds;
+
+        return
+            p.x >= b.min.x + margin &&
+            p.x <= b.max.x - margin &&
+            p.y >= b.min.y + margin &&
+            p.y <= b.max.y - margin;
+    }
+
+    private bool OverlapsAnyInArea(
+        Transform areaRoot,
+        Vector2 candidate,
+        float r)
+    {
+        if (areaRoot == null)
+            return false;
+
+        var others =
+            areaRoot.GetComponentsInChildren<Collider2D>(true);
+
         Transform selfRoot = stickerRoot;
 
         foreach (var o in others)
         {
+            if (o == null)
+                continue;
+
             if (o.transform.IsChildOf(selfRoot))
                 continue;
 
-            BaseSticker other = o.GetComponentInParent<BaseSticker>();
-            if (other == null) continue;
+            BaseSticker other =
+                o.GetComponentInParent<BaseSticker>();
 
-            float d = Vector2.Distance(candidate, o.bounds.center);
-            float ro = Mathf.Max(o.bounds.extents.x, o.bounds.extents.y);
+            if (other == null)
+                continue;
+
+            float d =
+                Vector2.Distance(
+                    candidate,
+                    o.bounds.center
+                );
+
+            float ro =
+                Mathf.Max(
+                    o.bounds.extents.x,
+                    o.bounds.extents.y
+                );
 
             if (d < (r + ro) * 0.98f)
                 return true;

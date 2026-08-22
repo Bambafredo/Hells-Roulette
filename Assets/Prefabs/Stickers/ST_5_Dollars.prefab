@@ -187,8 +187,9 @@ MonoBehaviour:
   stickerMask:
     serializedVersion: 2
     m_Bits: 256
-  tolerance: 0.05
+  tolerance: 0.01
   coverageThreshold: 0.75
+  stickerRoot: {fileID: 0}
 --- !u!1 &6470820344446946707
 GameObject:
   m_ObjectHideFlags: 0
