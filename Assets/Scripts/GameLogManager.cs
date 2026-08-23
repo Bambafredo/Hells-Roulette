@@ -116,6 +116,13 @@ public class GameLogManager : MonoBehaviour
     }
 
 
+    public bool IsExpanded
+    {
+        get;
+        private set;
+    }
+
+
     public bool SpinBlockOpen
     {
         get;
@@ -146,7 +153,21 @@ public class GameLogManager : MonoBehaviour
     private Vector2 shownPosition;
     private Vector2 hiddenPosition;
 
+    /*
+     * The authored RectTransform is always our NORMAL state.
+     * Expanded mode is derived from it at runtime.
+     *
+     * We normalize the panel pivot to its top edge without changing
+     * its visible authored position. That makes height changes grow
+     * downward instead of drifting up/down depending on the original pivot.
+     */
+    private Vector2 normalPanelPosition;
+
+    private float normalPanelHeight;
+    private float expandedPanelHeight;
+
     private Coroutine slideRoutine;
+    private Coroutine resizeRoutine;
     private Coroutine scrollRoutine;
 
 
@@ -186,17 +207,61 @@ public class GameLogManager : MonoBehaviour
 
 
         /*
-         * The position authored in the Editor is the OPEN position.
+         * Keep the current authored rectangle exactly where it is, but
+         * normalize its pivot to the TOP edge. From this point on,
+         * changing only the height makes the panel grow downward.
+         */
+        SetTopPivotPreservingVisualRect(
+            logPanel
+        );
+
+
+        /*
+         * The RectTransform authored in the Editor is the NORMAL state.
+         * We keep exactly that size and position as our baseline.
          */
         shownPosition =
             logPanel.anchoredPosition;
+
+        normalPanelPosition =
+            shownPosition;
+
+        normalPanelHeight =
+            logPanel.rect.height;
+
+
+        /*
+         * Convert the log's responsive children to stretch layouts while
+         * preserving their exact CURRENT visible bounds.
+         *
+         * No Inspector values are needed:
+         * - ScrollView stretches with LogPanel
+         * - Viewport stretches with ScrollView
+         * - VerticalScrollbar stretches with ScrollView
+         * - Sliding Area stretches with the scrollbar
+         *
+         * This is much more robust than manually resizing each child from
+         * cached sizeDelta/anchoredPosition values.
+         */
+        ConfigureResponsiveLogHierarchy();
+
+
+        /*
+         * Expanded mode is derived automatically:
+         *
+         * - target roughly 2x the current authored height
+         * - never extend beyond the available parent/canvas space
+         * - preserve the current TOP edge of the panel
+         */
+        expandedPanelHeight =
+            CalculateExpandedPanelHeight();
 
 
         hiddenPosition =
             shownPosition +
             Vector2.up *
             (
-                logPanel.rect.height +
+                normalPanelHeight +
                 hiddenExtraOffset
             );
 
@@ -204,10 +269,22 @@ public class GameLogManager : MonoBehaviour
         IsOpen =
             startOpen;
 
+        IsExpanded =
+            false;
+
+
+        /*
+         * Always begin at the authored NORMAL height.
+         */
+        logPanel.SetSizeWithCurrentAnchors(
+            RectTransform.Axis.Vertical,
+            normalPanelHeight
+        );
+
 
         logPanel.anchoredPosition =
             IsOpen
-                ? shownPosition
+                ? normalPanelPosition
                 : hiddenPosition;
 
 
@@ -348,6 +425,25 @@ public class GameLogManager : MonoBehaviour
 
     public void ToggleLogPanel()
     {
+        /*
+         * Two button behaviours:
+         *
+         * Start Open OFF:
+         *     Closed <-> Normal
+         *
+         * Start Open ON:
+         *     Normal <-> Expanded
+         *
+         * This lets Start Open behave like a permanently available
+         * compact log whose button simply gives it more room.
+         */
+        if (startOpen)
+        {
+            ToggleExpandedPanel();
+            return;
+        }
+
+
         SetLogPanelOpen(
             !IsOpen
         );
@@ -373,6 +469,37 @@ public class GameLogManager : MonoBehaviour
             return;
 
 
+        /*
+         * The sliding state always uses the NORMAL authored size.
+         * Expanded mode is only the alternate state used by the
+         * button when Start Open is enabled.
+         */
+        if (IsExpanded)
+        {
+            if (resizeRoutine != null)
+            {
+                StopCoroutine(
+                    resizeRoutine
+                );
+
+                resizeRoutine = null;
+            }
+
+
+            IsExpanded = false;
+
+            logPanel.SetSizeWithCurrentAnchors(
+                RectTransform.Axis.Vertical,
+                normalPanelHeight
+            );
+
+            logPanel.anchoredPosition =
+                normalPanelPosition;
+
+            RefreshLogLayout();
+        }
+
+
         IsOpen = open;
 
 
@@ -389,6 +516,466 @@ public class GameLogManager : MonoBehaviour
                 SlidePanelRoutine(
                     open
                 )
+            );
+    }
+
+
+    // =========================================================
+    // EXPANDED PANEL
+    // =========================================================
+
+    private void ToggleExpandedPanel()
+    {
+        if (logPanel == null)
+            return;
+
+
+        /*
+         * Start Open mode should always keep the log visible.
+         * If some external call happened to close it, restore the
+         * normal visible state before allowing expansion.
+         */
+        if (!IsOpen)
+        {
+            IsOpen = true;
+
+            logPanel.SetSizeWithCurrentAnchors(
+                RectTransform.Axis.Vertical,
+                normalPanelHeight
+            );
+
+            logPanel.anchoredPosition =
+                normalPanelPosition;
+
+            RefreshLogLayout();
+        }
+
+
+        SetExpandedPanel(
+            !IsExpanded
+        );
+    }
+
+
+    private void SetExpandedPanel(
+        bool expanded)
+    {
+        if (logPanel == null)
+            return;
+
+
+        IsExpanded = expanded;
+
+
+        if (resizeRoutine != null)
+        {
+            StopCoroutine(
+                resizeRoutine
+            );
+        }
+
+
+        resizeRoutine =
+            StartCoroutine(
+                ResizePanelRoutine(
+                    expanded
+                )
+            );
+    }
+
+
+    private IEnumerator ResizePanelRoutine(
+        bool expanding)
+    {
+        float preservedScrollPosition =
+            scrollRect != null
+                ? scrollRect.verticalNormalizedPosition
+                : 0f;
+
+
+        float startHeight =
+            logPanel.rect.height;
+
+        float targetHeight =
+            expanding
+                ? expandedPanelHeight
+                : normalPanelHeight;
+
+
+        float elapsed = 0f;
+
+
+        while (elapsed <
+               slideDuration)
+        {
+            elapsed +=
+                Time.unscaledDeltaTime;
+
+
+            float t =
+                Mathf.Clamp01(
+                    elapsed /
+                    slideDuration
+                );
+
+
+            float smoothT =
+                t *
+                t *
+                (
+                    3f -
+                    2f * t
+                );
+
+
+            float height =
+                Mathf.Lerp(
+                    startHeight,
+                    targetHeight,
+                    smoothT
+                );
+
+
+            /*
+             * Because the panel pivot is normalized to Y = 1,
+             * changing only the height keeps the TOP edge perfectly fixed
+             * and grows/shrinks the panel downward.
+             *
+             * The responsive children use stretch anchors, so they follow
+             * this size change automatically.
+             */
+            logPanel.SetSizeWithCurrentAnchors(
+                RectTransform.Axis.Vertical,
+                height
+            );
+
+
+            logPanel.anchoredPosition =
+                normalPanelPosition;
+
+
+            yield return null;
+        }
+
+
+        logPanel.SetSizeWithCurrentAnchors(
+            RectTransform.Axis.Vertical,
+            targetHeight
+        );
+
+        logPanel.anchoredPosition =
+            normalPanelPosition;
+
+
+        RefreshLogLayout();
+
+
+        if (scrollRect != null)
+        {
+            scrollRect.verticalNormalizedPosition =
+                preservedScrollPosition;
+        }
+
+
+        resizeRoutine = null;
+    }
+
+
+    // =========================================================
+    // RESPONSIVE LOG HIERARCHY
+    // =========================================================
+
+    private void ConfigureResponsiveLogHierarchy()
+    {
+        if (scrollRect == null)
+            return;
+
+
+        RectTransform scrollViewRect =
+            scrollRect.GetComponent<RectTransform>();
+
+
+        /*
+         * Preserve exactly how every element currently looks, then convert
+         * it to a stretch relationship with its parent.
+         *
+         * This means the Inspector layout remains the visual source of truth,
+         * while future parent height changes become automatic.
+         */
+        MakeRectStretchInsideParentPreservingBounds(
+            scrollViewRect
+        );
+
+
+        MakeRectStretchInsideParentPreservingBounds(
+            scrollRect.viewport
+        );
+
+
+        if (scrollRect.verticalScrollbar != null)
+        {
+            RectTransform scrollbarRect =
+                scrollRect.verticalScrollbar
+                    .GetComponent<RectTransform>();
+
+
+            MakeRectStretchInsideParentPreservingBounds(
+                scrollbarRect
+            );
+
+
+            /*
+             * Unity's default Scrollbar hierarchy has:
+             *
+             * VerticalScrollbar
+             * └─ Sliding Area
+             *    └─ Handle
+             *
+             * The Scrollbar component controls Handle itself, but Sliding Area
+             * must follow the scrollbar's new height.
+             */
+            if (scrollRect.verticalScrollbar.handleRect != null)
+            {
+                RectTransform slidingArea =
+                    scrollRect.verticalScrollbar
+                        .handleRect.parent
+                        as RectTransform;
+
+
+                MakeRectStretchInsideParentPreservingBounds(
+                    slidingArea
+                );
+            }
+        }
+
+
+        RefreshLogLayout();
+    }
+
+
+    private void MakeRectStretchInsideParentPreservingBounds(
+        RectTransform rect)
+    {
+        if (rect == null)
+            return;
+
+
+        RectTransform parentRect =
+            rect.parent as RectTransform;
+
+
+        if (parentRect == null)
+            return;
+
+
+        /*
+         * Capture the exact visible rectangle in the parent's local space.
+         */
+        Vector3[] corners =
+            new Vector3[4];
+
+
+        rect.GetWorldCorners(
+            corners
+        );
+
+
+        Vector3 bottomLeft =
+            parentRect.InverseTransformPoint(
+                corners[0]
+            );
+
+
+        Vector3 topRight =
+            parentRect.InverseTransformPoint(
+                corners[2]
+            );
+
+
+        float leftMargin =
+            bottomLeft.x -
+            parentRect.rect.xMin;
+
+
+        float rightMargin =
+            parentRect.rect.xMax -
+            topRight.x;
+
+
+        float bottomMargin =
+            bottomLeft.y -
+            parentRect.rect.yMin;
+
+
+        float topMargin =
+            parentRect.rect.yMax -
+            topRight.y;
+
+
+        /*
+         * Full stretch, but with the exact current margins restored.
+         * Visually this should be indistinguishable at normal size.
+         */
+        rect.anchorMin =
+            Vector2.zero;
+
+        rect.anchorMax =
+            Vector2.one;
+
+
+        rect.offsetMin =
+            new Vector2(
+                leftMargin,
+                bottomMargin
+            );
+
+
+        rect.offsetMax =
+            new Vector2(
+                -rightMargin,
+                -topMargin
+            );
+    }
+
+
+    private void SetTopPivotPreservingVisualRect(
+        RectTransform rect)
+    {
+        if (rect == null)
+            return;
+
+
+        if (Mathf.Approximately(
+                rect.pivot.y,
+                1f))
+        {
+            return;
+        }
+
+
+        /*
+         * Changing pivot normally moves the visible rectangle.
+         * Capture its top-left world corner, change pivot, then move the
+         * transform back so that exact corner remains in the same place.
+         */
+        Vector3[] beforeCorners =
+            new Vector3[4];
+
+
+        rect.GetWorldCorners(
+            beforeCorners
+        );
+
+
+        Vector3 originalTopLeft =
+            beforeCorners[1];
+
+
+        rect.pivot =
+            new Vector2(
+                rect.pivot.x,
+                1f
+            );
+
+
+        Vector3[] afterCorners =
+            new Vector3[4];
+
+
+        rect.GetWorldCorners(
+            afterCorners
+        );
+
+
+        Vector3 correctedOffset =
+            originalTopLeft -
+            afterCorners[1];
+
+
+        rect.position +=
+            correctedOffset;
+    }
+
+
+    private void RefreshLogLayout()
+    {
+        Canvas.ForceUpdateCanvases();
+
+
+        if (logPanel != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(
+                logPanel
+            );
+        }
+
+
+        Canvas.ForceUpdateCanvases();
+    }
+
+
+    // =========================================================
+    // EXPANDED SIZE CALCULATION
+    // =========================================================
+
+    private float CalculateExpandedPanelHeight()
+    {
+        float desiredHeight =
+            normalPanelHeight *
+            2f;
+
+
+        RectTransform parentRect =
+            logPanel.parent as RectTransform;
+
+
+        if (parentRect == null)
+        {
+            return desiredHeight;
+        }
+
+
+        /*
+         * Work out how much vertical space exists below the
+         * panel's current top edge inside its parent RectTransform.
+         */
+        Vector3[] panelCorners =
+            new Vector3[4];
+
+        logPanel.GetWorldCorners(
+            panelCorners
+        );
+
+
+        Vector3 panelTopLeftInParent =
+            parentRect.InverseTransformPoint(
+                panelCorners[1]
+            );
+
+
+        float availableHeight =
+            panelTopLeftInParent.y -
+            parentRect.rect.yMin -
+            Mathf.Max(
+                0f,
+                hiddenExtraOffset
+            );
+
+
+        /*
+         * Never make "expanded" smaller than the authored state.
+         */
+        availableHeight =
+            Mathf.Max(
+                normalPanelHeight,
+                availableHeight
+            );
+
+
+        return
+            Mathf.Min(
+                desiredHeight,
+                availableHeight
             );
     }
 
