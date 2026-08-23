@@ -2,10 +2,12 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System;
+using TMPro;
 
 public class RewardManager : MonoBehaviour
 {
     public static RewardManager Instance;
+
 
     // =========================================================
     // REFERENCES
@@ -17,9 +19,26 @@ public class RewardManager : MonoBehaviour
     public Transform rewardSlotA;
     public Transform rewardSlotB;
 
+
     [Header("Buttons")]
     public Collider2D rerollButtonCollider;
     public Collider2D skipButtonCollider;
+
+
+    // =========================================================
+    // REWARD TEXTS
+    // =========================================================
+
+    [Header("Reward Texts")]
+
+    [Tooltip("Texto de precio del RewardSlot A.")]
+    public TMP_Text rewardSlotAPriceText;
+
+    [Tooltip("Texto de precio del RewardSlot B.")]
+    public TMP_Text rewardSlotBPriceText;
+
+    [Tooltip("Texto que muestra el coste de reroll en sangre.")]
+    public TMP_Text rerollCostText;
 
 
     // =========================================================
@@ -35,6 +54,7 @@ public class RewardManager : MonoBehaviour
     // =========================================================
 
     [Header("Reroll")]
+
     [Min(0)]
     public int rerollBloodCost = 1;
 
@@ -49,11 +69,13 @@ public class RewardManager : MonoBehaviour
         private set;
     }
 
+
     public int PurchasesThisPhase
     {
         get;
         private set;
     }
+
 
     /// <summary>
     /// Primera compra = x1
@@ -68,6 +90,7 @@ public class RewardManager : MonoBehaviour
             return PurchasesThisPhase + 1;
         }
     }
+
 
     private GameObject currentOfferA;
     private GameObject currentOfferB;
@@ -97,6 +120,7 @@ public class RewardManager : MonoBehaviour
             return;
         }
 
+
         Instance = this;
 
         cam = Camera.main;
@@ -110,8 +134,17 @@ public class RewardManager : MonoBehaviour
             rewardPanel.SetActive(false);
         }
 
+
         RewardPhaseActive = false;
+
         PurchasesThisPhase = 0;
+
+
+        /*
+         * Dejamos inicializados los textos aunque
+         * RewardPanel empiece apagado.
+         */
+        UpdateRewardTexts();
     }
 
 
@@ -122,14 +155,18 @@ public class RewardManager : MonoBehaviour
         if (!RewardPhaseActive)
             return;
 
+
         if (!Input.GetMouseButtonDown(0))
             return;
+
 
         if (cam == null)
             cam = Camera.main;
 
+
         if (cam == null)
             return;
+
 
         Vector2 mouseWorld =
             cam.ScreenToWorldPoint(
@@ -180,6 +217,7 @@ public class RewardManager : MonoBehaviour
         if (RewardPhaseActive)
             return;
 
+
         if (rewardPanel == null)
         {
             Debug.LogError(
@@ -189,7 +227,9 @@ public class RewardManager : MonoBehaviour
             return;
         }
 
+
         RewardPhaseActive = true;
+
 
         /*
          * El multiplicador se reinicia únicamente
@@ -197,12 +237,16 @@ public class RewardManager : MonoBehaviour
          */
         PurchasesThisPhase = 0;
 
+
         OnPurchaseCountChanged?
             .Invoke(PurchasesThisPhase);
 
+
         rewardPanel.SetActive(true);
 
+
         GenerateOffers();
+
 
         Debug.Log(
             "[REWARD] Reward phase started. " +
@@ -228,11 +272,13 @@ public class RewardManager : MonoBehaviour
             return 0;
         }
 
+
         int baseCost =
             Mathf.Max(
                 0,
                 sticker.effect.basePurchaseCost
             );
+
 
         return
             baseCost *
@@ -253,11 +299,13 @@ public class RewardManager : MonoBehaviour
         if (!RewardPhaseActive)
             return false;
 
+
         if (offerObject == null ||
             sticker == null)
         {
             return false;
         }
+
 
         /*
          * Solo podemos comprar objetos que realmente
@@ -266,8 +314,10 @@ public class RewardManager : MonoBehaviour
         bool isOfferA =
             currentOfferA == offerObject;
 
+
         bool isOfferB =
             currentOfferB == offerObject;
+
 
         if (!isOfferA &&
             !isOfferB)
@@ -313,6 +363,7 @@ public class RewardManager : MonoBehaviour
             CurrencyManager.Instance
                 .Spend(price);
 
+
         if (!paid)
             return false;
 
@@ -322,15 +373,15 @@ public class RewardManager : MonoBehaviour
         // -----------------------------------------------------
 
         /*
-         * IMPORTANTÍSIMO:
-         *
          * NO destruimos el sticker comprado.
+         *
          * Ya está colocado en Album o Roulette
          * y ahora pertenece al jugador.
          */
 
         if (isOfferA)
             currentOfferA = null;
+
 
         if (isOfferB)
             currentOfferB = null;
@@ -342,8 +393,31 @@ public class RewardManager : MonoBehaviour
 
         PurchasesThisPhase++;
 
+
         OnPurchaseCountChanged?
             .Invoke(PurchasesThisPhase);
+
+
+        /*
+         * IMPORTANT:
+         *
+         * Al aumentar el multiplicador debemos refrescar
+         * inmediatamente el precio de la oferta restante.
+         *
+         * Ejemplo:
+         *
+         * Bean = $4
+         * Sword = $8
+         *
+         * Compramos Bean por $4.
+         *
+         * Purchases = 1
+         *
+         * Sword pasa inmediatamente a:
+         *
+         * $8 × 2 = $16
+         */
+        UpdateRewardTexts();
 
 
         Debug.Log(
@@ -386,6 +460,15 @@ public class RewardManager : MonoBehaviour
         ClearRemainingOffers();
 
 
+        /*
+         * Limpiamos inmediatamente los textos anteriores.
+         *
+         * Esto también nos protege si por algún motivo
+         * el reward pool estuviera vacío.
+         */
+        UpdateRewardTexts();
+
+
         if (stickerPrefabs == null ||
             stickerPrefabs.Length == 0)
         {
@@ -422,6 +505,13 @@ public class RewardManager : MonoBehaviour
                 stickerPrefabs[indexB],
                 rewardSlotB
             );
+
+
+        /*
+         * Ahora que ya existen ambas ofertas,
+         * mostramos sus precios reales.
+         */
+        UpdateRewardTexts();
 
 
         Debug.Log(
@@ -534,11 +624,13 @@ public class RewardManager : MonoBehaviour
         {
             GenerateOffers();
 
+
             Debug.Log(
                 "[REWARD] Free reroll. " +
                 $"Purchase multiplier remains " +
                 $"x{CurrentPurchaseMultiplier}."
             );
+
 
             return true;
         }
@@ -633,6 +725,9 @@ public class RewardManager : MonoBehaviour
         ClearRemainingOffers();
 
 
+        UpdateRewardTexts();
+
+
         RewardPhaseActive = false;
 
 
@@ -672,6 +767,122 @@ public class RewardManager : MonoBehaviour
 
             currentOfferB = null;
         }
+    }
+
+
+    // =========================================================
+    // REWARD TEXTS
+    // =========================================================
+
+    private void UpdateRewardTexts()
+    {
+        // -----------------------------------------------------
+        // OFFER A
+        // -----------------------------------------------------
+
+        if (rewardSlotAPriceText != null)
+        {
+            BaseSticker stickerA =
+                GetOfferSticker(
+                    currentOfferA
+                );
+
+
+            if (stickerA != null)
+            {
+                int price =
+                    GetCurrentPurchasePrice(
+                        stickerA
+                    );
+
+
+                rewardSlotAPriceText.text =
+                    $"${price}";
+            }
+
+            else
+            {
+                /*
+                 * No hay oferta:
+                 *
+                 * - ya fue comprada
+                 * - estamos entre rerolls
+                 * - Reward Screen está cerrada
+                 */
+                rewardSlotAPriceText.text =
+                    "";
+            }
+        }
+
+
+        // -----------------------------------------------------
+        // OFFER B
+        // -----------------------------------------------------
+
+        if (rewardSlotBPriceText != null)
+        {
+            BaseSticker stickerB =
+                GetOfferSticker(
+                    currentOfferB
+                );
+
+
+            if (stickerB != null)
+            {
+                int price =
+                    GetCurrentPurchasePrice(
+                        stickerB
+                    );
+
+
+                rewardSlotBPriceText.text =
+                    $"${price}";
+            }
+
+            else
+            {
+                rewardSlotBPriceText.text =
+                    "";
+            }
+        }
+
+
+        // -----------------------------------------------------
+        // REROLL COST
+        // -----------------------------------------------------
+
+        if (rerollCostText != null)
+        {
+            if (rerollBloodCost <= 0)
+            {
+                rerollCostText.text =
+                    "0";
+            }
+
+            else
+            {
+                rerollCostText.text =
+                    $"{rerollBloodCost}";
+            }
+        }
+    }
+
+
+    // =========================================================
+    // GET OFFER STICKER
+    // =========================================================
+
+    private BaseSticker GetOfferSticker(
+        GameObject offer)
+    {
+        if (offer == null)
+            return null;
+
+
+        return
+            offer.GetComponentInChildren<BaseSticker>(
+                true
+            );
     }
 
 
