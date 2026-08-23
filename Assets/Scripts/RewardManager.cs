@@ -10,6 +10,17 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
+    // PURCHASE CURRENCY
+    // =========================================================
+
+    public enum PurchaseCurrency
+    {
+        Blood,
+        Coin
+    }
+
+
+    // =========================================================
     // REFERENCES
     // =========================================================
 
@@ -26,19 +37,61 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
+    // CHANGE CURRENCY BUTTON
+    // =========================================================
+
+    [Header("Change Currency Button")]
+
+    public Collider2D changeCurrencyButtonCollider;
+
+    public SpriteRenderer changeCurrencyButtonRenderer;
+
+    public TMP_Text changeCurrencyButtonText;
+
+
+    [Header("Currency Button Colors")]
+
+    [Tooltip("Color del botón cuando estamos pagando con Blood.")]
+    public Color bloodButtonColor = Color.red;
+
+    [Tooltip("Color del botón cuando estamos pagando con Coin.")]
+    public Color coinButtonColor = Color.yellow;
+
+
+    // =========================================================
+    // DEFAULT CURRENCY
+    // =========================================================
+
+    [Header("Default Currency")]
+
+    [Tooltip(
+        "Moneda que estará seleccionada por defecto " +
+        "cada vez que se abra una nueva Reward Screen."
+    )]
+    public PurchaseCurrency defaultPurchaseCurrency =
+        PurchaseCurrency.Coin;
+
+
+    // =========================================================
     // REWARD TEXTS
     // =========================================================
 
     [Header("Reward Texts")]
 
-    [Tooltip("Texto de precio del RewardSlot A.")]
     public TMP_Text rewardSlotAPriceText;
 
-    [Tooltip("Texto de precio del RewardSlot B.")]
     public TMP_Text rewardSlotBPriceText;
 
-    [Tooltip("Texto que muestra el coste de reroll en sangre.")]
     public TMP_Text rerollCostText;
+
+
+    [Header("Reward Price Colors")]
+
+    [Tooltip("Color de los precios cuando se paga con Blood.")]
+    public Color bloodPriceColor = Color.red;
+
+    [Tooltip("Color de los precios cuando se paga con Coin.")]
+    public Color coinPriceColor = Color.yellow;
 
 
     // =========================================================
@@ -47,6 +100,21 @@ public class RewardManager : MonoBehaviour
 
     [Header("Reward Pool")]
     public GameObject[] stickerPrefabs;
+
+
+    // =========================================================
+    // PURCHASE BALANCE
+    // =========================================================
+
+    [Header("Purchase Balance")]
+
+    [Tooltip(
+        "Multiplicador adicional aplicado SOLO cuando " +
+        "los stickers se compran con Blood. " +
+        "1 = mismo precio que Coin, 2 = x2, 3 = x3, etc."
+    )]
+    [Min(1)]
+    public int bloodPriceMultiplier = 1;
 
 
     // =========================================================
@@ -71,6 +139,13 @@ public class RewardManager : MonoBehaviour
 
 
     public int PurchasesThisPhase
+    {
+        get;
+        private set;
+    }
+
+
+    public PurchaseCurrency CurrentPurchaseCurrency
     {
         get;
         private set;
@@ -124,6 +199,14 @@ public class RewardManager : MonoBehaviour
         Instance = this;
 
         cam = Camera.main;
+
+
+        /*
+         * Inicializamos inmediatamente con el valor
+         * configurado desde Inspector.
+         */
+        CurrentPurchaseCurrency =
+            defaultPurchaseCurrency;
     }
 
 
@@ -140,10 +223,11 @@ public class RewardManager : MonoBehaviour
         PurchasesThisPhase = 0;
 
 
-        /*
-         * Dejamos inicializados los textos aunque
-         * RewardPanel empiece apagado.
-         */
+        CurrentPurchaseCurrency =
+            defaultPurchaseCurrency;
+
+
+        UpdateCurrencyButtonVisuals();
         UpdateRewardTexts();
     }
 
@@ -172,6 +256,18 @@ public class RewardManager : MonoBehaviour
             cam.ScreenToWorldPoint(
                 Input.mousePosition
             );
+
+
+        // -----------------------------------------------------
+        // CHANGE CURRENCY
+        // -----------------------------------------------------
+
+        if (changeCurrencyButtonCollider != null &&
+            changeCurrencyButtonCollider.OverlapPoint(mouseWorld))
+        {
+            TogglePurchaseCurrency();
+            return;
+        }
 
 
         // -----------------------------------------------------
@@ -232,10 +328,15 @@ public class RewardManager : MonoBehaviour
 
 
         /*
-         * El multiplicador se reinicia únicamente
-         * al entrar en una NUEVA Reward Phase.
+         * Cada nueva Reward Phase:
+         *
+         * - multiplicador vuelve a x1
+         * - moneda vuelve a la configurada como Default
          */
         PurchasesThisPhase = 0;
+
+        CurrentPurchaseCurrency =
+            defaultPurchaseCurrency;
 
 
         OnPurchaseCountChanged?
@@ -247,11 +348,84 @@ public class RewardManager : MonoBehaviour
 
         GenerateOffers();
 
+        UpdateCurrencyButtonVisuals();
+        UpdateRewardTexts();
+
 
         Debug.Log(
             "[REWARD] Reward phase started. " +
-            "Next purchase multiplier: x1."
+            $"Next purchase multiplier: x1. " +
+            $"Currency: {CurrentPurchaseCurrency}."
         );
+    }
+
+
+    // =========================================================
+    // CHANGE PURCHASE CURRENCY
+    // =========================================================
+
+    private void TogglePurchaseCurrency()
+    {
+        if (!RewardPhaseActive)
+            return;
+
+
+        if (CurrentPurchaseCurrency ==
+            PurchaseCurrency.Blood)
+        {
+            CurrentPurchaseCurrency =
+                PurchaseCurrency.Coin;
+        }
+
+        else
+        {
+            CurrentPurchaseCurrency =
+                PurchaseCurrency.Blood;
+        }
+
+
+        UpdateCurrencyButtonVisuals();
+        UpdateRewardTexts();
+
+
+        Debug.Log(
+            $"[REWARD] Purchase currency changed to " +
+            $"{CurrentPurchaseCurrency}."
+        );
+    }
+
+
+    private void UpdateCurrencyButtonVisuals()
+    {
+        bool usingBlood =
+            CurrentPurchaseCurrency ==
+            PurchaseCurrency.Blood;
+
+
+        // -----------------------------------------------------
+        // BUTTON TEXT
+        // -----------------------------------------------------
+
+        if (changeCurrencyButtonText != null)
+        {
+            changeCurrencyButtonText.text =
+                usingBlood
+                    ? "Blood"
+                    : "Coin";
+        }
+
+
+        // -----------------------------------------------------
+        // BUTTON COLOR
+        // -----------------------------------------------------
+
+        if (changeCurrencyButtonRenderer != null)
+        {
+            changeCurrencyButtonRenderer.color =
+                usingBlood
+                    ? bloodButtonColor
+                    : coinButtonColor;
+        }
     }
 
 
@@ -260,8 +434,11 @@ public class RewardManager : MonoBehaviour
     // =========================================================
 
     /// <summary>
-    /// Devuelve el precio que tendría ESTE sticker
-    /// si se comprara ahora mismo.
+    /// Coin:
+    /// Base Cost × Purchase Multiplier
+    ///
+    /// Blood:
+    /// Base Cost × Purchase Multiplier × Blood Price Multiplier
     /// </summary>
     public int GetCurrentPurchasePrice(
         BaseSticker sticker)
@@ -280,18 +457,30 @@ public class RewardManager : MonoBehaviour
             );
 
 
-        return
+        int price =
             baseCost *
             CurrentPurchaseMultiplier;
+
+
+        if (CurrentPurchaseCurrency ==
+            PurchaseCurrency.Blood)
+        {
+            price *=
+                Mathf.Max(
+                    1,
+                    bloodPriceMultiplier
+                );
+        }
+
+
+        return price;
     }
 
 
-    /// <summary>
-    /// RewardStickerOffer llamará aquí DESPUÉS de que
-    /// BaseSticker haya conseguido una colocación válida.
-    ///
-    /// Devuelve false si no podemos pagar.
-    /// </summary>
+    // =========================================================
+    // PURCHASE
+    // =========================================================
+
     public bool TryPurchaseOffer(
         GameObject offerObject,
         BaseSticker sticker)
@@ -307,10 +496,10 @@ public class RewardManager : MonoBehaviour
         }
 
 
-        /*
-         * Solo podemos comprar objetos que realmente
-         * pertenecen actualmente a la tienda.
-         */
+        // -----------------------------------------------------
+        // VALID OFFER
+        // -----------------------------------------------------
+
         bool isOfferA =
             currentOfferA == offerObject;
 
@@ -333,39 +522,24 @@ public class RewardManager : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // MONEY
+        // PAY
         // -----------------------------------------------------
 
-        if (CurrencyManager.Instance == null)
-        {
-            Debug.LogWarning(
-                "[REWARD] CurrencyManager missing."
-            );
-
-            return false;
-        }
-
-
-        if (!CurrencyManager.Instance.CanAfford(price))
-        {
-            Debug.Log(
-                $"[REWARD] Cannot buy " +
-                $"'{GetStickerName(sticker)}'. " +
-                $"Need ${price}, " +
-                $"have ${CurrencyManager.Instance.dollars}."
-            );
-
-            return false;
-        }
-
-
         bool paid =
-            CurrencyManager.Instance
-                .Spend(price);
+            TryPayPurchasePrice(
+                price
+            );
 
 
         if (!paid)
+        {
+            LogFailedPurchase(
+                sticker,
+                price
+            );
+
             return false;
+        }
 
 
         // -----------------------------------------------------
@@ -373,10 +547,8 @@ public class RewardManager : MonoBehaviour
         // -----------------------------------------------------
 
         /*
-         * NO destruimos el sticker comprado.
-         *
-         * Ya está colocado en Album o Roulette
-         * y ahora pertenece al jugador.
+         * El sticker comprado NO se destruye.
+         * Ya pertenece al jugador.
          */
 
         if (isOfferA)
@@ -399,23 +571,8 @@ public class RewardManager : MonoBehaviour
 
 
         /*
-         * IMPORTANT:
-         *
-         * Al aumentar el multiplicador debemos refrescar
-         * inmediatamente el precio de la oferta restante.
-         *
-         * Ejemplo:
-         *
-         * Bean = $4
-         * Sword = $8
-         *
-         * Compramos Bean por $4.
-         *
-         * Purchases = 1
-         *
-         * Sword pasa inmediatamente a:
-         *
-         * $8 × 2 = $16
+         * La oferta restante pasa inmediatamente
+         * al nuevo multiplicador.
          */
         UpdateRewardTexts();
 
@@ -423,7 +580,7 @@ public class RewardManager : MonoBehaviour
         Debug.Log(
             $"[REWARD] Purchased " +
             $"'{GetStickerName(sticker)}' " +
-            $"for ${price}. " +
+            $"for {GetPriceLogString(price)}. " +
             $"Purchases this phase: " +
             $"{PurchasesThisPhase}. " +
             $"Next multiplier: " +
@@ -431,16 +588,120 @@ public class RewardManager : MonoBehaviour
         );
 
 
-        /*
-         * La Reward Phase NO termina.
-         *
-         * El jugador puede:
-         *
-         * - comprar la otra oferta
-         * - hacer reroll
-         * - hacer skip
-         */
         return true;
+    }
+
+
+    // =========================================================
+    // PAY PURCHASE PRICE
+    // =========================================================
+
+    private bool TryPayPurchasePrice(
+        int price)
+    {
+        if (price <= 0)
+            return true;
+
+
+        // -----------------------------------------------------
+        // BLOOD
+        // -----------------------------------------------------
+
+        if (CurrentPurchaseCurrency ==
+            PurchaseCurrency.Blood)
+        {
+            if (BloodManager.Instance == null)
+            {
+                Debug.LogWarning(
+                    "[REWARD] BloodManager missing."
+                );
+
+                return false;
+            }
+
+
+            if (BloodManager.Instance.currentBlood <
+                price)
+            {
+                return false;
+            }
+
+
+            return
+                BloodManager.Instance
+                    .ConsumeBlood(
+                        price
+                    );
+        }
+
+
+        // -----------------------------------------------------
+        // COIN
+        // -----------------------------------------------------
+
+        if (CurrencyManager.Instance == null)
+        {
+            Debug.LogWarning(
+                "[REWARD] CurrencyManager missing."
+            );
+
+            return false;
+        }
+
+
+        if (!CurrencyManager.Instance
+            .CanAfford(price))
+        {
+            return false;
+        }
+
+
+        return
+            CurrencyManager.Instance
+                .Spend(price);
+    }
+
+
+    // =========================================================
+    // FAILED PURCHASE LOG
+    // =========================================================
+
+    private void LogFailedPurchase(
+        BaseSticker sticker,
+        int price)
+    {
+        if (CurrentPurchaseCurrency ==
+            PurchaseCurrency.Blood)
+        {
+            int available =
+                BloodManager.Instance != null
+                    ? BloodManager.Instance.currentBlood
+                    : 0;
+
+
+            Debug.Log(
+                $"[REWARD] Cannot buy " +
+                $"'{GetStickerName(sticker)}'. " +
+                $"Need {price} Blood, " +
+                $"have {available}."
+            );
+        }
+
+        else
+        {
+            int available =
+                CurrencyManager.Instance != null
+                    ? CurrencyManager.Instance.dollars
+                    : 0;
+
+
+            Debug.Log(
+                $"[REWARD] Cannot buy " +
+                $"'{GetStickerName(sticker)}'. " +
+                $"Need ${price}, " +
+                $"have ${available}."
+            );
+        }
     }
 
 
@@ -450,22 +711,9 @@ public class RewardManager : MonoBehaviour
 
     private void GenerateOffers()
     {
-        /*
-         * Reroll siempre sustituye cualquier oferta
-         * que todavía quede.
-         *
-         * Los stickers YA COMPRADOS no están en
-         * currentOfferA/B y por tanto no se destruyen.
-         */
         ClearRemainingOffers();
 
 
-        /*
-         * Limpiamos inmediatamente los textos anteriores.
-         *
-         * Esto también nos protege si por algún motivo
-         * el reward pool estuviera vacío.
-         */
         UpdateRewardTexts();
 
 
@@ -507,10 +755,6 @@ public class RewardManager : MonoBehaviour
             );
 
 
-        /*
-         * Ahora que ya existen ambas ofertas,
-         * mostramos sus precios reales.
-         */
         UpdateRewardTexts();
 
 
@@ -531,10 +775,6 @@ public class RewardManager : MonoBehaviour
     private int GetSecondRewardIndex(
         int firstIndex)
     {
-        /*
-         * Durante desarrollo permitimos dos copias
-         * si el pool solo contiene un prefab.
-         */
         if (stickerPrefabs.Length <= 1)
             return firstIndex;
 
@@ -579,10 +819,6 @@ public class RewardManager : MonoBehaviour
                 slot.rotation
             );
 
-
-        // =====================================================
-        // REWARD OFFER COMPONENT
-        // =====================================================
 
         RewardStickerOffer offer =
             instance.GetComponent<RewardStickerOffer>();
@@ -640,6 +876,12 @@ public class RewardManager : MonoBehaviour
         // BLOOD
         // -----------------------------------------------------
 
+        /*
+         * Reroll siempre cuesta Blood.
+         *
+         * No está afectado ni por Change Currency
+         * ni por Blood Price Multiplier.
+         */
         if (BloodManager.Instance == null)
         {
             Debug.LogWarning(
@@ -718,10 +960,6 @@ public class RewardManager : MonoBehaviour
 
     private void CompleteRewardPhase()
     {
-        /*
-         * Destruimos únicamente los stickers que
-         * todavía seguían a la venta.
-         */
         ClearRemainingOffers();
 
 
@@ -776,100 +1014,102 @@ public class RewardManager : MonoBehaviour
 
     private void UpdateRewardTexts()
     {
-        // -----------------------------------------------------
-        // OFFER A
-        // -----------------------------------------------------
-
-        if (rewardSlotAPriceText != null)
-        {
-            BaseSticker stickerA =
-                GetOfferSticker(
-                    currentOfferA
-                );
+        UpdateOfferPriceText(
+            rewardSlotAPriceText,
+            currentOfferA
+        );
 
 
-            if (stickerA != null)
-            {
-                int price =
-                    GetCurrentPurchasePrice(
-                        stickerA
-                    );
-
-
-                rewardSlotAPriceText.text =
-                    $"${price}";
-            }
-
-            else
-            {
-                /*
-                 * No hay oferta:
-                 *
-                 * - ya fue comprada
-                 * - estamos entre rerolls
-                 * - Reward Screen está cerrada
-                 */
-                rewardSlotAPriceText.text =
-                    "";
-            }
-        }
+        UpdateOfferPriceText(
+            rewardSlotBPriceText,
+            currentOfferB
+        );
 
 
         // -----------------------------------------------------
-        // OFFER B
-        // -----------------------------------------------------
-
-        if (rewardSlotBPriceText != null)
-        {
-            BaseSticker stickerB =
-                GetOfferSticker(
-                    currentOfferB
-                );
-
-
-            if (stickerB != null)
-            {
-                int price =
-                    GetCurrentPurchasePrice(
-                        stickerB
-                    );
-
-
-                rewardSlotBPriceText.text =
-                    $"${price}";
-            }
-
-            else
-            {
-                rewardSlotBPriceText.text =
-                    "";
-            }
-        }
-
-
-        // -----------------------------------------------------
-        // REROLL COST
+        // REROLL
         // -----------------------------------------------------
 
         if (rerollCostText != null)
         {
-            if (rerollBloodCost <= 0)
-            {
-                rerollCostText.text =
-                    "0";
-            }
+            /*
+             * Solo mostramos el número.
+             *
+             * 5 → "5"
+             * 1 → "1"
+             * 0 → "0"
+             */
+            rerollCostText.text =
+                rerollBloodCost.ToString();
+        }
+    }
 
-            else
-            {
-                rerollCostText.text =
-                    $"{rerollBloodCost}";
-            }
+
+    private void UpdateOfferPriceText(
+        TMP_Text priceText,
+        GameObject offer)
+    {
+        if (priceText == null)
+            return;
+
+
+        BaseSticker sticker =
+            GetOfferSticker(
+                offer
+            );
+
+
+        if (sticker == null)
+        {
+            priceText.text = "";
+            return;
+        }
+
+
+        int price =
+            GetCurrentPurchasePrice(
+                sticker
+            );
+
+
+        // -----------------------------------------------------
+        // BLOOD
+        // -----------------------------------------------------
+
+        if (CurrentPurchaseCurrency ==
+            PurchaseCurrency.Blood)
+        {
+            /*
+             * Blood:
+             * número sin símbolo.
+             */
+            priceText.text =
+                price.ToString();
+
+
+            priceText.color =
+                bloodPriceColor;
+        }
+
+
+        // -----------------------------------------------------
+        // COIN
+        // -----------------------------------------------------
+
+        else
+        {
+            priceText.text =
+                $"${price}";
+
+
+            priceText.color =
+                coinPriceColor;
         }
     }
 
 
     // =========================================================
-    // GET OFFER STICKER
+    // OFFER STICKER
     // =========================================================
 
     private BaseSticker GetOfferSticker(
@@ -883,6 +1123,26 @@ public class RewardManager : MonoBehaviour
             offer.GetComponentInChildren<BaseSticker>(
                 true
             );
+    }
+
+
+    // =========================================================
+    // PRICE LOG STRING
+    // =========================================================
+
+    private string GetPriceLogString(
+        int price)
+    {
+        if (CurrentPurchaseCurrency ==
+            PurchaseCurrency.Blood)
+        {
+            return
+                $"{price} Blood";
+        }
+
+
+        return
+            $"${price}";
     }
 
 
