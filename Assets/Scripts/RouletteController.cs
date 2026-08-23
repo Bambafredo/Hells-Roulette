@@ -704,6 +704,19 @@ public class RouletteController : MonoBehaviour
             0;
 
         /*
+         * Reset the Flag Pin earnings for this physical spin.
+         *
+         * We keep the running total in FlagPin because that is the
+         * object that actually awards the pending money on every hit.
+         */
+        if (RoundManager.Instance != null &&
+            RoundManager.Instance.flagPin != null)
+        {
+            RoundManager.Instance.flagPin
+                .ResetSpinEarnings();
+        }
+
+        /*
          * Primero RoundManager.
          *
          * Así CurrencyManager.BeginSpin() y el estado
@@ -1027,6 +1040,27 @@ public class RouletteController : MonoBehaviour
                     .LogManualBrake(
                         brakeBloodSpentThisSpin
                     );
+            }
+
+            /*
+             * Flag Pin rewards happen during the physical spin, before
+             * the final winning segment is resolved. We aggregate them
+             * into a single line instead of spamming one entry per hit.
+             */
+            if (RoundManager.Instance != null &&
+                RoundManager.Instance.flagPin != null)
+            {
+                int flagMoney =
+                    RoundManager.Instance.flagPin
+                        .MoneyEarnedThisSpin;
+
+                if (flagMoney > 0)
+                {
+                    GameLogManager.Instance
+                        .LogFlagPinMoney(
+                            flagMoney
+                        );
+                }
             }
 
             int displaySegmentNumber =

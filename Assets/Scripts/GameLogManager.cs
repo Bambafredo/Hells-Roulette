@@ -570,6 +570,22 @@ public class GameLogManager : MonoBehaviour
     }
 
 
+    public void LogFlagPinMoney(
+        int moneyGained)
+    {
+        if (moneyGained <= 0)
+            return;
+
+
+        AddGameplayLine(
+            "Flag Pin: " +
+            MoneyText(
+                $"+${moneyGained}"
+            )
+        );
+    }
+
+
     public void LogWinningSegment(
         int segmentNumber,
         Color actualSegmentColor)
