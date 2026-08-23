@@ -3603,8 +3603,8 @@ MonoBehaviour:
   tokensPerRound: 3
   currentRound: 0
   tokensRemaining: 0
-  startingDebt: 10
-  debtIncreasePerRound: 20
+  startingDebt: 6
+  debtIncreasePerRound: 10
   currentDebt: 0
   debtPending: 0
   waitingForRewardCompletion: 0
@@ -3697,16 +3697,21 @@ MonoBehaviour:
   changeCurrencyButtonText: {fileID: 1681727128}
   bloodButtonColor: {r: 1, g: 0, b: 0, a: 1}
   coinButtonColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  defaultPurchaseCurrency: 1
   rewardSlotAPriceText: {fileID: 2097484618}
   rewardSlotBPriceText: {fileID: 993250765}
   rerollCostText: {fileID: 2101371309}
   bloodPriceColor: {r: 1, g: 0, b: 0, a: 1}
   coinPriceColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  freePriceColor: {r: 0, g: 1, b: 0, a: 1}
   stickerPrefabs:
   - {fileID: 577474978131120927, guid: e380f0cfcc88d914fa292738c551e8c0, type: 3}
   - {fileID: 577474978131120927, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
   - {fileID: 577474978131120927, guid: 00e0f7cee6aad8440bee00663f654f25, type: 3}
   bloodPriceMultiplier: 2
+  enableFirstPurchaseDiscount: 1
+  firstPurchaseDiscountTarget: 0
+  firstPurchaseDiscountPercent: 100
   rerollBloodCost: 5
 --- !u!1 &1004711265
 GameObject:

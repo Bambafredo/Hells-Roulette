@@ -20,6 +20,14 @@ public class RewardManager : MonoBehaviour
     }
 
 
+    public enum FirstPurchaseDiscountTarget
+    {
+        CoinOnly,
+        BloodOnly,
+        Both
+    }
+
+
     // =========================================================
     // REFERENCES
     // =========================================================
@@ -65,8 +73,8 @@ public class RewardManager : MonoBehaviour
     [Header("Default Currency")]
 
     [Tooltip(
-        "Moneda que estará seleccionada por defecto " +
-        "cada vez que se abra una nueva Reward Screen."
+        "Moneda seleccionada por defecto cada vez " +
+        "que comienza una nueva Reward Phase."
     )]
     public PurchaseCurrency defaultPurchaseCurrency =
         PurchaseCurrency.Coin;
@@ -93,6 +101,11 @@ public class RewardManager : MonoBehaviour
     [Tooltip("Color de los precios cuando se paga con Coin.")]
     public Color coinPriceColor = Color.yellow;
 
+    [Tooltip(
+        "Color utilizado cuando el precio del sticker es FREE."
+    )]
+    public Color freePriceColor = Color.green;
+
 
     // =========================================================
     // REWARD POOL
@@ -115,6 +128,35 @@ public class RewardManager : MonoBehaviour
     )]
     [Min(1)]
     public int bloodPriceMultiplier = 1;
+
+
+    // =========================================================
+    // FIRST PURCHASE DISCOUNT
+    // =========================================================
+
+    [Header("First Purchase Discount")]
+
+    [Tooltip(
+        "Activa o desactiva el descuento especial " +
+        "para el primer sticker comprado durante cada Reward Phase."
+    )]
+    public bool enableFirstPurchaseDiscount = false;
+
+
+    [Tooltip(
+        "Determina qué moneda puede beneficiarse " +
+        "del descuento de primera compra."
+    )]
+    public FirstPurchaseDiscountTarget firstPurchaseDiscountTarget =
+        FirstPurchaseDiscountTarget.CoinOnly;
+
+
+    [Tooltip(
+        "Porcentaje de descuento aplicado al primer sticker comprado. " +
+        "0 = sin descuento, 100 = FREE."
+    )]
+    [Range(0, 100)]
+    public int firstPurchaseDiscountPercent = 0;
 
 
     // =========================================================
@@ -201,10 +243,6 @@ public class RewardManager : MonoBehaviour
         cam = Camera.main;
 
 
-        /*
-         * Inicializamos inmediatamente con el valor
-         * configurado desde Inspector.
-         */
         CurrentPurchaseCurrency =
             defaultPurchaseCurrency;
     }
@@ -330,8 +368,8 @@ public class RewardManager : MonoBehaviour
         /*
          * Cada nueva Reward Phase:
          *
-         * - multiplicador vuelve a x1
-         * - moneda vuelve a la configurada como Default
+         * - vuelve a primera compra
+         * - vuelve a la moneda configurada por defecto
          */
         PurchasesThisPhase = 0;
 
@@ -434,11 +472,16 @@ public class RewardManager : MonoBehaviour
     // =========================================================
 
     /// <summary>
+    /// Calcula el precio REAL que se cobraría ahora.
+    ///
     /// Coin:
-    /// Base Cost × Purchase Multiplier
+    /// Base × Purchase Multiplier
     ///
     /// Blood:
-    /// Base Cost × Purchase Multiplier × Blood Price Multiplier
+    /// Base × Purchase Multiplier × Blood Multiplier
+    ///
+    /// Después, si corresponde, se aplica
+    /// First Purchase Discount.
     /// </summary>
     public int GetCurrentPurchasePrice(
         BaseSticker sticker)
@@ -462,6 +505,10 @@ public class RewardManager : MonoBehaviour
             CurrentPurchaseMultiplier;
 
 
+        // -----------------------------------------------------
+        // BLOOD MULTIPLIER
+        // -----------------------------------------------------
+
         if (CurrentPurchaseCurrency ==
             PurchaseCurrency.Blood)
         {
@@ -473,7 +520,142 @@ public class RewardManager : MonoBehaviour
         }
 
 
-        return price;
+        // -----------------------------------------------------
+        // FIRST PURCHASE DISCOUNT
+        // -----------------------------------------------------
+
+        if (ShouldApplyFirstPurchaseDiscount())
+        {
+            price =
+                ApplyDiscount(
+                    price,
+                    firstPurchaseDiscountPercent
+                );
+        }
+
+
+        return
+            Mathf.Max(
+                0,
+                price
+            );
+    }
+
+
+    // =========================================================
+    // FIRST PURCHASE DISCOUNT
+    // =========================================================
+
+    private bool ShouldApplyFirstPurchaseDiscount()
+    {
+        // Feature desactivada.
+        if (!enableFirstPurchaseDiscount)
+            return false;
+
+
+        // Solo puede afectar a la primera compra.
+        if (PurchasesThisPhase != 0)
+            return false;
+
+
+        // 0% no tiene efecto.
+        if (firstPurchaseDiscountPercent <= 0)
+            return false;
+
+
+        // -----------------------------------------------------
+        // BOTH
+        // -----------------------------------------------------
+
+        if (firstPurchaseDiscountTarget ==
+            FirstPurchaseDiscountTarget.Both)
+        {
+            return true;
+        }
+
+
+        // -----------------------------------------------------
+        // COIN ONLY
+        // -----------------------------------------------------
+
+        if (firstPurchaseDiscountTarget ==
+            FirstPurchaseDiscountTarget.CoinOnly)
+        {
+            return
+                CurrentPurchaseCurrency ==
+                PurchaseCurrency.Coin;
+        }
+
+
+        // -----------------------------------------------------
+        // BLOOD ONLY
+        // -----------------------------------------------------
+
+        if (firstPurchaseDiscountTarget ==
+            FirstPurchaseDiscountTarget.BloodOnly)
+        {
+            return
+                CurrentPurchaseCurrency ==
+                PurchaseCurrency.Blood;
+        }
+
+
+        return false;
+    }
+
+
+    private int ApplyDiscount(
+        int originalPrice,
+        int discountPercent)
+    {
+        originalPrice =
+            Mathf.Max(
+                0,
+                originalPrice
+            );
+
+
+        discountPercent =
+            Mathf.Clamp(
+                discountPercent,
+                0,
+                100
+            );
+
+
+        /*
+         * 100% siempre significa exactamente FREE.
+         */
+        if (discountPercent >= 100)
+            return 0;
+
+
+        if (discountPercent <= 0)
+            return originalPrice;
+
+
+        float remainingPercent =
+            (100f - discountPercent) /
+            100f;
+
+
+        /*
+         * Redondeamos hacia arriba porque las monedas
+         * son unidades enteras.
+         *
+         * Ejemplo:
+         *
+         * 5 con 50% descuento = 2.5
+         * Precio final = 3.
+         *
+         * Así nunca damos MÁS descuento que el porcentaje
+         * configurado accidentalmente por redondeo.
+         */
+        return
+            Mathf.CeilToInt(
+                originalPrice *
+                remainingPercent
+            );
     }
 
 
@@ -546,11 +728,6 @@ public class RewardManager : MonoBehaviour
         // REMOVE FROM STORE
         // -----------------------------------------------------
 
-        /*
-         * El sticker comprado NO se destruye.
-         * Ya pertenece al jugador.
-         */
-
         if (isOfferA)
             currentOfferA = null;
 
@@ -560,7 +737,7 @@ public class RewardManager : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // ADVANCE MULTIPLIER
+        // ADVANCE PURCHASE COUNT
         // -----------------------------------------------------
 
         PurchasesThisPhase++;
@@ -571,8 +748,10 @@ public class RewardManager : MonoBehaviour
 
 
         /*
-         * La oferta restante pasa inmediatamente
-         * al nuevo multiplicador.
+         * Esto hace dos cosas:
+         *
+         * - oferta restante pasa a x2
+         * - desaparece First Purchase Discount
          */
         UpdateRewardTexts();
 
@@ -599,6 +778,9 @@ public class RewardManager : MonoBehaviour
     private bool TryPayPurchasePrice(
         int price)
     {
+        /*
+         * FREE.
+         */
         if (price <= 0)
             return true;
 
@@ -711,6 +893,10 @@ public class RewardManager : MonoBehaviour
 
     private void GenerateOffers()
     {
+        /*
+         * Reroll reemplaza las ofertas restantes,
+         * pero no afecta al número de compras.
+         */
         ClearRemainingOffers();
 
 
@@ -877,10 +1063,13 @@ public class RewardManager : MonoBehaviour
         // -----------------------------------------------------
 
         /*
-         * Reroll siempre cuesta Blood.
+         * Reroll sigue siendo siempre Blood.
          *
-         * No está afectado ni por Change Currency
-         * ni por Blood Price Multiplier.
+         * No le afectan:
+         *
+         * - Current Purchase Currency
+         * - Blood Price Multiplier
+         * - First Purchase Discount
          */
         if (BloodManager.Instance == null)
         {
@@ -1032,13 +1221,6 @@ public class RewardManager : MonoBehaviour
 
         if (rerollCostText != null)
         {
-            /*
-             * Solo mostramos el número.
-             *
-             * 5 → "5"
-             * 1 → "1"
-             * 0 → "0"
-             */
             rerollCostText.text =
                 rerollBloodCost.ToString();
         }
@@ -1070,6 +1252,24 @@ public class RewardManager : MonoBehaviour
             GetCurrentPurchasePrice(
                 sticker
             );
+
+
+        // -----------------------------------------------------
+        // FREE
+        // -----------------------------------------------------
+
+        if (price <= 0)
+        {
+            priceText.text =
+                "FREE";
+
+
+            priceText.color =
+                freePriceColor;
+
+
+            return;
+        }
 
 
         // -----------------------------------------------------
@@ -1133,6 +1333,10 @@ public class RewardManager : MonoBehaviour
     private string GetPriceLogString(
         int price)
     {
+        if (price <= 0)
+            return "FREE";
+
+
         if (CurrentPurchaseCurrency ==
             PurchaseCurrency.Blood)
         {
