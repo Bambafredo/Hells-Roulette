@@ -87,22 +87,17 @@ public class RewardManager : MonoBehaviour
     [Header("Reward Texts")]
 
     public TMP_Text rewardSlotAPriceText;
-
     public TMP_Text rewardSlotBPriceText;
-
     public TMP_Text rerollCostText;
 
 
     [Header("Reward Price Colors")]
 
-    [Tooltip("Color de los precios cuando se paga con Blood.")]
     public Color bloodPriceColor = Color.red;
-
-    [Tooltip("Color de los precios cuando se paga con Coin.")]
     public Color coinPriceColor = Color.yellow;
 
     [Tooltip(
-        "Color utilizado cuando el precio del sticker es FREE."
+        "Color del texto cuando un sticker es gratuito."
     )]
     public Color freePriceColor = Color.green;
 
@@ -122,9 +117,8 @@ public class RewardManager : MonoBehaviour
     [Header("Purchase Balance")]
 
     [Tooltip(
-        "Multiplicador adicional aplicado SOLO cuando " +
-        "los stickers se compran con Blood. " +
-        "1 = mismo precio que Coin, 2 = x2, 3 = x3, etc."
+        "Multiplicador adicional aplicado SOLO " +
+        "al precio en Blood."
     )]
     [Min(1)]
     public int bloodPriceMultiplier = 1;
@@ -137,23 +131,22 @@ public class RewardManager : MonoBehaviour
     [Header("First Purchase Discount")]
 
     [Tooltip(
-        "Activa o desactiva el descuento especial " +
-        "para el primer sticker comprado durante cada Reward Phase."
+        "Activa/desactiva el descuento especial."
     )]
     public bool enableFirstPurchaseDiscount = false;
 
 
     [Tooltip(
-        "Determina qué moneda puede beneficiarse " +
-        "del descuento de primera compra."
+        "Moneda o monedas en las que puede utilizarse " +
+        "el descuento."
     )]
     public FirstPurchaseDiscountTarget firstPurchaseDiscountTarget =
         FirstPurchaseDiscountTarget.CoinOnly;
 
 
     [Tooltip(
-        "Porcentaje de descuento aplicado al primer sticker comprado. " +
-        "0 = sin descuento, 100 = FREE."
+        "Porcentaje de descuento. " +
+        "100 = FREE."
     )]
     [Range(0, 100)]
     public int firstPurchaseDiscountPercent = 0;
@@ -165,8 +158,18 @@ public class RewardManager : MonoBehaviour
 
     [Header("Reroll")]
 
+    [Tooltip(
+        "Coste base de Blood del reroll."
+    )]
     [Min(0)]
     public int rerollBloodCost = 1;
+
+
+    [Tooltip(
+        "Si está activo, cada reroll utiliza " +
+        "multiplicadores Fibonacci: x3, x5, x8, x13..."
+    )]
+    public bool enableFibonacciRerollMultiplier = false;
 
 
     // =========================================================
@@ -180,7 +183,38 @@ public class RewardManager : MonoBehaviour
     }
 
 
+    /*
+     * Número TOTAL de stickers adquiridos durante
+     * esta Reward Phase.
+     *
+     * Incluye compras FREE.
+     */
     public int PurchasesThisPhase
+    {
+        get;
+        private set;
+    }
+
+
+    /*
+     * Número de compras que SÍ han avanzado
+     * la progresión x1, x2, x3...
+     *
+     * Una compra FREE causada por descuento 100%
+     * NO entra aquí.
+     */
+    public int MultiplierPurchasesThisPhase
+    {
+        get;
+        private set;
+    }
+
+
+    /*
+     * Número de rerolls realizados durante
+     * esta Reward Phase.
+     */
+    public int RerollsThisPhase
     {
         get;
         private set;
@@ -194,17 +228,41 @@ public class RewardManager : MonoBehaviour
     }
 
 
+    /*
+     * El descuento tiene su propio estado.
+     *
+     * NO desaparece por comprar con una moneda
+     * que no sea elegible para el descuento.
+     */
+    private bool firstPurchaseDiscountAvailable = false;
+
+
     /// <summary>
-    /// Primera compra = x1
-    /// Segunda compra = x2
-    /// Tercera compra = x3
-    /// etc.
+    /// 0 compras normales → x1
+    /// 1 compra normal   → x2
+    /// 2 compras normales → x3
+    ///
+    /// Las compras FREE por 100% discount
+    /// no hacen avanzar este contador.
     /// </summary>
     public int CurrentPurchaseMultiplier
     {
         get
         {
-            return PurchasesThisPhase + 1;
+            return
+                MultiplierPurchasesThisPhase + 1;
+        }
+    }
+
+
+    /// <summary>
+    /// Coste real del reroll que se realizaría ahora.
+    /// </summary>
+    public int CurrentRerollCost
+    {
+        get
+        {
+            return CalculateCurrentRerollCost();
         }
     }
 
@@ -260,9 +318,16 @@ public class RewardManager : MonoBehaviour
 
         PurchasesThisPhase = 0;
 
+        MultiplierPurchasesThisPhase = 0;
+
+        RerollsThisPhase = 0;
+
 
         CurrentPurchaseCurrency =
             defaultPurchaseCurrency;
+
+
+        ResetFirstPurchaseDiscount();
 
 
         UpdateCurrencyButtonVisuals();
@@ -365,16 +430,22 @@ public class RewardManager : MonoBehaviour
         RewardPhaseActive = true;
 
 
-        /*
-         * Cada nueva Reward Phase:
-         *
-         * - vuelve a primera compra
-         * - vuelve a la moneda configurada por defecto
-         */
+        // -----------------------------------------------------
+        // RESET PHASE STATE
+        // -----------------------------------------------------
+
         PurchasesThisPhase = 0;
+
+        MultiplierPurchasesThisPhase = 0;
+
+        RerollsThisPhase = 0;
+
 
         CurrentPurchaseCurrency =
             defaultPurchaseCurrency;
+
+
+        ResetFirstPurchaseDiscount();
 
 
         OnPurchaseCountChanged?
@@ -392,9 +463,23 @@ public class RewardManager : MonoBehaviour
 
         Debug.Log(
             "[REWARD] Reward phase started. " +
-            $"Next purchase multiplier: x1. " +
-            $"Currency: {CurrentPurchaseCurrency}."
+            $"Multiplier = x{CurrentPurchaseMultiplier}. " +
+            $"Currency = {CurrentPurchaseCurrency}. " +
+            $"Discount available = " +
+            $"{firstPurchaseDiscountAvailable}."
         );
+    }
+
+
+    // =========================================================
+    // RESET FIRST PURCHASE DISCOUNT
+    // =========================================================
+
+    private void ResetFirstPurchaseDiscount()
+    {
+        firstPurchaseDiscountAvailable =
+            enableFirstPurchaseDiscount &&
+            firstPurchaseDiscountPercent > 0;
     }
 
 
@@ -428,7 +513,9 @@ public class RewardManager : MonoBehaviour
 
         Debug.Log(
             $"[REWARD] Purchase currency changed to " +
-            $"{CurrentPurchaseCurrency}."
+            $"{CurrentPurchaseCurrency}. " +
+            $"Multiplier remains " +
+            $"x{CurrentPurchaseMultiplier}."
         );
     }
 
@@ -440,10 +527,6 @@ public class RewardManager : MonoBehaviour
             PurchaseCurrency.Blood;
 
 
-        // -----------------------------------------------------
-        // BUTTON TEXT
-        // -----------------------------------------------------
-
         if (changeCurrencyButtonText != null)
         {
             changeCurrencyButtonText.text =
@@ -452,10 +535,6 @@ public class RewardManager : MonoBehaviour
                     : "Coin";
         }
 
-
-        // -----------------------------------------------------
-        // BUTTON COLOR
-        // -----------------------------------------------------
 
         if (changeCurrencyButtonRenderer != null)
         {
@@ -471,18 +550,6 @@ public class RewardManager : MonoBehaviour
     // PRICE
     // =========================================================
 
-    /// <summary>
-    /// Calcula el precio REAL que se cobraría ahora.
-    ///
-    /// Coin:
-    /// Base × Purchase Multiplier
-    ///
-    /// Blood:
-    /// Base × Purchase Multiplier × Blood Multiplier
-    ///
-    /// Después, si corresponde, se aplica
-    /// First Purchase Discount.
-    /// </summary>
     public int GetCurrentPurchasePrice(
         BaseSticker sticker)
     {
@@ -500,13 +567,17 @@ public class RewardManager : MonoBehaviour
             );
 
 
+        // -----------------------------------------------------
+        // NORMAL GLOBAL PROGRESSION
+        // -----------------------------------------------------
+
         int price =
             baseCost *
             CurrentPurchaseMultiplier;
 
 
         // -----------------------------------------------------
-        // BLOOD MULTIPLIER
+        // BLOOD BALANCE MULTIPLIER
         // -----------------------------------------------------
 
         if (CurrentPurchaseCurrency ==
@@ -521,7 +592,7 @@ public class RewardManager : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // FIRST PURCHASE DISCOUNT
+        // DISCOUNT
         // -----------------------------------------------------
 
         if (ShouldApplyFirstPurchaseDiscount())
@@ -543,66 +614,52 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
-    // FIRST PURCHASE DISCOUNT
+    // DISCOUNT ELIGIBILITY
     // =========================================================
 
     private bool ShouldApplyFirstPurchaseDiscount()
     {
-        // Feature desactivada.
+        if (!firstPurchaseDiscountAvailable)
+            return false;
+
+
         if (!enableFirstPurchaseDiscount)
             return false;
 
 
-        // Solo puede afectar a la primera compra.
-        if (PurchasesThisPhase != 0)
-            return false;
-
-
-        // 0% no tiene efecto.
         if (firstPurchaseDiscountPercent <= 0)
             return false;
 
 
-        // -----------------------------------------------------
-        // BOTH
-        // -----------------------------------------------------
-
-        if (firstPurchaseDiscountTarget ==
-            FirstPurchaseDiscountTarget.Both)
+        switch (firstPurchaseDiscountTarget)
         {
-            return true;
-        }
+            case FirstPurchaseDiscountTarget.CoinOnly:
+
+                return
+                    CurrentPurchaseCurrency ==
+                    PurchaseCurrency.Coin;
 
 
-        // -----------------------------------------------------
-        // COIN ONLY
-        // -----------------------------------------------------
+            case FirstPurchaseDiscountTarget.BloodOnly:
 
-        if (firstPurchaseDiscountTarget ==
-            FirstPurchaseDiscountTarget.CoinOnly)
-        {
-            return
-                CurrentPurchaseCurrency ==
-                PurchaseCurrency.Coin;
-        }
+                return
+                    CurrentPurchaseCurrency ==
+                    PurchaseCurrency.Blood;
 
 
-        // -----------------------------------------------------
-        // BLOOD ONLY
-        // -----------------------------------------------------
+            case FirstPurchaseDiscountTarget.Both:
 
-        if (firstPurchaseDiscountTarget ==
-            FirstPurchaseDiscountTarget.BloodOnly)
-        {
-            return
-                CurrentPurchaseCurrency ==
-                PurchaseCurrency.Blood;
+                return true;
         }
 
 
         return false;
     }
 
+
+    // =========================================================
+    // DISCOUNT CALCULATION
+    // =========================================================
 
     private int ApplyDiscount(
         int originalPrice,
@@ -623,9 +680,6 @@ public class RewardManager : MonoBehaviour
             );
 
 
-        /*
-         * 100% siempre significa exactamente FREE.
-         */
         if (discountPercent >= 100)
             return 0;
 
@@ -634,27 +688,20 @@ public class RewardManager : MonoBehaviour
             return originalPrice;
 
 
-        float remainingPercent =
+        float remaining =
             (100f - discountPercent) /
             100f;
 
 
         /*
-         * Redondeamos hacia arriba porque las monedas
-         * son unidades enteras.
+         * Redondeamos hacia arriba.
          *
-         * Ejemplo:
-         *
-         * 5 con 50% descuento = 2.5
-         * Precio final = 3.
-         *
-         * Así nunca damos MÁS descuento que el porcentaje
-         * configurado accidentalmente por redondeo.
+         * 5 con 50% off = 2.5 → 3.
          */
         return
             Mathf.CeilToInt(
                 originalPrice *
-                remainingPercent
+                remaining
             );
     }
 
@@ -697,6 +744,24 @@ public class RewardManager : MonoBehaviour
         }
 
 
+        /*
+         * Guardamos si ESTA compra está utilizando
+         * el descuento antes de modificar ningún estado.
+         */
+        bool discountApplied =
+            ShouldApplyFirstPurchaseDiscount();
+
+
+        /*
+         * Solo una compra con descuento 100%
+         * se considera la compra FREE especial
+         * que no avanza la progresión.
+         */
+        bool freeDiscountPurchase =
+            discountApplied &&
+            firstPurchaseDiscountPercent >= 100;
+
+
         int price =
             GetCurrentPurchasePrice(
                 sticker
@@ -737,22 +802,54 @@ public class RewardManager : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // ADVANCE PURCHASE COUNT
+        // CONSUME DISCOUNT
+        // -----------------------------------------------------
+
+        /*
+         * IMPORTANTÍSIMO:
+         *
+         * El descuento SOLO se consume si la compra
+         * realmente se ha realizado utilizando una
+         * moneda elegible.
+         *
+         * Ejemplo Coin Only:
+         *
+         * comprar con Blood NO consume el FREE de Coin.
+         */
+        if (discountApplied)
+        {
+            firstPurchaseDiscountAvailable =
+                false;
+        }
+
+
+        // -----------------------------------------------------
+        // TOTAL PURCHASES
         // -----------------------------------------------------
 
         PurchasesThisPhase++;
+
+
+        // -----------------------------------------------------
+        // PRICE PROGRESSION
+        // -----------------------------------------------------
+
+        /*
+         * Una compra FREE provocada por el descuento
+         * del 100% NO avanza x1 → x2.
+         *
+         * Todas las demás compras sí.
+         */
+        if (!freeDiscountPurchase)
+        {
+            MultiplierPurchasesThisPhase++;
+        }
 
 
         OnPurchaseCountChanged?
             .Invoke(PurchasesThisPhase);
 
 
-        /*
-         * Esto hace dos cosas:
-         *
-         * - oferta restante pasa a x2
-         * - desaparece First Purchase Discount
-         */
         UpdateRewardTexts();
 
 
@@ -760,10 +857,14 @@ public class RewardManager : MonoBehaviour
             $"[REWARD] Purchased " +
             $"'{GetStickerName(sticker)}' " +
             $"for {GetPriceLogString(price)}. " +
-            $"Purchases this phase: " +
+            $"Total purchases = " +
             $"{PurchasesThisPhase}. " +
-            $"Next multiplier: " +
-            $"x{CurrentPurchaseMultiplier}."
+            $"Progression purchases = " +
+            $"{MultiplierPurchasesThisPhase}. " +
+            $"Next multiplier = " +
+            $"x{CurrentPurchaseMultiplier}. " +
+            $"Discount available = " +
+            $"{firstPurchaseDiscountAvailable}."
         );
 
 
@@ -778,9 +879,10 @@ public class RewardManager : MonoBehaviour
     private bool TryPayPurchasePrice(
         int price)
     {
-        /*
-         * FREE.
-         */
+        // -----------------------------------------------------
+        // FREE
+        // -----------------------------------------------------
+
         if (price <= 0)
             return true;
 
@@ -894,8 +996,13 @@ public class RewardManager : MonoBehaviour
     private void GenerateOffers()
     {
         /*
-         * Reroll reemplaza las ofertas restantes,
-         * pero no afecta al número de compras.
+         * Reroll:
+         *
+         * - NO toca el multiplicador
+         * - NO consume el descuento
+         * - NO afecta al número de compras
+         *
+         * Solo reemplaza las ofertas.
          */
         ClearRemainingOffers();
 
@@ -948,8 +1055,10 @@ public class RewardManager : MonoBehaviour
             $"[REWARD] Generated offers: " +
             $"{GetOfferName(currentOfferA)} / " +
             $"{GetOfferName(currentOfferB)}. " +
-            $"Current multiplier: " +
-            $"x{CurrentPurchaseMultiplier}."
+            $"Purchase multiplier = " +
+            $"x{CurrentPurchaseMultiplier}. " +
+            $"Discount available = " +
+            $"{firstPurchaseDiscountAvailable}."
         );
     }
 
@@ -1029,6 +1138,111 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
+    // REROLL COST
+    // =========================================================
+
+    private int CalculateCurrentRerollCost()
+    {
+        int baseCost =
+            Mathf.Max(
+                0,
+                rerollBloodCost
+            );
+
+
+        if (!enableFibonacciRerollMultiplier)
+            return baseCost;
+
+
+        int multiplier =
+            GetFibonacciRerollMultiplier(
+                RerollsThisPhase
+            );
+
+
+        long result =
+            (long)baseCost *
+            multiplier;
+
+
+        /*
+         * Protección absurda por si alguien hace
+         * suficientes rerolls para desbordar un int.
+         */
+        if (result > int.MaxValue)
+            return int.MaxValue;
+
+
+        return (int)result;
+    }
+
+
+    // =========================================================
+    // FIBONACCI
+    // =========================================================
+
+    /*
+     * Index:
+     *
+     * 0 → 3
+     * 1 → 5
+     * 2 → 8
+     * 3 → 13
+     * 4 → 21
+     * ...
+     */
+    private int GetFibonacciRerollMultiplier(
+        int index)
+    {
+        index =
+            Mathf.Max(
+                0,
+                index
+            );
+
+
+        if (index == 0)
+            return 3;
+
+
+        if (index == 1)
+            return 5;
+
+
+        long previous =
+            3;
+
+        long current =
+            5;
+
+
+        for (int i = 2;
+             i <= index;
+             i++)
+        {
+            long next =
+                previous +
+                current;
+
+
+            previous =
+                current;
+
+
+            current =
+                next;
+
+
+            if (current >= int.MaxValue)
+                return int.MaxValue;
+        }
+
+
+        return (int)current;
+    }
+
+
+    // =========================================================
     // REROLL
     // =========================================================
 
@@ -1038,19 +1252,32 @@ public class RewardManager : MonoBehaviour
             return false;
 
 
+        int currentCost =
+            CurrentRerollCost;
+
+
         // -----------------------------------------------------
         // FREE REROLL
         // -----------------------------------------------------
 
-        if (rerollBloodCost <= 0)
+        if (currentCost <= 0)
         {
+            /*
+             * Aunque sea gratis, cuenta como reroll
+             * para avanzar Fibonacci.
+             */
+            RerollsThisPhase++;
+
+
             GenerateOffers();
 
 
             Debug.Log(
                 "[REWARD] Free reroll. " +
-                $"Purchase multiplier remains " +
-                $"x{CurrentPurchaseMultiplier}."
+                $"Rerolls this phase = " +
+                $"{RerollsThisPhase}. " +
+                $"Next reroll cost = " +
+                $"{CurrentRerollCost}."
             );
 
 
@@ -1062,15 +1289,6 @@ public class RewardManager : MonoBehaviour
         // BLOOD
         // -----------------------------------------------------
 
-        /*
-         * Reroll sigue siendo siempre Blood.
-         *
-         * No le afectan:
-         *
-         * - Current Purchase Currency
-         * - Blood Price Multiplier
-         * - First Purchase Discount
-         */
         if (BloodManager.Instance == null)
         {
             Debug.LogWarning(
@@ -1083,11 +1301,11 @@ public class RewardManager : MonoBehaviour
 
 
         if (BloodManager.Instance.currentBlood <
-            rerollBloodCost)
+            currentCost)
         {
             Debug.Log(
                 $"[REWARD] Cannot reroll. " +
-                $"Need {rerollBloodCost} blood, " +
+                $"Need {currentCost} blood, " +
                 $"have " +
                 $"{BloodManager.Instance.currentBlood}."
             );
@@ -1099,7 +1317,7 @@ public class RewardManager : MonoBehaviour
         bool paid =
             BloodManager.Instance
                 .ConsumeBlood(
-                    rerollBloodCost
+                    currentCost
                 );
 
 
@@ -1107,12 +1325,27 @@ public class RewardManager : MonoBehaviour
             return false;
 
 
+        // -----------------------------------------------------
+        // ADVANCE FIBONACCI
+        // -----------------------------------------------------
+
+        RerollsThisPhase++;
+
+
+        /*
+         * GenerateOffers NO toca ningún estado
+         * de precios/descuento.
+         */
         GenerateOffers();
 
 
         Debug.Log(
             $"[REWARD] Rerolled for " +
-            $"{rerollBloodCost} blood. " +
+            $"{currentCost} blood. " +
+            $"Rerolls this phase = " +
+            $"{RerollsThisPhase}. " +
+            $"Next reroll cost = " +
+            $"{CurrentRerollCost}. " +
             $"Purchase multiplier remains " +
             $"x{CurrentPurchaseMultiplier}."
         );
@@ -1134,8 +1367,10 @@ public class RewardManager : MonoBehaviour
 
         Debug.Log(
             $"[REWARD] Reward phase skipped. " +
-            $"Total purchases: " +
-            $"{PurchasesThisPhase}."
+            $"Total purchases = " +
+            $"{PurchasesThisPhase}. " +
+            $"Progression purchases = " +
+            $"{MultiplierPurchasesThisPhase}."
         );
 
 
@@ -1216,13 +1451,23 @@ public class RewardManager : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // REROLL
+        // REROLL COST
         // -----------------------------------------------------
 
         if (rerollCostText != null)
         {
+            /*
+             * Solo número.
+             *
+             * Ejemplo Fibonacci:
+             *
+             * 3
+             * 5
+             * 8
+             * 13
+             */
             rerollCostText.text =
-                rerollBloodCost.ToString();
+                CurrentRerollCost.ToString();
         }
     }
 
@@ -1279,10 +1524,6 @@ public class RewardManager : MonoBehaviour
         if (CurrentPurchaseCurrency ==
             PurchaseCurrency.Blood)
         {
-            /*
-             * Blood:
-             * número sin símbolo.
-             */
             priceText.text =
                 price.ToString();
 
