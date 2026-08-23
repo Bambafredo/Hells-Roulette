@@ -6,6 +6,20 @@ using UnityEngine.UI;
 
 public class RouletteController : MonoBehaviour
 {
+    // =========================================================
+    // SPIN METHOD
+    // =========================================================
+
+    public enum SpinMethod
+    {
+        Manual,
+        Power
+    }
+
+    // =========================================================
+    // REFERENCES
+    // =========================================================
+
     [Header("References")]
     public Transform wheel;
     public WheelGenerator generator;
@@ -30,6 +44,24 @@ public class RouletteController : MonoBehaviour
     public float wheelWeight = 1.0f;
 
     public int velocitySamples = 5;
+
+    // =========================================================
+    // POWER SPIN
+    // =========================================================
+
+    [Header("Power Spin")]
+
+    [Tooltip(
+        "Velocidad máxima que puede alcanzar una tirada realizada " +
+        "con el interruptor al 100% de potencia."
+    )]
+    public float powerSpinMaxSpeed = 2000f;
+
+    [Tooltip(
+        "Dirección de las tiradas automáticas. " +
+        "En Unity, rotación Z negativa = horario."
+    )]
+    public bool powerSpinClockwise = true;
 
     // =========================================================
     // INPUT
@@ -84,12 +116,63 @@ public class RouletteController : MonoBehaviour
 
     public bool SpinInProgress { get; private set; } = false;
 
+    /// <summary>
+    /// Método utilizado para iniciar la tirada actual / última tirada.
+    ///
+    /// Esto nos permitirá posteriormente hacer cosas como:
+    ///
+    /// Manual spin → bonus
+    /// Power spin  → comportamiento normal
+    ///
+    /// sin deducirlo de la velocidad o del input.
+    /// </summary>
+    public SpinMethod CurrentSpinMethod
+    {
+        get;
+        private set;
+    } = SpinMethod.Manual;
+
+    /// <summary>
+    /// Potencia visual que debe mostrar la barra.
+    ///
+    /// Durante un drag manual:
+    ///     potencia estimada en tiempo real.
+    ///
+    /// Después de lanzar:
+    ///     potencia final de la tirada.
+    ///
+    /// Rango 0 - 1.
+    /// </summary>
+    public float DisplayPower01
+    {
+        get;
+        private set;
+    } = 0f;
+
+    /// <summary>
+    /// Potencia con la que comenzó la tirada actual / última tirada.
+    /// </summary>
+    public float LastLaunchPower01
+    {
+        get;
+        private set;
+    } = 0f;
+
+    /// <summary>
+    /// Nos permite saber si el jugador está manipulando
+    /// directamente la rueda.
+    /// </summary>
+    public bool IsDraggingWheel
+    {
+        get { return dragging; }
+    }
+
     public event Action OnSpinStart;
 
     /*
      * IMPORTANTE:
      *
-     * OnSpinEnd ahora significa:
+     * OnSpinEnd significa:
      *
      * "La tirada física ha terminado y los stickers
      * ganadores ya se han resuelto."
@@ -123,6 +206,39 @@ public class RouletteController : MonoBehaviour
     {
         HandlePointer();
         ApplySpin();
+    }
+
+    // =========================================================
+    // CAN START SPIN
+    // =========================================================
+
+    /// <summary>
+    /// Comprobación común para inputs externos.
+    ///
+    /// El futuro PowerSpinController utilizará esto
+    /// antes de comenzar a cargar.
+    /// </summary>
+    public bool CanStartNewSpin()
+    {
+        if (SpinInProgress)
+            return false;
+
+        if (dragging)
+            return false;
+
+        if (StickerPlacementValidator.Instance != null &&
+            StickerPlacementValidator.Instance.InputBlocked)
+        {
+            return false;
+        }
+
+        if (RoundManager.Instance != null &&
+            !RoundManager.Instance.CanStartSpin)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     // =========================================================
@@ -217,13 +333,6 @@ public class RouletteController : MonoBehaviour
 
         if (down)
         {
-            /*
-             * Antes de permitir siquiera coger la ruleta,
-             * comprobamos que la ronda permita otra tirada.
-             *
-             * Esto será especialmente útil cuando más adelante
-             * haya pantallas de recompensa / estados intermedios.
-             */
             if (RoundManager.Instance != null &&
                 !RoundManager.Instance.CanStartSpin)
             {
@@ -262,6 +371,10 @@ public class RouletteController : MonoBehaviour
                 recentSpeeds.Clear();
 
                 accumulatedDragDistance =
+                    0f;
+
+                // Nueva tirada manual: empezamos desde 0.
+                DisplayPower01 =
                     0f;
             }
         }
@@ -314,6 +427,24 @@ public class RouletteController : MonoBehaviour
                 recentSpeeds.Dequeue();
             }
 
+            /*
+             * NUEVO:
+             *
+             * Calculamos en tiempo real la potencia que tendría
+             * la tirada si soltásemos la rueda ahora mismo.
+             *
+             * La barra podrá leer directamente DisplayPower01.
+             */
+            float previewSpeed =
+                GetAverageRecentSpeed() /
+                wheelWeight;
+
+            DisplayPower01 =
+                Mathf.Clamp01(
+                    Mathf.Abs(previewSpeed) /
+                    Mathf.Max(0.01f, maxSpinSpeed)
+                );
+
             lastAngleDeg =
                 currentAngle;
 
@@ -346,6 +477,9 @@ public class RouletteController : MonoBehaviour
                 spinSpeed =
                     0f;
 
+                DisplayPower01 =
+                    0f;
+
                 return;
             }
 
@@ -357,79 +491,225 @@ public class RouletteController : MonoBehaviour
             // -------------------------------------------------
 
             float avgSpeed =
-                0f;
-
-            foreach (float v in recentSpeeds)
-                avgSpeed += v;
-
-            avgSpeed /=
-                Mathf.Max(
-                    1,
-                    recentSpeeds.Count
-                );
+                GetAverageRecentSpeed();
 
             float weightedSpeed =
                 avgSpeed /
                 wheelWeight;
 
+            /*
+             * La potencia manual representa la velocidad
+             * efectiva después de aplicar wheelWeight.
+             */
+            float manualPower01 =
+                Mathf.Clamp01(
+                    Mathf.Abs(weightedSpeed) /
+                    Mathf.Max(0.01f, maxSpinSpeed)
+                );
+
             if (Mathf.Abs(weightedSpeed) >
                 minThrowSpeed)
             {
-                /*
-                 * Segunda protección.
-                 *
-                 * En teoría ya lo comprobamos en MouseDown,
-                 * pero el estado podría haber cambiado mientras
-                 * el jugador estaba haciendo el gesto.
-                 */
-                if (RoundManager.Instance != null &&
-                    !RoundManager.Instance.CanStartSpin)
-                {
-                    recentSpeeds.Clear();
+                bool started =
+                    TryBeginSpin(
+                        weightedSpeed,
+                        SpinMethod.Manual,
+                        manualPower01
+                    );
 
+                if (!started)
+                {
                     spinSpeed =
                         0f;
 
-                    return;
+                    DisplayPower01 =
+                        0f;
                 }
-
-                spinSpeed =
-                    Mathf.Clamp(
-                        weightedSpeed,
-                        -maxSpinSpeed,
-                        maxSpinSpeed
-                    );
-
-                startSegmentIndex =
-                    GetCurrentSegmentIndex();
-
-                SpinInProgress =
-                    true;
-
-                /*
-                 * Primero notificamos al RoundManager.
-                 *
-                 * Así CurrencyManager.BeginSpin() y el estado
-                 * de validación están preparados antes de que
-                 * cualquier listener externo procese OnSpinStart.
-                 */
-                RoundManager.Instance?
-                    .NotifySpinStart();
-
-                OnSpinStart?
-                    .Invoke();
-
-                bloodTimer =
-                    0f;
             }
             else
             {
+                /*
+                 * Conservamos el comportamiento anterior.
+                 */
                 spinSpeed *=
                     0.5f;
+
+                DisplayPower01 =
+                    0f;
             }
 
             recentSpeeds.Clear();
         }
+    }
+
+    // =========================================================
+    // POWER SPIN PUBLIC API
+    // =========================================================
+
+    /// <summary>
+    /// Inicia una tirada automática con una potencia 0 - 1.
+    ///
+    /// El futuro interruptor llamará a este método
+    /// cuando el jugador suelte el botón.
+    ///
+    /// Por ahora:
+    ///
+    /// power 0   → velocidad 0
+    /// power 1   → powerSpinMaxSpeed
+    ///
+    /// Si la velocidad no alcanza minThrowSpeed,
+    /// no se inicia una tirada real.
+    /// </summary>
+    public bool TryStartPowerSpin(float power01)
+    {
+        if (!CanStartNewSpin())
+            return false;
+
+        float normalizedPower =
+            Mathf.Clamp01(power01);
+
+        float allowedMaximum =
+            Mathf.Min(
+                powerSpinMaxSpeed,
+                maxSpinSpeed
+            );
+
+        float requestedSpeed =
+            normalizedPower *
+            allowedMaximum;
+
+        if (requestedSpeed <=
+            minThrowSpeed)
+        {
+            return false;
+        }
+
+        float direction =
+            powerSpinClockwise
+                ? -1f
+                : 1f;
+
+        requestedSpeed *=
+            direction;
+
+        return
+            TryBeginSpin(
+                requestedSpeed,
+                SpinMethod.Power,
+                normalizedPower
+            );
+    }
+
+    // =========================================================
+    // COMMON SPIN START
+    // =========================================================
+
+    /// <summary>
+    /// ÚNICA puerta de entrada para comenzar una tirada real.
+    ///
+    /// Tanto la tirada manual como la Power Spin terminan aquí.
+    ///
+    /// De esta forma no duplicamos:
+    ///
+    /// - RoundManager.NotifySpinStart
+    /// - OnSpinStart
+    /// - token/debt preparation
+    /// - state initialization
+    ///
+    /// y futuros costes podrán añadirse antes de llegar aquí.
+    /// </summary>
+    private bool TryBeginSpin(
+        float requestedSpeed,
+        SpinMethod method,
+        float displayPower01)
+    {
+        if (SpinInProgress)
+            return false;
+
+        if (RoundManager.Instance != null &&
+            !RoundManager.Instance.CanStartSpin)
+        {
+            return false;
+        }
+
+        float clampedSpeed =
+            Mathf.Clamp(
+                requestedSpeed,
+                -maxSpinSpeed,
+                maxSpinSpeed
+            );
+
+        if (Mathf.Abs(clampedSpeed) <=
+            minThrowSpeed)
+        {
+            return false;
+        }
+
+        spinSpeed =
+            clampedSpeed;
+
+        CurrentSpinMethod =
+            method;
+
+        LastLaunchPower01 =
+            Mathf.Clamp01(
+                displayPower01
+            );
+
+        DisplayPower01 =
+            LastLaunchPower01;
+
+        startSegmentIndex =
+            GetCurrentSegmentIndex();
+
+        SpinInProgress =
+            true;
+
+        isBraking =
+            false;
+
+        bloodTimer =
+            0f;
+
+        /*
+         * Primero RoundManager.
+         *
+         * Así CurrencyManager.BeginSpin() y el estado
+         * de validación están preparados antes de que
+         * cualquier listener procese OnSpinStart.
+         */
+        RoundManager.Instance?
+            .NotifySpinStart();
+
+        OnSpinStart?
+            .Invoke();
+
+        return true;
+    }
+
+    // =========================================================
+    // VELOCITY SAMPLING
+    // =========================================================
+
+    private float GetAverageRecentSpeed()
+    {
+        if (recentSpeeds == null ||
+            recentSpeeds.Count == 0)
+        {
+            return 0f;
+        }
+
+        float total =
+            0f;
+
+        foreach (float v in recentSpeeds)
+        {
+            total += v;
+        }
+
+        return
+            total /
+            recentSpeeds.Count;
     }
 
     // =========================================================
@@ -664,16 +944,6 @@ public class RouletteController : MonoBehaviour
 
         if (!validSpin)
         {
-            /*
-             * Ningún sticker.
-             *
-             * OnSpinEnd se mantiene porque otros sistemas
-             * pueden necesitar saber que la tirada física
-             * ha terminado.
-             *
-             * BaseEnemy ya consulta WasLastSpinValid,
-             * por lo que no atacará.
-             */
             OnSpinEnd?
                 .Invoke();
 
@@ -694,43 +964,25 @@ public class RouletteController : MonoBehaviour
 
         /*
          * 3. STICKERS
-         *
-         * Esta era una de las cosas que teníamos pendientes:
-         * ahora los stickers resuelven ANTES de los enemigos.
          */
         TriggerStickersOnWinningSegment();
 
         /*
          * 4. ENEMIGOS
-         *
-         * BaseEnemy está suscrito a OnSpinEnd.
-         *
-         * Por tanto el evento ocurre DESPUÉS de los stickers.
          */
         OnSpinEnd?
             .Invoke();
 
         /*
          * 5. FIN COMPLETO DE LA RESOLUCIÓN
-         *
-         * Aquí ya han ocurrido:
-         *
-         * - dinero del giro
-         * - consumo de ficha
-         * - stickers
-         * - enemigos
-         *
-         * AHORA y solo ahora RoundManager puede comprobar
-         * si queda alguna ficha y, en caso contrario,
-         * cobrar la deuda.
          */
         RoundManager.Instance?
             .NotifySpinResolved();
 
         /*
          * Mantenemos SpinInProgress = true durante toda
-         * la resolución para impedir que el jugador pueda
-         * manipular stickers mientras se procesan efectos.
+         * la resolución para impedir manipular stickers
+         * mientras se procesan efectos.
          */
         SpinInProgress =
             false;
@@ -805,7 +1057,8 @@ public class RouletteController : MonoBehaviour
 
         int idx =
             Mathf.FloorToInt(
-                ang / step
+                ang /
+                step
             );
 
         return
@@ -861,9 +1114,8 @@ public class RouletteController : MonoBehaviour
         /*
          * Guardamos primero el array completo.
          *
-         * Esto es importante porque uno de esos stickers
-         * puede ser WheelShifter y regenerar la rueda
-         * mientras estamos resolviendo efectos.
+         * Un sticker como WheelShifter puede regenerar
+         * la rueda mientras resolvemos efectos.
          */
         BaseSticker[] stickers =
             winningTransform
