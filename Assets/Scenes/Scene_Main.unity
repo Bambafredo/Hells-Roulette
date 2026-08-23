@@ -465,7 +465,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &69046370
 Transform:
   m_ObjectHideFlags: 0
@@ -3244,6 +3244,7 @@ GameObject:
   - component: {fileID: 996127459}
   - component: {fileID: 996127460}
   - component: {fileID: 996127461}
+  - component: {fileID: 996127463}
   - component: {fileID: 996127462}
   m_Layer: 0
   m_Name: GameManagers
@@ -3357,6 +3358,28 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   wrongStickerPanel: {fileID: 1866646970}
+--- !u!114 &996127463
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996127457}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c49d4c07a748f274a906a15038807430, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rewardPanel: {fileID: 69046369}
+  rewardSlotA: {fileID: 1198554405}
+  rewardSlotB: {fileID: 1246014780}
+  rerollButtonCollider: {fileID: 1392370264}
+  skipButtonCollider: {fileID: 1803339945}
+  stickerPrefabs:
+  - {fileID: 577474978131120927, guid: e380f0cfcc88d914fa292738c551e8c0, type: 3}
+  - {fileID: 577474978131120927, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
+  - {fileID: 577474978131120927, guid: 00e0f7cee6aad8440bee00663f654f25, type: 3}
+  rerollBloodCost: 5
 --- !u!1 &1004711265
 GameObject:
   m_ObjectHideFlags: 0
@@ -5436,7 +5459,7 @@ CircleCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_UsedByEffector: 0
   m_UsedByComposite: 0
   m_Offset: {x: 0, y: 0}
@@ -7877,7 +7900,7 @@ CircleCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_UsedByEffector: 0
   m_UsedByComposite: 0
   m_Offset: {x: 0, y: 0}
