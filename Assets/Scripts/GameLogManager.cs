@@ -689,6 +689,64 @@ public class GameLogManager : MonoBehaviour
 
 
     // =========================================================
+    // ENEMY EVENTS
+    // =========================================================
+
+    /// <summary>
+    /// Logs an enemy attack against the player.
+    /// The enemy name and Blood loss use their configured log colors.
+    /// </summary>
+    public void LogEnemyAttack(
+        string enemyName,
+        int bloodLost)
+    {
+        string safeName =
+            string.IsNullOrWhiteSpace(enemyName)
+                ? "Enemy"
+                : enemyName;
+
+
+        string line =
+            EnemyText(safeName) +
+            " attacks";
+
+
+        if (bloodLost > 0)
+        {
+            line +=
+                ": " +
+                BloodText(
+                    $"-{bloodLost} Blood"
+                );
+        }
+
+
+        AddGameplayLine(
+            line
+        );
+    }
+
+
+    /// <summary>
+    /// Logs an enemy death at the exact moment Die() is resolved.
+    /// </summary>
+    public void LogEnemyDeath(
+        string enemyName)
+    {
+        string safeName =
+            string.IsNullOrWhiteSpace(enemyName)
+                ? "Enemy"
+                : enemyName;
+
+
+        AddGameplayLine(
+            EnemyText(safeName) +
+            " dies"
+        );
+    }
+
+
+    // =========================================================
     // GENERIC GAMEPLAY LINE
     // =========================================================
 
