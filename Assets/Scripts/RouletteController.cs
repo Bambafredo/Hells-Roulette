@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 public class RouletteController : MonoBehaviour
 {
@@ -275,6 +276,29 @@ public class RouletteController : MonoBehaviour
             out held,
             out up
         );
+
+        // -----------------------------------------------------
+        // CANVAS UI
+        // -----------------------------------------------------
+
+        #if UNITY_EDITOR || UNITY_STANDALONE
+
+        /*
+        * Un click que empieza sobre UI no puede comenzar
+        * una interacción manual con la ruleta.
+        *
+        * Esto permite utilizar ScrollViews, scrollbars,
+        * botones y futuras utilities sin que el mismo click
+        * se interprete también como un spin.
+        */
+        if (down &&
+            EventSystem.current != null &&
+            EventSystem.current.IsPointerOverGameObject())
+        {
+            return;
+        }
+
+        #endif
 
         // -----------------------------------------------------
         // BAG PORTALS
