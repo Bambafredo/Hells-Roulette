@@ -15,20 +15,20 @@ public class GameLogManager : MonoBehaviour
 
     [Header("Panel References")]
 
-    [Tooltip("RectTransform del LogPanel completo.")]
+    [Tooltip("RectTransform of the complete LogPanel.")]
     public RectTransform logPanel;
 
-    [Tooltip("ScrollRect del ScrollView.")]
+    [Tooltip("ScrollRect of the ScrollView.")]
     public ScrollRect scrollRect;
 
-    [Tooltip("TMP UI que contiene todo el historial.")]
+    [Tooltip("TMP UI containing the complete log history.")]
     public TMP_Text logText;
 
 
     [Header("Button")]
 
     [Tooltip(
-        "Collider2D del botón world-space que abre/cierra el log."
+        "Collider2D of the world-space button used to open/close the log."
     )]
     public Collider2D logButtonCollider;
 
@@ -39,20 +39,15 @@ public class GameLogManager : MonoBehaviour
 
     [Header("Panel Animation")]
 
-    [Tooltip(
-        "Si está activado, el panel comienza abierto."
-    )]
+    [Tooltip("If enabled, the panel starts open.")]
     public bool startOpen = false;
 
-    [Tooltip(
-        "Duración de la animación de abrir/cerrar."
-    )]
+    [Tooltip("Duration of the open/close slide animation.")]
     [Min(0.01f)]
     public float slideDuration = 0.2f;
 
     [Tooltip(
-        "Margen adicional que desplazamos el panel " +
-        "por encima de la pantalla al cerrarlo."
+        "Extra distance used to hide the panel above the screen."
     )]
     public float hiddenExtraOffset = 10f;
 
@@ -63,20 +58,14 @@ public class GameLogManager : MonoBehaviour
 
     [Header("Log Settings")]
 
-    [Tooltip(
-        "Número máximo de líneas guardadas en el historial."
-    )]
+    [Tooltip("Maximum number of lines kept in the log history.")]
     [Min(10)]
     public int maxLogEntries = 250;
 
-    [Tooltip(
-        "Añade una línea vacía entre bloques de tiradas."
-    )]
+    [Tooltip("Adds an empty line between completed spin blocks.")]
     public bool separateSpinBlocks = true;
 
-    [Tooltip(
-        "Velocidad del scroll con la rueda del ratón."
-    )]
+    [Tooltip("Mouse wheel scroll speed while the pointer is over the log.")]
     [Min(0.01f)]
     public float mouseWheelScrollSpeed = 0.12f;
 
@@ -87,22 +76,22 @@ public class GameLogManager : MonoBehaviour
 
     [Header("Log Colors")]
 
-    [Tooltip("Color del texto normal.")]
+    [Tooltip("Base color used by normal log text.")]
     public Color normalTextColor = Color.white;
 
-    [Tooltip("Color del encabezado de una tirada.")]
+    [Tooltip("Color used by valid-spin headers.")]
     public Color spinHeaderColor = Color.white;
 
-    [Tooltip("Color utilizado para nombres de stickers.")]
+    [Tooltip("Color used for sticker names.")]
     public Color stickerColor = Color.green;
 
-    [Tooltip("Color utilizado para Blood perdida.")]
+    [Tooltip("Color used for Blood losses.")]
     public Color bloodColor = Color.red;
 
-    [Tooltip("Color utilizado para dinero ganado.")]
+    [Tooltip("Color used for money gains.")]
     public Color moneyColor = Color.yellow;
 
-    [Tooltip("Color utilizado para nombres de enemigos.")]
+    [Tooltip("Color used for enemy names.")]
     public Color enemyColor =
         new Color(
             1f,
@@ -111,8 +100,7 @@ public class GameLogManager : MonoBehaviour
         );
 
     [Tooltip(
-        "Color fallback para segmentos. " +
-        "Los eventos reales utilizarán el color real del segmento."
+        "Fallback segment color. Real spins use the actual winning segment color."
     )]
     public Color segmentColor = Color.cyan;
 
@@ -128,7 +116,28 @@ public class GameLogManager : MonoBehaviour
     }
 
 
+    public bool SpinBlockOpen
+    {
+        get;
+        private set;
+    }
+
+
+    public int ValidSpinCount
+    {
+        get;
+        private set;
+    }
+
+
     private readonly List<string> logEntries =
+        new List<string>();
+
+    /*
+     * Events from the currently resolving valid spin live here.
+     * They are invisible until CommitSpinBlock().
+     */
+    private readonly List<string> pendingSpinEntries =
         new List<string>();
 
 
@@ -173,24 +182,16 @@ public class GameLogManager : MonoBehaviour
         }
 
 
-        /*
-         * Forzamos a Unity a calcular el layout antes
-         * de leer la altura real del panel.
-         */
         Canvas.ForceUpdateCanvases();
 
 
         /*
-         * La posición colocada manualmente en Editor
-         * es nuestra posición ABIERTA.
+         * The position authored in the Editor is the OPEN position.
          */
         shownPosition =
             logPanel.anchoredPosition;
 
 
-        /*
-         * Cerrado = panel completo desplazado hacia arriba.
-         */
         hiddenPosition =
             shownPosition +
             Vector2.up *
@@ -213,25 +214,22 @@ public class GameLogManager : MonoBehaviour
         if (logText != null)
         {
             logText.text = "";
-
-            logText.color =
-                normalTextColor;
+            logText.color = normalTextColor;
         }
 
 
         /*
-         * Nosotros controlamos explícitamente
-         * la rueda del ratón.
-         *
-         * Esto evita que ScrollRect + GameLogManager
-         * hagan scroll simultáneamente.
-         *
-         * Arrastrar scrollbar / handle sigue funcionando.
+         * Mouse-wheel scrolling is handled explicitly below.
+         * The scrollbar can still be used as a visual position indicator.
          */
         if (scrollRect != null)
         {
             scrollRect.scrollSensitivity = 0f;
         }
+
+
+        SpinBlockOpen = false;
+        ValidSpinCount = 0;
 
 
         Debug.Log(
@@ -311,10 +309,6 @@ public class GameLogManager : MonoBehaviour
         }
 
 
-        /*
-         * Solo hacemos scroll si el cursor está
-         * realmente encima de la ventana del log.
-         */
         bool pointerInsideLog =
             RectTransformUtility
                 .RectangleContainsScreenPoint(
@@ -339,14 +333,6 @@ public class GameLogManager : MonoBehaviour
         }
 
 
-        /*
-         * verticalNormalizedPosition:
-         *
-         * 1 = arriba
-         * 0 = abajo
-         *
-         * Wheel positivo = subir.
-         */
         scrollRect.verticalNormalizedPosition =
             Mathf.Clamp01(
                 scrollRect.verticalNormalizedPosition +
@@ -387,8 +373,7 @@ public class GameLogManager : MonoBehaviour
             return;
 
 
-        IsOpen =
-            open;
+        IsOpen = open;
 
 
         if (slideRoutine != null)
@@ -442,9 +427,6 @@ public class GameLogManager : MonoBehaviour
                 );
 
 
-            /*
-             * SmoothStep.
-             */
             float smoothT =
                 t *
                 t *
@@ -475,7 +457,197 @@ public class GameLogManager : MonoBehaviour
 
 
     // =========================================================
-    // ADD LOG ENTRY
+    // VALID SPIN BLOCK
+    // =========================================================
+
+    /// <summary>
+    /// Opens a temporary block for a VALID spin.
+    /// Nothing is shown in the visible log until CommitSpinBlock().
+    /// </summary>
+    public void BeginValidSpinBlock(
+        string methodLabel,
+        float power01)
+    {
+        /*
+         * Defensive cleanup in case a previous development-time
+         * spin somehow left a block open.
+         */
+        pendingSpinEntries.Clear();
+
+        SpinBlockOpen = true;
+
+        ValidSpinCount++;
+
+
+        int powerPercent =
+            Mathf.RoundToInt(
+                Mathf.Clamp01(power01) *
+                100f
+            );
+
+
+        string header =
+            $"VALID SPIN #{ValidSpinCount}" +
+            $" — {methodLabel}" +
+            $" — POWER {powerPercent}%";
+
+
+        AddPendingSpinLine(
+            SpinHeaderText(
+                header
+            )
+        );
+    }
+
+
+    /// <summary>
+    /// Publishes the entire completed spin at once.
+    /// </summary>
+    public void CommitSpinBlock()
+    {
+        if (!SpinBlockOpen)
+            return;
+
+
+        if (pendingSpinEntries.Count == 0)
+        {
+            SpinBlockOpen = false;
+            return;
+        }
+
+
+        if (separateSpinBlocks &&
+            logEntries.Count > 0)
+        {
+            logEntries.Add("");
+        }
+
+
+        logEntries.AddRange(
+            pendingSpinEntries
+        );
+
+
+        pendingSpinEntries.Clear();
+
+        SpinBlockOpen = false;
+
+
+        TrimHistory();
+        RefreshLogText();
+        ScrollToBottom();
+    }
+
+
+    /// <summary>
+    /// Throws away the current unresolved block.
+    /// Useful for invalid/cancelled spins if needed later.
+    /// </summary>
+    public void DiscardSpinBlock()
+    {
+        pendingSpinEntries.Clear();
+        SpinBlockOpen = false;
+    }
+
+
+    // =========================================================
+    // REAL SPIN EVENTS
+    // =========================================================
+
+    public void LogManualBrake(
+        int bloodSpent)
+    {
+        if (bloodSpent <= 0)
+            return;
+
+
+        AddGameplayLine(
+            "Manual brake: " +
+            BloodText(
+                $"-{bloodSpent} Blood"
+            )
+        );
+    }
+
+
+    public void LogWinningSegment(
+        int segmentNumber,
+        Color actualSegmentColor)
+    {
+        AddGameplayLine(
+            "Winning segment: " +
+            SegmentText(
+                segmentNumber.ToString(),
+                actualSegmentColor
+            )
+        );
+    }
+
+
+    public void LogWinningSegment(
+        int segmentNumber)
+    {
+        AddGameplayLine(
+            "Winning segment: " +
+            SegmentText(
+                segmentNumber.ToString()
+            )
+        );
+    }
+
+
+    // =========================================================
+    // GENERIC GAMEPLAY LINE
+    // =========================================================
+
+    /// <summary>
+    /// Future stickers/enemies will use this route.
+    /// During a resolving spin the line is buffered.
+    /// Outside a spin it is written directly to the history.
+    /// </summary>
+    public void AddGameplayLine(
+        string richTextLine)
+    {
+        if (string.IsNullOrEmpty(
+            richTextLine))
+        {
+            return;
+        }
+
+
+        if (SpinBlockOpen)
+        {
+            AddPendingSpinLine(
+                richTextLine
+            );
+        }
+        else
+        {
+            AddLine(
+                richTextLine
+            );
+        }
+    }
+
+
+    private void AddPendingSpinLine(
+        string richTextLine)
+    {
+        if (string.IsNullOrEmpty(
+            richTextLine))
+        {
+            return;
+        }
+
+
+        pendingSpinEntries.Add(
+            richTextLine
+        );
+    }
+
+
+    // =========================================================
+    // ADD DIRECT LOG ENTRY
     // =========================================================
 
     public void AddLine(
@@ -494,18 +666,10 @@ public class GameLogManager : MonoBehaviour
 
 
         TrimHistory();
-
-
         RefreshLogText();
-
-
         ScrollToBottom();
     }
 
-
-    // =========================================================
-    // ADD EMPTY LINE
-    // =========================================================
 
     public void AddEmptyLine()
     {
@@ -513,11 +677,7 @@ public class GameLogManager : MonoBehaviour
 
 
         TrimHistory();
-
-
         RefreshLogText();
-
-
         ScrollToBottom();
     }
 
@@ -529,11 +689,15 @@ public class GameLogManager : MonoBehaviour
     public void ClearLog()
     {
         logEntries.Clear();
+        pendingSpinEntries.Clear();
+        SpinBlockOpen = false;
 
 
+        /*
+         * We deliberately do NOT reset ValidSpinCount here.
+         * Clearing the visual history should not alter gameplay numbering.
+         */
         RefreshLogText();
-
-
         ScrollToBottom();
     }
 
@@ -576,12 +740,6 @@ public class GameLogManager : MonoBehaviour
             );
 
 
-        /*
-         * Color base.
-         *
-         * Los tags Rich Text sustituyen el color
-         * solamente en fragmentos concretos.
-         */
         logText.color =
             normalTextColor;
     }
@@ -605,10 +763,6 @@ public class GameLogManager : MonoBehaviour
         }
 
 
-        /*
-         * Esperamos a que TMP y ContentSizeFitter
-         * recalculen el Content.
-         */
         scrollRoutine =
             StartCoroutine(
                 ScrollToBottomRoutine()
@@ -676,16 +830,6 @@ public class GameLogManager : MonoBehaviour
     }
 
 
-    // =========================================================
-    // SEGMENT COLOR
-    // =========================================================
-
-    /*
-     * ESTE será el método utilizado por la ruleta real.
-     *
-     * El número/nombre del segmento utiliza directamente
-     * el color visual real del segmento ganador.
-     */
     public string SegmentText(
         string text,
         Color actualSegmentColor)
@@ -697,10 +841,6 @@ public class GameLogManager : MonoBehaviour
     }
 
 
-    /*
-     * Fallback para debug o casos en los que
-     * no tengamos un color real.
-     */
     public string SegmentText(
         string text)
     {
@@ -756,43 +896,19 @@ public class GameLogManager : MonoBehaviour
         }
 
 
-        if (separateSpinBlocks &&
-            logEntries.Count > 0)
-        {
-            AddEmptyLine();
-        }
-
-
-        AddLine(
-            SpinHeaderText(
-                "VALID SPIN #4 — POWER 78%"
-            )
+        BeginValidSpinBlock(
+            "MANUAL",
+            0.78f
         );
 
 
-        AddLine(
-            "Manual brake: " +
-            BloodText(
-                "-2 Blood"
-            )
-        );
+        LogManualBrake(2);
 
 
-        /*
-         * En el test usamos segmentColor fallback.
-         *
-         * Cuando conectemos RouletteController aquí
-         * llegará el color REAL del segmento.
-         */
-        AddLine(
-            "Winning segment: " +
-            SegmentText(
-                "3"
-            )
-        );
+        LogWinningSegment(3);
 
 
-        AddLine(
+        AddGameplayLine(
             StickerText(
                 "Magic Bean"
             ) +
@@ -803,7 +919,7 @@ public class GameLogManager : MonoBehaviour
         );
 
 
-        AddLine(
+        AddGameplayLine(
             StickerText(
                 "Sword"
             ) +
@@ -811,7 +927,7 @@ public class GameLogManager : MonoBehaviour
         );
 
 
-        AddLine(
+        AddGameplayLine(
             EnemyText(
                 "Imp"
             ) +
@@ -819,7 +935,7 @@ public class GameLogManager : MonoBehaviour
         );
 
 
-        AddLine(
+        AddGameplayLine(
             EnemyText(
                 "Demon"
             ) +
@@ -828,6 +944,9 @@ public class GameLogManager : MonoBehaviour
                 "-3 Blood"
             )
         );
+
+
+        CommitSpinBlock();
     }
 
 

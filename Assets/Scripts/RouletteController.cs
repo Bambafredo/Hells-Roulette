@@ -93,6 +93,11 @@ public class RouletteController : MonoBehaviour
     private bool isBraking = false;
     private float bloodTimer = 0f;
 
+    // Blood actually spent by manual braking during the current spin.
+    // Reset on every real spin start and written to the gameplay log
+    // only if the spin is later validated.
+    private int brakeBloodSpentThisSpin = 0;
+
     // =========================================================
     // INTERNAL SPIN STATE
     // =========================================================
@@ -695,6 +700,9 @@ public class RouletteController : MonoBehaviour
         bloodTimer =
             0f;
 
+        brakeBloodSpentThisSpin =
+            0;
+
         /*
          * Primero RoundManager.
          *
@@ -876,7 +884,13 @@ public class RouletteController : MonoBehaviour
                             0f;
 
                         if (!canBrake)
+                        {
                             isBraking = false;
+                        }
+                        else
+                        {
+                            brakeBloodSpentThisSpin++;
+                        }
                     }
 
                     adjustedDecel +=
@@ -987,21 +1001,90 @@ public class RouletteController : MonoBehaviour
         // -----------------------------------------------------
 
         /*
-         * 3. STICKERS
+         * 3. GAME LOG - OPEN TEMPORARY SPIN BLOCK
+         *
+         * Nothing becomes visible yet. GameLogManager buffers
+         * these lines until CommitSpinBlock() is called after the
+         * complete spin resolution. Future sticker/enemy events can
+         * therefore be inserted in their real causal order.
+         */
+        if (GameLogManager.Instance != null)
+        {
+            string methodLabel =
+                CurrentSpinMethod == SpinMethod.Power
+                    ? "POWER SWITCH"
+                    : "MANUAL";
+
+            GameLogManager.Instance
+                .BeginValidSpinBlock(
+                    methodLabel,
+                    LastLaunchPower01
+                );
+
+            if (brakeBloodSpentThisSpin > 0)
+            {
+                GameLogManager.Instance
+                    .LogManualBrake(
+                        brakeBloodSpentThisSpin
+                    );
+            }
+
+            int displaySegmentNumber =
+                endSegmentIndex + 1;
+
+            bool hasRealSegmentColor =
+                generator != null &&
+                generator.segments != null &&
+                endSegmentIndex >= 0 &&
+                endSegmentIndex < generator.segments.Count &&
+                generator.segments[endSegmentIndex] != null &&
+                generator.segments[endSegmentIndex].meshComponent != null;
+
+            if (hasRealSegmentColor)
+            {
+                Color winningColor =
+                    generator.segments[endSegmentIndex]
+                        .meshComponent.color;
+
+                GameLogManager.Instance
+                    .LogWinningSegment(
+                        displaySegmentNumber,
+                        winningColor
+                    );
+            }
+            else
+            {
+                GameLogManager.Instance
+                    .LogWinningSegment(
+                        displaySegmentNumber
+                    );
+            }
+        }
+
+        /*
+         * 4. STICKERS
          */
         TriggerStickersOnWinningSegment();
 
         /*
-         * 4. ENEMIGOS
+         * 5. ENEMIGOS
          */
         OnSpinEnd?
             .Invoke();
 
         /*
-         * 5. FIN COMPLETO DE LA RESOLUCIÓN
+         * 6. FIN COMPLETO DE LA RESOLUCIÓN
          */
         RoundManager.Instance?
             .NotifySpinResolved();
+
+        /*
+         * 7. PUBLISH GAME LOG BLOCK
+         *
+         * Only now does the player see the completed spin.
+         */
+        GameLogManager.Instance?
+            .CommitSpinBlock();
 
         /*
          * Mantenemos SpinInProgress = true durante toda

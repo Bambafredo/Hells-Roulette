@@ -2058,7 +2058,7 @@ SortingGroup:
   m_Enabled: 1
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: -1
+  m_SortingOrder: -2
   m_SortAtRoot: 0
 --- !u!1 &482484557
 GameObject:
@@ -4274,11 +4274,12 @@ MonoBehaviour:
   scrollRect: {fileID: 1804076182}
   logText: {fileID: 1820544743}
   logButtonCollider: {fileID: 250003984}
-  startOpen: 0
+  startOpen: 1
   slideDuration: 0.2
   hiddenExtraOffset: 10
   maxLogEntries: 250
   separateSpinBlocks: 1
+  mouseWheelScrollSpeed: 0.12
   normalTextColor: {r: 1, g: 1, b: 1, a: 1}
   spinHeaderColor: {r: 1, g: 1, b: 1, a: 1}
   stickerColor: {r: 0, g: 1, b: 0, a: 1}
