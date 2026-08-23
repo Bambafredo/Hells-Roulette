@@ -2,10 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-[CreateAssetMenu(
-    fileName = "NewStickerEffect",
-    menuName = "Stickers/StickerEffect"
-)]
+[CreateAssetMenu(fileName = "NewStickerEffect", menuName = "Stickers/StickerEffect")]
 public class StickerEffect : ScriptableObject
 {
     // =========================================================
@@ -22,18 +19,12 @@ public class StickerEffect : ScriptableObject
     // =========================================================
 
     [Header("Shop")]
-
-    [Tooltip(
-        "Precio base del sticker en Reward Screen. " +
-        "El precio real puede ser multiplicado según " +
-        "cuántos stickers se hayan comprado durante esta fase."
-    )]
     [Min(0)]
     public int basePurchaseCost = 5;
 
 
     // =========================================================
-    // REWARD
+    // EFFECT VALUES
     // =========================================================
 
     [Header("Reward")]
@@ -41,50 +32,122 @@ public class StickerEffect : ScriptableObject
 
 
     // =========================================================
-    // CLASSIC API
+    // GAME LOG
+    // =========================================================
+
+    [Header("Game Log")]
+
+    [Tooltip(
+        "Short English description shown after '<Sticker> activates:'. " +
+        "Leave empty for money-only stickers because dollarReward is logged automatically."
+    )]
+    [TextArea(2, 4)]
+    public string logDescription = "";
+
+
+    // =========================================================
+    // CLASSIC API (NO OWNER)
     // =========================================================
 
     public virtual void ApplyEffect()
     {
-        // Si hay RoundManager y la última tirada NO es válida,
-        // no damos recompensa.
+        // Invalid spins never activate sticker effects.
         if (RoundManager.Instance != null &&
             !RoundManager.Instance.WasLastSpinValid)
         {
             Debug.Log(
-                $"Sticker '{stickerName}' no otorga recompensa: " +
-                $"ronda no válida."
+                $"Sticker '{stickerName}' did not activate: invalid spin."
             );
 
             return;
         }
 
+
+        /*
+         * Log BEFORE applying the gameplay result.
+         *
+         * This preserves causal order in the Game Log:
+         *
+         * Sticker activates
+         * -> currency changes / enemy damage / death / etc.
+         */
+        LogActivation(null);
+
+
         if (CurrencyManager.Instance != null &&
             dollarReward != 0)
         {
-            CurrencyManager.Instance.AddDollar(
-                dollarReward
-            );
+            CurrencyManager.Instance
+                .AddDollar(
+                    dollarReward
+                );
+
 
             Debug.Log(
-                $"💵 Sticker '{stickerName}' dio " +
-                $"{dollarReward}$!"
+                $"Sticker '{stickerName}' gave ${dollarReward}."
             );
         }
     }
 
 
     // =========================================================
-    // OWNER API
+    // API WITH STICKER OWNER CONTEXT
     // =========================================================
 
     public virtual void ApplyEffect(
         BaseSticker owner)
     {
         /*
-         * Implementación por defecto:
-         * ignoramos owner y usamos el comportamiento clásico.
+         * Keep backwards compatibility with effects that override
+         * the classic no-owner ApplyEffect() method.
          */
         ApplyEffect();
+    }
+
+
+    // =========================================================
+    // LOG DESCRIPTION
+    // =========================================================
+
+    /// <summary>
+    /// Description shown after the sticker name in the Game Log.
+    /// Custom effects can override this when their text depends on
+    /// runtime or inspector values.
+    /// </summary>
+    public virtual string GetLogDescription(
+        BaseSticker owner)
+    {
+        return logDescription;
+    }
+
+
+    // =========================================================
+    // LOG ACTIVATION HELPER
+    // =========================================================
+
+    /// <summary>
+    /// Shared route used by this effect and custom StickerEffect subclasses.
+    /// dollarReward is appended automatically by GameLogManager.
+    /// </summary>
+    protected void LogActivation(
+        BaseSticker owner,
+        string overrideDescription = null)
+    {
+        if (GameLogManager.Instance == null)
+            return;
+
+
+        string description =
+            overrideDescription != null
+                ? overrideDescription
+                : GetLogDescription(owner);
+
+
+        GameLogManager.Instance
+            .LogStickerActivation(
+                stickerName,
+                description,
+                dollarReward
+            );
     }
 }

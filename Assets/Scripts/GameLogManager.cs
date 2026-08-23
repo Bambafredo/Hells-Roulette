@@ -597,6 +597,82 @@ public class GameLogManager : MonoBehaviour
 
 
     // =========================================================
+    // STICKER EVENTS
+    // =========================================================
+
+    /// <summary>
+    /// Logs a sticker activation using the standard gameplay colors.
+    ///
+    /// The sticker name is colored with stickerColor.
+    /// Positive money rewards are colored with moneyColor.
+    /// effectDescription may already contain Rich Text tags.
+    /// </summary>
+    public void LogStickerActivation(
+        string stickerName,
+        string effectDescription,
+        int moneyGained = 0)
+    {
+        string safeName =
+            string.IsNullOrWhiteSpace(stickerName)
+                ? "Unnamed Sticker"
+                : stickerName;
+
+
+        string line =
+            StickerText(safeName) +
+            " activates";
+
+
+        bool hasDescription =
+            !string.IsNullOrWhiteSpace(
+                effectDescription
+            );
+
+
+        bool hasMoney =
+            moneyGained != 0;
+
+
+        if (hasDescription ||
+            hasMoney)
+        {
+            line += ": ";
+        }
+
+
+        if (hasDescription)
+        {
+            line +=
+                effectDescription.Trim();
+        }
+
+
+        if (hasMoney)
+        {
+            if (hasDescription)
+                line += " ";
+
+
+            string moneyLabel =
+                moneyGained > 0
+                    ? $"+${moneyGained}"
+                    : $"-${Mathf.Abs(moneyGained)}";
+
+
+            line +=
+                MoneyText(
+                    moneyLabel
+                );
+        }
+
+
+        AddGameplayLine(
+            line
+        );
+    }
+
+
+    // =========================================================
     // GENERIC GAMEPLAY LINE
     // =========================================================
 

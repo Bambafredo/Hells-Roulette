@@ -8,35 +8,105 @@ public class StickerSword : StickerEffect
     [Header("Damage")]
     public int damageAmount = 5;
 
+
     public override void ApplyEffect()
     {
-        // 1. Validación de ronda
-        if (RoundManager.Instance != null && !RoundManager.Instance.WasLastSpinValid)
+        // -----------------------------------------------------
+        // VALID SPIN
+        // -----------------------------------------------------
+
+        if (RoundManager.Instance != null &&
+            !RoundManager.Instance.WasLastSpinValid)
         {
-            Debug.Log("❌ StickerSword no activa daño porque la ronda no fue válida.");
+            Debug.Log(
+                "StickerSword did not activate because the spin was invalid."
+            );
+
             return;
         }
 
-        // 2. Encontrar el EnemyPanel dinámicamente
-        EnemyPanelManager enemyPanel = Object.FindObjectOfType<EnemyPanelManager>();
+
+        // -----------------------------------------------------
+        // ENEMY PANEL
+        // -----------------------------------------------------
+
+        EnemyPanelManager enemyPanel =
+            Object.FindObjectOfType<EnemyPanelManager>();
+
 
         if (enemyPanel == null)
         {
-            Debug.LogWarning("⚠️ StickerSword: No se encontró EnemyPanelManager en la escena.");
+            Debug.LogWarning(
+                "StickerSword: EnemyPanelManager was not found."
+            );
+
             return;
         }
 
-        // 3. Buscar enemigo más a la izquierda
-        BaseEnemy target = enemyPanel.GetLeftmostAliveEnemy();
+
+        // -----------------------------------------------------
+        // TARGET
+        // -----------------------------------------------------
+
+        BaseEnemy target =
+            enemyPanel.GetLeftmostAliveEnemy();
+
 
         if (target == null)
         {
-            Debug.Log("⚠️ StickerSword: No hay enemigos vivos a los que golpear.");
+            /*
+             * The sticker genuinely activated, but had no valid target.
+             * This is still relevant gameplay information.
+             */
+            LogActivation(
+                null,
+                "No valid target"
+            );
+
+
+            Debug.Log(
+                "StickerSword: No living enemy to attack."
+            );
+
             return;
         }
 
-        // 4. Aplicar daño
-        target.TakeDamage(damageAmount);
-        Debug.Log($"🗡️ StickerSword inflige {damageAmount} de daño a {target.enemyName}!");
+
+        // -----------------------------------------------------
+        // GAME LOG
+        // -----------------------------------------------------
+
+        string targetName =
+            target.enemyName;
+
+
+        if (GameLogManager.Instance != null)
+        {
+            targetName =
+                GameLogManager.Instance
+                    .EnemyText(
+                        target.enemyName
+                    );
+        }
+
+
+        LogActivation(
+            null,
+            $"Deal {damageAmount} damage to {targetName}"
+        );
+
+
+        // -----------------------------------------------------
+        // DAMAGE
+        // -----------------------------------------------------
+
+        target.TakeDamage(
+            damageAmount
+        );
+
+
+        Debug.Log(
+            $"StickerSword deals {damageAmount} damage to {target.enemyName}."
+        );
     }
 }

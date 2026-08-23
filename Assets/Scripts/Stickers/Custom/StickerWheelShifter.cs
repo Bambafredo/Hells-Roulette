@@ -9,83 +9,201 @@ public class StickerWheelShifter : StickerEffect
     public float selfIncrease = 10f;
     public float adjacentDecrease = 5f;
 
-    public override void ApplyEffect(BaseSticker owner)
+
+    public override void ApplyEffect(
+        BaseSticker owner)
     {
-        // 1. Validación de ronda (como antes)
-        if (RoundManager.Instance != null && !RoundManager.Instance.WasLastSpinValid)
+        // -----------------------------------------------------
+        // VALID SPIN
+        // -----------------------------------------------------
+
+        if (RoundManager.Instance != null &&
+            !RoundManager.Instance.WasLastSpinValid)
         {
-            Debug.Log("❌ StickerWheelShifter no activa porque la ronda no fue válida.");
+            Debug.Log(
+                "StickerWheelShifter did not activate because the spin was invalid."
+            );
+
             return;
         }
+
 
         if (owner == null)
         {
-            Debug.LogWarning("StickerWheelShifter: owner == null, no hay contexto del sticker.");
+            Debug.LogWarning(
+                "StickerWheelShifter: owner is null."
+            );
+
             return;
         }
 
-        // 2. Obtener el WheelGenerator desde el owner
-        WheelGenerator generator = owner.generator;
+
+        // -----------------------------------------------------
+        // GENERATOR
+        // -----------------------------------------------------
+
+        WheelGenerator generator =
+            owner.generator;
+
+
         if (generator == null)
         {
-            generator = Object.FindObjectOfType<WheelGenerator>();
+            generator =
+                Object.FindObjectOfType<WheelGenerator>();
         }
+
 
         if (generator == null)
         {
-            Debug.LogError("StickerWheelShifter: No se encontró WheelGenerator.");
+            Debug.LogError(
+                "StickerWheelShifter: WheelGenerator was not found."
+            );
+
             return;
         }
 
-        if (!owner.isPlaced || owner.currentSegment == null)
+
+        if (!owner.isPlaced ||
+            owner.currentSegment == null)
         {
-            Debug.LogWarning("StickerWheelShifter: Sticker no está colocado en la ruleta.");
+            Debug.LogWarning(
+                "StickerWheelShifter: Sticker is not placed on the roulette."
+            );
+
             return;
         }
 
-        // 3. Obtener índice del segmento actual
-        int index = GetSegmentIndex(generator, owner.currentSegment);
+
+        // -----------------------------------------------------
+        // SEGMENT INDEX
+        // -----------------------------------------------------
+
+        int index =
+            GetSegmentIndex(
+                generator,
+                owner.currentSegment
+            );
+
+
         if (index < 0)
         {
-            Debug.LogError("StickerWheelShifter: No se pudo identificar el segmento del sticker.");
+            Debug.LogError(
+                "StickerWheelShifter: Could not identify its segment."
+            );
+
             return;
         }
 
-        int segCount = generator.segmentCount;
-        if (segCount <= 0 || generator.segmentAngles == null ||
+
+        int segCount =
+            generator.segmentCount;
+
+
+        if (segCount <= 0 ||
+            generator.segmentAngles == null ||
             generator.segmentAngles.Count != segCount)
         {
-            Debug.LogError("StickerWheelShifter: segmentAngles no está bien configurado.");
+            Debug.LogError(
+                "StickerWheelShifter: segmentAngles are not correctly configured."
+            );
+
             return;
         }
 
-        int leftIndex = (index - 1 + segCount) % segCount;
-        int rightIndex = (index + 1) % segCount;
 
-        // 4. Aplicar cambios de ángulo
-        generator.segmentAngles[index] += selfIncrease;
-        generator.segmentAngles[leftIndex] -= adjacentDecrease;
-        generator.segmentAngles[rightIndex] -= adjacentDecrease;
+        int leftIndex =
+            (index - 1 + segCount) %
+            segCount;
 
-        Debug.Log(
-            $"🔄 StickerWheelShifter activado en segmento {index}: +" +
-            $"{selfIncrease}, -{adjacentDecrease} a {leftIndex} y {rightIndex}"
+
+        int rightIndex =
+            (index + 1) %
+            segCount;
+
+
+        // -----------------------------------------------------
+        // GAME LOG
+        // -----------------------------------------------------
+
+        LogActivation(
+            owner,
+            $"Segment +{FormatAngle(selfIncrease)}°, " +
+            $"adjacent segments -{FormatAngle(adjacentDecrease)}°"
         );
 
-        // 5. Regenerar la ruleta (esto ya hace NormalizeAngles internamente)
+
+        // -----------------------------------------------------
+        // APPLY ANGLE CHANGES
+        // -----------------------------------------------------
+
+        generator.segmentAngles[index] +=
+            selfIncrease;
+
+        generator.segmentAngles[leftIndex] -=
+            adjacentDecrease;
+
+        generator.segmentAngles[rightIndex] -=
+            adjacentDecrease;
+
+
+        Debug.Log(
+            $"StickerWheelShifter activated on segment {index}: " +
+            $"+{selfIncrease}, -{adjacentDecrease} on {leftIndex} and {rightIndex}."
+        );
+
+
+        // -----------------------------------------------------
+        // REGENERATE WHEEL
+        // -----------------------------------------------------
+
         generator.GenerateWheel();
     }
 
-    private int GetSegmentIndex(WheelGenerator gen, Transform segmentTransform)
-    {
-        if (gen == null || gen.segments == null) return -1;
 
-        for (int i = 0; i < gen.segments.Count; i++)
+    // =========================================================
+    // SEGMENT INDEX
+    // =========================================================
+
+    private int GetSegmentIndex(
+        WheelGenerator gen,
+        Transform segmentTransform)
+    {
+        if (gen == null ||
+            gen.segments == null)
+        {
+            return -1;
+        }
+
+
+        for (int i = 0;
+             i < gen.segments.Count;
+             i++)
         {
             if (gen.segments[i].collider != null &&
                 gen.segments[i].collider.transform == segmentTransform)
+            {
                 return i;
+            }
         }
+
+
         return -1;
+    }
+
+
+    // =========================================================
+    // DISPLAY
+    // =========================================================
+
+    private string FormatAngle(
+        float value)
+    {
+        return
+            Mathf.Approximately(
+                value,
+                Mathf.Round(value)
+            )
+                ? Mathf.RoundToInt(value).ToString()
+                : value.ToString("0.##");
     }
 }
