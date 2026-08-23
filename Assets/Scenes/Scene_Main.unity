@@ -3018,7 +3018,7 @@ MonoBehaviour:
   round: {fileID: 996127459}
   controller: {fileID: 1075813796}
   selfMinInterval: 0
-  moneyReward: 3
+  moneyReward: 1
   roundManager: {fileID: 0}
   originalPosition: {x: 0, y: 0, z: 0}
   originalRotation: {x: 0, y: 0, z: 0, w: 0}
@@ -3282,6 +3282,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   controller: {fileID: 1075813796}
   flagPin: {fileID: 934489007}
+  rewardManager: {fileID: 996127463}
   minHitsRequired: 2
   minSpinDuration: 0.25
   tokensPerRound: 3
@@ -3291,6 +3292,7 @@ MonoBehaviour:
   debtIncreasePerRound: 20
   currentDebt: 0
   debtPending: 0
+  waitingForRewardCompletion: 0
   roundText: {fileID: 1455258518}
   debtText: {fileID: 235942601}
   tokensText: {fileID: 0}

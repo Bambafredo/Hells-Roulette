@@ -14,12 +14,8 @@ public class RewardManager : MonoBehaviour
     [Header("Reward Screen")]
     public GameObject rewardPanel;
 
-    [Tooltip("Punto donde aparecerá la primera oferta.")]
     public Transform rewardSlotA;
-
-    [Tooltip("Punto donde aparecerá la segunda oferta.")]
     public Transform rewardSlotB;
-
 
     [Header("Buttons")]
     public Collider2D rerollButtonCollider;
@@ -31,10 +27,6 @@ public class RewardManager : MonoBehaviour
     // =========================================================
 
     [Header("Reward Pool")]
-
-    [Tooltip(
-        "Prefabs de stickers que pueden aparecer como recompensa."
-    )]
     public GameObject[] stickerPrefabs;
 
 
@@ -43,8 +35,6 @@ public class RewardManager : MonoBehaviour
     // =========================================================
 
     [Header("Reroll")]
-
-    [Tooltip("Coste en sangre de hacer reroll.")]
     [Min(0)]
     public int rerollBloodCost = 1;
 
@@ -59,6 +49,26 @@ public class RewardManager : MonoBehaviour
         private set;
     }
 
+    public int PurchasesThisPhase
+    {
+        get;
+        private set;
+    }
+
+    /// <summary>
+    /// Primera compra = x1
+    /// Segunda compra = x2
+    /// Tercera compra = x3
+    /// etc.
+    /// </summary>
+    public int CurrentPurchaseMultiplier
+    {
+        get
+        {
+            return PurchasesThisPhase + 1;
+        }
+    }
+
     private GameObject currentOfferA;
     private GameObject currentOfferB;
 
@@ -69,13 +79,9 @@ public class RewardManager : MonoBehaviour
     // EVENTS
     // =========================================================
 
-    /*
-     * Más adelante RoundManager podrá utilizar este evento
-     * para comenzar la siguiente ronda.
-     *
-     * Se dispara tanto al comprar un sticker como al hacer Skip.
-     */
     public event Action OnRewardPhaseCompleted;
+
+    public event Action<int> OnPurchaseCountChanged;
 
 
     // =========================================================
@@ -99,18 +105,13 @@ public class RewardManager : MonoBehaviour
 
     private void Start()
     {
-        /*
-         * RewardScreen debe comenzar cerrado.
-         *
-         * Aunque accidentalmente lo dejemos activo en Editor,
-         * el manager corrige el estado al empezar.
-         */
         if (rewardPanel != null)
         {
             rewardPanel.SetActive(false);
         }
 
         RewardPhaseActive = false;
+        PurchasesThisPhase = 0;
     }
 
 
@@ -129,7 +130,6 @@ public class RewardManager : MonoBehaviour
 
         if (cam == null)
             return;
-
 
         Vector2 mouseWorld =
             cam.ScreenToWorldPoint(
@@ -180,7 +180,6 @@ public class RewardManager : MonoBehaviour
         if (RewardPhaseActive)
             return;
 
-
         if (rewardPanel == null)
         {
             Debug.LogError(
@@ -190,16 +189,184 @@ public class RewardManager : MonoBehaviour
             return;
         }
 
-
         RewardPhaseActive = true;
+
+        /*
+         * El multiplicador se reinicia únicamente
+         * al entrar en una NUEVA Reward Phase.
+         */
+        PurchasesThisPhase = 0;
+
+        OnPurchaseCountChanged?
+            .Invoke(PurchasesThisPhase);
 
         rewardPanel.SetActive(true);
 
         GenerateOffers();
 
         Debug.Log(
-            "[REWARD] Reward phase started."
+            "[REWARD] Reward phase started. " +
+            "Next purchase multiplier: x1."
         );
+    }
+
+
+    // =========================================================
+    // PRICE
+    // =========================================================
+
+    /// <summary>
+    /// Devuelve el precio que tendría ESTE sticker
+    /// si se comprara ahora mismo.
+    /// </summary>
+    public int GetCurrentPurchasePrice(
+        BaseSticker sticker)
+    {
+        if (sticker == null ||
+            sticker.effect == null)
+        {
+            return 0;
+        }
+
+        int baseCost =
+            Mathf.Max(
+                0,
+                sticker.effect.basePurchaseCost
+            );
+
+        return
+            baseCost *
+            CurrentPurchaseMultiplier;
+    }
+
+
+    /// <summary>
+    /// RewardStickerOffer llamará aquí DESPUÉS de que
+    /// BaseSticker haya conseguido una colocación válida.
+    ///
+    /// Devuelve false si no podemos pagar.
+    /// </summary>
+    public bool TryPurchaseOffer(
+        GameObject offerObject,
+        BaseSticker sticker)
+    {
+        if (!RewardPhaseActive)
+            return false;
+
+        if (offerObject == null ||
+            sticker == null)
+        {
+            return false;
+        }
+
+        /*
+         * Solo podemos comprar objetos que realmente
+         * pertenecen actualmente a la tienda.
+         */
+        bool isOfferA =
+            currentOfferA == offerObject;
+
+        bool isOfferB =
+            currentOfferB == offerObject;
+
+        if (!isOfferA &&
+            !isOfferB)
+        {
+            return false;
+        }
+
+
+        int price =
+            GetCurrentPurchasePrice(
+                sticker
+            );
+
+
+        // -----------------------------------------------------
+        // MONEY
+        // -----------------------------------------------------
+
+        if (CurrencyManager.Instance == null)
+        {
+            Debug.LogWarning(
+                "[REWARD] CurrencyManager missing."
+            );
+
+            return false;
+        }
+
+
+        if (!CurrencyManager.Instance.CanAfford(price))
+        {
+            Debug.Log(
+                $"[REWARD] Cannot buy " +
+                $"'{GetStickerName(sticker)}'. " +
+                $"Need ${price}, " +
+                $"have ${CurrencyManager.Instance.dollars}."
+            );
+
+            return false;
+        }
+
+
+        bool paid =
+            CurrencyManager.Instance
+                .Spend(price);
+
+        if (!paid)
+            return false;
+
+
+        // -----------------------------------------------------
+        // REMOVE FROM STORE
+        // -----------------------------------------------------
+
+        /*
+         * IMPORTANTÍSIMO:
+         *
+         * NO destruimos el sticker comprado.
+         * Ya está colocado en Album o Roulette
+         * y ahora pertenece al jugador.
+         */
+
+        if (isOfferA)
+            currentOfferA = null;
+
+        if (isOfferB)
+            currentOfferB = null;
+
+
+        // -----------------------------------------------------
+        // ADVANCE MULTIPLIER
+        // -----------------------------------------------------
+
+        PurchasesThisPhase++;
+
+        OnPurchaseCountChanged?
+            .Invoke(PurchasesThisPhase);
+
+
+        Debug.Log(
+            $"[REWARD] Purchased " +
+            $"'{GetStickerName(sticker)}' " +
+            $"for ${price}. " +
+            $"Purchases this phase: " +
+            $"{PurchasesThisPhase}. " +
+            $"Next multiplier: " +
+            $"x{CurrentPurchaseMultiplier}."
+        );
+
+
+        /*
+         * La Reward Phase NO termina.
+         *
+         * El jugador puede:
+         *
+         * - comprar la otra oferta
+         * - hacer reroll
+         * - hacer skip
+         */
+        return true;
     }
 
 
@@ -209,7 +376,14 @@ public class RewardManager : MonoBehaviour
 
     private void GenerateOffers()
     {
-        ClearOffers();
+        /*
+         * Reroll siempre sustituye cualquier oferta
+         * que todavía quede.
+         *
+         * Los stickers YA COMPRADOS no están en
+         * currentOfferA/B y por tanto no se destruyen.
+         */
+        ClearRemainingOffers();
 
 
         if (stickerPrefabs == null ||
@@ -229,8 +403,11 @@ public class RewardManager : MonoBehaviour
                 stickerPrefabs.Length
             );
 
+
         int indexB =
-            GetSecondRewardIndex(indexA);
+            GetSecondRewardIndex(
+                indexA
+            );
 
 
         currentOfferA =
@@ -250,7 +427,9 @@ public class RewardManager : MonoBehaviour
         Debug.Log(
             $"[REWARD] Generated offers: " +
             $"{GetOfferName(currentOfferA)} / " +
-            $"{GetOfferName(currentOfferB)}"
+            $"{GetOfferName(currentOfferB)}. " +
+            $"Current multiplier: " +
+            $"x{CurrentPurchaseMultiplier}."
         );
     }
 
@@ -263,9 +442,8 @@ public class RewardManager : MonoBehaviour
         int firstIndex)
     {
         /*
-         * Si solamente tenemos un sticker configurado
-         * permitimos repetirlo para no romper el sistema
-         * durante desarrollo.
+         * Durante desarrollo permitimos dos copias
+         * si el pool solo contiene un prefab.
          */
         if (stickerPrefabs.Length <= 1)
             return firstIndex;
@@ -275,10 +453,6 @@ public class RewardManager : MonoBehaviour
             firstIndex;
 
 
-        /*
-         * Evitamos que las dos ofertas sean
-         * exactamente el mismo prefab.
-         */
         while (secondIndex == firstIndex)
         {
             secondIndex =
@@ -294,7 +468,7 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
-    // SPAWN OFFER
+    // SPAWN
     // =========================================================
 
     private GameObject SpawnOffer(
@@ -308,22 +482,34 @@ public class RewardManager : MonoBehaviour
         }
 
 
-        /*
-         * IMPORTANTE:
-         *
-         * Lo instanciamos en la posición del slot,
-         * pero NO como hijo del slot.
-         *
-         * Los stickers ya tienen su propia jerarquía/root
-         * y BaseSticker se ocupa después de parentarlos
-         * a Roulette o Album.
-         */
         GameObject instance =
             Instantiate(
                 prefab,
                 slot.position,
                 slot.rotation
             );
+
+
+        // =====================================================
+        // REWARD OFFER COMPONENT
+        // =====================================================
+
+        RewardStickerOffer offer =
+            instance.GetComponent<RewardStickerOffer>();
+
+
+        if (offer == null)
+        {
+            offer =
+                instance.AddComponent<RewardStickerOffer>();
+        }
+
+
+        offer.Initialize(
+            this,
+            instance,
+            slot
+        );
 
 
         return instance;
@@ -349,7 +535,9 @@ public class RewardManager : MonoBehaviour
             GenerateOffers();
 
             Debug.Log(
-                "[REWARD] Free reroll."
+                "[REWARD] Free reroll. " +
+                $"Purchase multiplier remains " +
+                $"x{CurrentPurchaseMultiplier}."
             );
 
             return true;
@@ -357,7 +545,7 @@ public class RewardManager : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // BLOOD CHECK
+        // BLOOD
         // -----------------------------------------------------
 
         if (BloodManager.Instance == null)
@@ -371,21 +559,14 @@ public class RewardManager : MonoBehaviour
         }
 
 
-        /*
-         * BloodManager.ConsumeBlood() actualmente permite
-         * consumir más sangre de la disponible y simplemente
-         * clampa a 0.
-         *
-         * Para una compra/reroll queremos exigir que
-         * realmente puedas pagar el coste completo.
-         */
         if (BloodManager.Instance.currentBlood <
             rerollBloodCost)
         {
             Debug.Log(
                 $"[REWARD] Cannot reroll. " +
                 $"Need {rerollBloodCost} blood, " +
-                $"have {BloodManager.Instance.currentBlood}."
+                $"have " +
+                $"{BloodManager.Instance.currentBlood}."
             );
 
             return false;
@@ -407,8 +588,10 @@ public class RewardManager : MonoBehaviour
 
 
         Debug.Log(
-            $"[REWARD] Rerolled offers for " +
-            $"{rerollBloodCost} blood."
+            $"[REWARD] Rerolled for " +
+            $"{rerollBloodCost} blood. " +
+            $"Purchase multiplier remains " +
+            $"x{CurrentPurchaseMultiplier}."
         );
 
 
@@ -427,7 +610,9 @@ public class RewardManager : MonoBehaviour
 
 
         Debug.Log(
-            "[REWARD] Reward skipped."
+            $"[REWARD] Reward phase skipped. " +
+            $"Total purchases: " +
+            $"{PurchasesThisPhase}."
         );
 
 
@@ -436,69 +621,16 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
-    // PURCHASE COMPLETED
-    // =========================================================
-
-    /*
-     * RewardStickerOffer llamará a este método
-     * cuando uno de los dos stickers se haya comprado
-     * satisfactoriamente.
-     */
-    public void NotifyStickerPurchased(
-        GameObject purchasedSticker)
-    {
-        if (!RewardPhaseActive)
-            return;
-
-
-        /*
-         * El comprado ya pertenece al jugador.
-         * NO debemos destruirlo.
-         *
-         * Destruimos solamente la otra oferta.
-         */
-
-        if (currentOfferA != null &&
-            currentOfferA != purchasedSticker)
-        {
-            Destroy(currentOfferA);
-        }
-
-
-        if (currentOfferB != null &&
-            currentOfferB != purchasedSticker)
-        {
-            Destroy(currentOfferB);
-        }
-
-
-        currentOfferA = null;
-        currentOfferB = null;
-
-
-        Debug.Log(
-            $"[REWARD] Sticker purchased: " +
-            $"{GetOfferName(purchasedSticker)}"
-        );
-
-
-        CompleteRewardPhase(
-            clearOffers: false
-        );
-    }
-
-
-    // =========================================================
     // COMPLETE PHASE
     // =========================================================
 
-    private void CompleteRewardPhase(
-        bool clearOffers = true)
+    private void CompleteRewardPhase()
     {
-        if (clearOffers)
-        {
-            ClearOffers();
-        }
+        /*
+         * Destruimos únicamente los stickers que
+         * todavía seguían a la venta.
+         */
+        ClearRemainingOffers();
 
 
         RewardPhaseActive = false;
@@ -521,14 +653,15 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
-    // CLEAR OFFERS
+    // CLEAR REMAINING OFFERS
     // =========================================================
 
-    private void ClearOffers()
+    private void ClearRemainingOffers()
     {
         if (currentOfferA != null)
         {
             Destroy(currentOfferA);
+
             currentOfferA = null;
         }
 
@@ -536,6 +669,7 @@ public class RewardManager : MonoBehaviour
         if (currentOfferB != null)
         {
             Destroy(currentOfferB);
+
             currentOfferB = null;
         }
     }
@@ -545,15 +679,6 @@ public class RewardManager : MonoBehaviour
     // DEBUG
     // =========================================================
 
-    /*
-     * Esto nos permite probar RewardScreen AHORA,
-     * antes de tocar RoundManager.
-     *
-     * Selecciona RewardManager en Inspector,
-     * menú de los tres puntos del componente:
-     *
-     * DEBUG - Begin Reward Phase
-     */
     [ContextMenu("DEBUG - Begin Reward Phase")]
     private void DebugBeginRewardPhase()
     {
@@ -569,7 +694,7 @@ public class RewardManager : MonoBehaviour
         GameObject offer)
     {
         if (offer == null)
-            return "NULL";
+            return "EMPTY";
 
 
         BaseSticker sticker =
@@ -578,16 +703,30 @@ public class RewardManager : MonoBehaviour
             );
 
 
-        if (sticker != null &&
-            sticker.effect != null &&
+        return GetStickerName(
+            sticker
+        );
+    }
+
+
+    private string GetStickerName(
+        BaseSticker sticker)
+    {
+        if (sticker == null)
+            return "NULL";
+
+
+        if (sticker.effect != null &&
             !string.IsNullOrEmpty(
                 sticker.effect.stickerName
             ))
         {
-            return sticker.effect.stickerName;
+            return
+                sticker.effect.stickerName;
         }
 
 
-        return offer.name;
+        return
+            sticker.name;
     }
 }

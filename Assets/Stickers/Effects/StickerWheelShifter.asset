@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   stickerName: Magic Bean
   icon: {fileID: 0}
+  basePurchaseCost: 7
   dollarReward: 0
   selfIncrease: 10
   adjacentDecrease: 5

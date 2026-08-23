@@ -17,6 +17,13 @@ public class RoundManager : MonoBehaviour
     public RouletteController controller;
     public FlagPin flagPin;
 
+    [Tooltip(
+        "Opcional. Si la escena tiene Reward Screen, " +
+        "asigna aquí su RewardManager. " +
+        "Si queda vacío se intenta encontrar automáticamente."
+    )]
+    public RewardManager rewardManager;
+
     // =========================================================
     // VALID SPIN CONDITIONS
     // =========================================================
@@ -24,7 +31,10 @@ public class RoundManager : MonoBehaviour
     [Header("Condiciones de tirada válida")]
     public int minHitsRequired = 2;
 
-    [Tooltip("Duración mínima (en segundos) que debe durar el spin para considerarse válido.")]
+    [Tooltip(
+        "Duración mínima (en segundos) que debe durar " +
+        "el spin para considerarse válido."
+    )]
     public float minSpinDuration = 0.25f;
 
     // =========================================================
@@ -33,7 +43,9 @@ public class RoundManager : MonoBehaviour
 
     [Header("Round / Tokens")]
 
-    [Tooltip("Número base de tiradas válidas disponibles por ronda.")]
+    [Tooltip(
+        "Número base de tiradas válidas disponibles por ronda."
+    )]
     [Min(1)]
     public int tokensPerRound = 3;
 
@@ -53,7 +65,10 @@ public class RoundManager : MonoBehaviour
     [Min(0)]
     public int startingDebt = 10;
 
-    [Tooltip("Cantidad que aumenta la deuda después de cada ronda superada.")]
+    [Tooltip(
+        "Cantidad que aumenta la deuda después " +
+        "de cada ronda superada."
+    )]
     [Min(0)]
     public int debtIncreasePerRound = 5;
 
@@ -62,6 +77,15 @@ public class RoundManager : MonoBehaviour
 
     [SerializeField]
     private bool debtPending = false;
+
+    // =========================================================
+    // REWARD PHASE
+    // =========================================================
+
+    [Header("Reward Phase")]
+
+    [SerializeField]
+    private bool waitingForRewardCompletion = false;
 
     // =========================================================
     // UI
@@ -75,10 +99,15 @@ public class RoundManager : MonoBehaviour
     [Tooltip("Texto de deuda. Ejemplo: DEBT: $10")]
     public TMP_Text debtText;
 
-    [Tooltip("Opcional. Texto numérico de fichas, por ejemplo 2 / 3.")]
+    [Tooltip(
+        "Opcional. Texto numérico de fichas, por ejemplo 2 / 3."
+    )]
     public TMP_Text tokensText;
 
-    [Tooltip("GameObjects de las fichas, en orden. Pueden ser UI Images con el sprite que quieras.")]
+    [Tooltip(
+        "GameObjects de las fichas, en orden. " +
+        "Pueden ser UI Images con el sprite que quieras."
+    )]
     public GameObject[] tokenIcons;
 
     // =========================================================
@@ -103,10 +132,6 @@ public class RoundManager : MonoBehaviour
 
     // =========================================================
     // EVENTS
-    //
-    // De momento nadie necesita escucharlos.
-    // Los dejamos preparados porque serán muy útiles
-    // para stickers condicionales.
     // =========================================================
 
     public event Action<int> OnRoundStarted;
@@ -121,20 +146,55 @@ public class RoundManager : MonoBehaviour
     // =========================================================
 
     public int CurrentRound => currentRound;
-    public int TokensRemaining => tokensRemaining;
-    public int CurrentDebt => currentDebt;
 
-    public bool DebtPending => debtPending;
+    public int TokensRemaining =>
+        tokensRemaining;
 
-    public bool WasLastSpinValid => lastSpinWasValid;
+    public int CurrentDebt =>
+        currentDebt;
+
+    public bool DebtPending =>
+        debtPending;
+
+    public bool WasLastSpinValid =>
+        lastSpinWasValid;
+
+    public bool WaitingForRewardCompletion =>
+        waitingForRewardCompletion;
 
     /*
-     * RouletteController utilizará esto en el siguiente paso
-     * para impedir físicamente nuevas tiradas cuando no queden fichas.
+     * Una nueva tirada solo puede comenzar si:
+     *
+     * - quedan fichas
+     * - no hay deuda pendiente
+     * - no estamos esperando terminar Rewards
+     * - Reward Screen no está activa
+     *
+     * La última comprobación también hace que el
+     * ContextMenu DEBUG de RewardManager bloquee la ruleta.
      */
-    public bool CanStartSpin =>
-        tokensRemaining > 0 &&
-        !debtPending;
+    public bool CanStartSpin
+    {
+        get
+        {
+            if (tokensRemaining <= 0)
+                return false;
+
+            if (debtPending)
+                return false;
+
+            if (waitingForRewardCompletion)
+                return false;
+
+            if (RewardManager.Instance != null &&
+                RewardManager.Instance.RewardPhaseActive)
+            {
+                return false;
+            }
+
+            return true;
+        }
+    }
 
     // =========================================================
     // UNITY
@@ -142,7 +202,8 @@ public class RoundManager : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null && Instance != this)
+        if (Instance != null &&
+            Instance != this)
         {
             Destroy(this);
             return;
@@ -154,17 +215,42 @@ public class RoundManager : MonoBehaviour
     private void Start()
     {
         // -----------------------------------------------------
-        // Resolver referencias si no están asignadas
+        // REFERENCES
         // -----------------------------------------------------
 
         if (controller == null)
-            controller = FindObjectOfType<RouletteController>();
+        {
+            controller =
+                FindObjectOfType<RouletteController>();
+        }
 
         if (flagPin == null)
-            flagPin = FindObjectOfType<FlagPin>();
+        {
+            flagPin =
+                FindObjectOfType<FlagPin>();
+        }
+
+        if (rewardManager == null)
+        {
+            RewardManager[] managers =
+                FindObjectsOfType<RewardManager>(true);
+
+            if (managers.Length > 0)
+                rewardManager = managers[0];
+        }
 
         // -----------------------------------------------------
-        // ESTADO INICIAL DE LA RUN
+        // REWARD EVENT
+        // -----------------------------------------------------
+
+        if (rewardManager != null)
+        {
+            rewardManager.OnRewardPhaseCompleted +=
+                HandleRewardPhaseCompleted;
+        }
+
+        // -----------------------------------------------------
+        // INITIAL RUN STATE
         // -----------------------------------------------------
 
         currentRound = 0;
@@ -173,12 +259,18 @@ public class RoundManager : MonoBehaviour
             tokensPerRound;
 
         currentDebt =
-            CalculateDebtForRound(currentRound);
+            CalculateDebtForRound(
+                currentRound
+            );
 
         debtPending = false;
 
+        waitingForRewardCompletion = false;
+
         spinActive = false;
+
         lastSpinWasValid = false;
+
         waitingForSpinResolution = false;
 
         UpdateAllUI();
@@ -191,27 +283,29 @@ public class RoundManager : MonoBehaviour
         );
     }
 
+    private void OnDestroy()
+    {
+        if (rewardManager != null)
+        {
+            rewardManager.OnRewardPhaseCompleted -=
+                HandleRewardPhaseCompleted;
+        }
+
+        if (Instance == this)
+            Instance = null;
+    }
+
     // =========================================================
     // SPIN HOOKS
     // =========================================================
 
-    /// <summary>
-    /// Llamado por RouletteController cuando comienza
-    /// una tirada real.
-    /// </summary>
     public void NotifySpinStart()
     {
-        /*
-         * Esto será además bloqueado ANTES de lanzar
-         * desde RouletteController en el siguiente paso.
-         *
-         * Dejamos esta protección aquí igualmente.
-         */
         if (!CanStartSpin)
         {
             Debug.LogWarning(
-                "[ROUND] Spin rejected: no tokens available " +
-                "or debt resolution is pending."
+                "[ROUND] Spin rejected: " +
+                "round state does not currently allow a spin."
             );
 
             return;
@@ -220,16 +314,6 @@ public class RoundManager : MonoBehaviour
         StartNewSpin();
     }
 
-    /// <summary>
-    /// Llamado cuando la ruleta se ha detenido.
-    ///
-    /// AQUÍ:
-    /// - validamos la tirada
-    /// - confirmamos o descartamos dinero pendiente
-    /// - gastamos ficha
-    ///
-    /// NO pagamos todavía la deuda.
-    /// </summary>
     public void NotifySpinEnd()
     {
         if (!spinActive)
@@ -238,29 +322,25 @@ public class RoundManager : MonoBehaviour
         EndSpin();
     }
 
-    /// <summary>
-    /// NUEVO.
-    ///
-    /// RouletteController llamará a esto DESPUÉS de:
-    ///
-    /// 1. Resolver stickers
-    /// 2. Resolver enemigos
-    ///
-    /// Solo entonces puede entrar la deuda.
-    /// </summary>
+    /*
+     * RouletteController llama aquí DESPUÉS de:
+     *
+     * 1. Resolver stickers
+     * 2. Resolver enemigos
+     *
+     * Solo entonces puede entrar la deuda.
+     */
     public void NotifySpinResolved()
     {
         if (!waitingForSpinResolution)
             return;
 
-        waitingForSpinResolution = false;
+        waitingForSpinResolution =
+            false;
 
         /*
-         * Es posible que algún sticker de la tirada
-         * haya añadido fichas.
-         *
-         * Por eso volvemos a mirar tokensRemaining
-         * en lugar de asumir que seguimos a cero.
+         * Un sticker/enemigo podría haber añadido fichas
+         * durante la resolución.
          */
         debtPending =
             tokensRemaining <= 0;
@@ -286,19 +366,13 @@ public class RoundManager : MonoBehaviour
         spinStartTime =
             Time.time;
 
-        /*
-         * Si todavía quedase este flag de una tirada anterior
-         * durante desarrollo, la nueva tirada pasa a ser
-         * la resolución relevante.
-         *
-         * En el flujo final RouletteController llamará a
-         * NotifySpinResolved() en el mismo frame de resolución.
-         */
-        waitingForSpinResolution = false;
+        waitingForSpinResolution =
+            false;
 
         if (CurrencyManager.Instance != null)
         {
-            CurrencyManager.Instance.BeginSpin();
+            CurrencyManager.Instance
+                .BeginSpin();
         }
 
         Debug.Log(
@@ -322,15 +396,11 @@ public class RoundManager : MonoBehaviour
             .Invoke(lastSpinWasValid);
 
         // -----------------------------------------------------
-        // VALID SPIN
+        // VALID
         // -----------------------------------------------------
 
         if (lastSpinWasValid)
         {
-            /*
-             * Primero confirmamos el dinero generado
-             * durante el giro físico de la ruleta.
-             */
             if (CurrencyManager.Instance != null)
             {
                 int committed =
@@ -342,41 +412,26 @@ public class RoundManager : MonoBehaviour
                 );
             }
 
-            /*
-             * SOLO una tirada válida consume ficha.
-             */
             SpendToken();
 
-            /*
-             * Todavía NO resolvemos deuda.
-             *
-             * Faltan:
-             *
-             * - efectos del segmento ganador
-             * - enemigos
-             */
-            waitingForSpinResolution = true;
+            waitingForSpinResolution =
+                true;
         }
 
         // -----------------------------------------------------
-        // INVALID SPIN
+        // INVALID
         // -----------------------------------------------------
 
         else
         {
-            /*
-             * Una tirada inválida:
-             *
-             * - NO consume ficha
-             * - NO conserva pending money
-             */
             if (CurrencyManager.Instance != null)
             {
                 CurrencyManager.Instance
                     .ClearPending();
             }
 
-            waitingForSpinResolution = false;
+            waitingForSpinResolution =
+                false;
         }
 
         float duration =
@@ -429,7 +484,8 @@ public class RoundManager : MonoBehaviour
     // PIN HITS
     // =========================================================
 
-    public void RegisterPinHit(FlagPin p)
+    public void RegisterPinHit(
+        FlagPin p)
     {
         if (!spinActive)
             return;
@@ -448,12 +504,6 @@ public class RoundManager : MonoBehaviour
 
         tokensRemaining--;
 
-        /*
-         * Si llegamos a cero marcamos que existe
-         * una potencial deuda pendiente.
-         *
-         * Pero NO se cobra hasta NotifySpinResolved().
-         */
         debtPending =
             tokensRemaining <= 0;
 
@@ -476,14 +526,8 @@ public class RoundManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// API preparada para stickers/enemigos.
-    ///
-    /// Ej:
-    /// ModifyTokens(+1) -> gana una tirada
-    /// ModifyTokens(-1) -> pierde una tirada
-    /// </summary>
-    public void ModifyTokens(int amount)
+    public void ModifyTokens(
+        int amount)
     {
         tokensRemaining =
             Mathf.Max(
@@ -491,13 +535,6 @@ public class RoundManager : MonoBehaviour
                 tokensRemaining + amount
             );
 
-        /*
-         * Muy importante:
-         *
-         * Si durante la ÚLTIMA tirada un sticker
-         * concede +1 token, la deuda deja de estar
-         * pendiente y la ronda puede continuar.
-         */
         debtPending =
             tokensRemaining <= 0;
 
@@ -512,7 +549,8 @@ public class RoundManager : MonoBehaviour
         );
     }
 
-    public void AddTokens(int amount)
+    public void AddTokens(
+        int amount)
     {
         if (amount <= 0)
             return;
@@ -526,11 +564,6 @@ public class RoundManager : MonoBehaviour
 
     private void ResolveDebt()
     {
-        /*
-         * Este método SOLO debe alcanzarse después
-         * de NotifySpinResolved().
-         */
-
         if (!debtPending)
             return;
 
@@ -572,19 +605,14 @@ public class RoundManager : MonoBehaviour
                 .Invoke(paidAmount);
 
             /*
-             * De momento todavía no existe Reward Screen.
+             * La deuda ya está PAGADA.
              *
-             * Por eso pasamos directamente a la siguiente ronda.
-             *
-             * MÁS ADELANTE:
-             *
-             * Debt paid
-             *      ↓
-             * Reward Screen
-             *      ↓
-             * StartNextRound()
+             * Ahora entramos en Reward Phase antes
+             * de avanzar la ronda.
              */
-            StartNextRound();
+            debtPending = false;
+
+            BeginRewardPhaseOrNextRound();
 
             return;
         }
@@ -601,15 +629,85 @@ public class RoundManager : MonoBehaviour
         GameOver();
     }
 
-    /// <summary>
-    /// Permite a stickers/enemigos modificar
-    /// la deuda actual.
-    ///
-    /// Ej:
-    /// ModifyDebt(-5)
-    /// ModifyDebt(+10)
-    /// </summary>
-    public void ModifyDebt(int amount)
+    // =========================================================
+    // REWARD PHASE
+    // =========================================================
+
+    private void BeginRewardPhaseOrNextRound()
+    {
+        /*
+         * Si esta escena NO utiliza RewardManager
+         * (por ejemplo una escena mobile antigua),
+         * conservamos el comportamiento anterior.
+         */
+        if (rewardManager == null)
+        {
+            Debug.Log(
+                "[REWARD] No RewardManager in scene. " +
+                "Starting next round directly."
+            );
+
+            StartNextRound();
+            return;
+        }
+
+        /*
+         * Bloqueamos explícitamente el cambio de ronda
+         * hasta que RewardManager nos avise de que
+         * el jugador ha hecho Skip.
+         */
+        waitingForRewardCompletion =
+            true;
+
+        rewardManager.BeginRewardPhase();
+
+        /*
+         * Protección por si RewardManager no ha podido
+         * abrirse (por ejemplo RewardPanel sin asignar).
+         *
+         * No queremos dejar la run bloqueada para siempre.
+         */
+        if (!rewardManager.RewardPhaseActive)
+        {
+            Debug.LogWarning(
+                "[REWARD] Reward phase could not start. " +
+                "Starting next round as fallback."
+            );
+
+            waitingForRewardCompletion =
+                false;
+
+            StartNextRound();
+            return;
+        }
+
+        Debug.Log(
+            "[ROUND] Waiting for Reward Phase completion."
+        );
+    }
+
+    private void HandleRewardPhaseCompleted()
+    {
+        if (!waitingForRewardCompletion)
+            return;
+
+        waitingForRewardCompletion =
+            false;
+
+        Debug.Log(
+            "[ROUND] Reward Phase completed. " +
+            "Starting next round."
+        );
+
+        StartNextRound();
+    }
+
+    // =========================================================
+    // MODIFY DEBT
+    // =========================================================
+
+    public void ModifyDebt(
+        int amount)
     {
         currentDebt =
             Mathf.Max(
@@ -644,11 +742,17 @@ public class RoundManager : MonoBehaviour
                 currentRound
             );
 
-        debtPending = false;
+        debtPending =
+            false;
 
-        waitingForSpinResolution = false;
+        waitingForRewardCompletion =
+            false;
 
-        lastSpinWasValid = false;
+        waitingForSpinResolution =
+            false;
+
+        lastSpinWasValid =
+            false;
 
         UpdateAllUI();
 
@@ -673,7 +777,8 @@ public class RoundManager : MonoBehaviour
     {
         return
             startingDebt +
-            (round * debtIncreasePerRound);
+            (round *
+             debtIncreasePerRound);
     }
 
     // =========================================================
@@ -682,7 +787,8 @@ public class RoundManager : MonoBehaviour
 
     private void GameOver()
     {
-        OnGameOver?.Invoke();
+        OnGameOver?
+            .Invoke();
 
         if (CurrencyManager.Instance != null)
         {
@@ -694,23 +800,10 @@ public class RoundManager : MonoBehaviour
             "[GAME OVER] Resetting run..."
         );
 
-        /*
-         * Recargar la escena es muchísimo más seguro
-         * durante esta fase que intentar resetear manualmente:
-         *
-         * - dinero
-         * - sangre
-         * - enemigos
-         * - stickers
-         * - rueda
-         * - bolsa
-         * - ronda
-         * - fichas
-         *
-         * Todo vuelve exactamente al estado del Editor.
-         */
         SceneManager.LoadScene(
-            SceneManager.GetActiveScene().buildIndex
+            SceneManager
+                .GetActiveScene()
+                .buildIndex
         );
     }
 
@@ -745,19 +838,12 @@ public class RoundManager : MonoBehaviour
 
     private void UpdateTokensUI()
     {
-        // -----------------------------------------------------
-        // OPTIONAL TEXT
-        // -----------------------------------------------------
-
         if (tokensText != null)
         {
             tokensText.text =
-                $"{tokensRemaining} / {tokensPerRound}";
+                $"{tokensRemaining} / " +
+                $"{tokensPerRound}";
         }
-
-        // -----------------------------------------------------
-        // TOKEN ICONS
-        // -----------------------------------------------------
 
         if (tokenIcons == null)
             return;
@@ -769,14 +855,6 @@ public class RoundManager : MonoBehaviour
             if (tokenIcons[i] == null)
                 continue;
 
-            /*
-             * Ejemplo con 3 tokens:
-             *
-             * 3 restantes: ● ● ●
-             * 2 restantes: ● ●
-             * 1 restante : ●
-             * 0 restantes:
-             */
             bool shouldBeVisible =
                 i < tokensRemaining;
 
