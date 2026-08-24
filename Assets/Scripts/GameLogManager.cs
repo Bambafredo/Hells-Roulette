@@ -91,6 +91,14 @@ public class GameLogManager : MonoBehaviour
     [Tooltip("Color used for money gains.")]
     public Color moneyColor = Color.yellow;
 
+    [Tooltip("Color used for end-of-round debt payments.")]
+    public Color debtColor =
+        new Color(
+            0.72f,
+            0.42f,
+            1f
+        );
+
     [Tooltip("Color used for enemy names.")]
     public Color enemyColor =
         new Color(
@@ -149,6 +157,8 @@ public class GameLogManager : MonoBehaviour
 
 
     private Camera cam;
+
+    private RoundManager subscribedRoundManager;
 
     private Vector2 shownPosition;
     private Vector2 hiddenPosition;
@@ -309,6 +319,9 @@ public class GameLogManager : MonoBehaviour
         ValidSpinCount = 0;
 
 
+        SubscribeToRoundManager();
+
+
         Debug.Log(
             "[GAME LOG] Initialized."
         );
@@ -364,8 +377,68 @@ public class GameLogManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        UnsubscribeFromRoundManager();
+
         if (Instance == this)
             Instance = null;
+    }
+
+
+    // =========================================================
+    // ROUND MANAGER EVENTS
+    // =========================================================
+
+    private void SubscribeToRoundManager()
+    {
+        UnsubscribeFromRoundManager();
+
+
+        if (RoundManager.Instance == null)
+            return;
+
+
+        subscribedRoundManager =
+            RoundManager.Instance;
+
+
+        subscribedRoundManager.OnDebtPaid +=
+            HandleDebtPaid;
+    }
+
+
+    private void UnsubscribeFromRoundManager()
+    {
+        if (subscribedRoundManager == null)
+            return;
+
+
+        subscribedRoundManager.OnDebtPaid -=
+            HandleDebtPaid;
+
+
+        subscribedRoundManager = null;
+    }
+
+
+    private void HandleDebtPaid(
+        int paidAmount)
+    {
+        if (paidAmount <= 0)
+            return;
+
+
+        /*
+         * RoundManager raises OnDebtPaid from NotifySpinResolved().
+         * RouletteController commits the visible spin block only AFTER
+         * that call, so this line naturally lands after Lucky Shot and
+         * every other spin effect while still belonging to the same block.
+         */
+        AddGameplayLine(
+            "ROUND END: Debt collected: " +
+            DebtText(
+                $"-${paidAmount}"
+            )
+        );
     }
 
 
@@ -1553,6 +1626,16 @@ public class GameLogManager : MonoBehaviour
         return ColorText(
             text,
             moneyColor
+        );
+    }
+
+
+    public string DebtText(
+        string text)
+    {
+        return ColorText(
+            text,
+            debtColor
         );
     }
 

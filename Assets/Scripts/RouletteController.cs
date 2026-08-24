@@ -14,7 +14,8 @@ public class RouletteController : MonoBehaviour
     public enum SpinMethod
     {
         Manual,
-        Power
+        Power,
+        LuckyShot
     }
 
     // =========================================================
@@ -98,6 +99,13 @@ public class RouletteController : MonoBehaviour
     // only if the spin is later validated.
     private int brakeBloodSpentThisSpin = 0;
 
+    /*
+     * Used by world-space utility buttons that consume the same
+     * mouse-down as the roulette. This prevents a button click from
+     * accidentally beginning a manual drag in the same frame.
+     */
+    private bool pointerInputConsumedThisFrame = false;
+
     // =========================================================
     // INTERNAL SPIN STATE
     // =========================================================
@@ -165,6 +173,27 @@ public class RouletteController : MonoBehaviour
     } = 0f;
 
     /// <summary>
+    /// Reward percentage attached to the current / last Lucky Shot.
+    /// Zero for Manual and Power Switch spins.
+    /// </summary>
+    public float CurrentLuckyShotRewardPercent
+    {
+        get;
+        private set;
+    } = 0f;
+
+    /// <summary>
+    /// Whether the current physical spin allows the player to use
+    /// the Blood-powered manual brake. Manual and Power spins allow
+    /// it by default; Lucky Shot decides this per launch.
+    /// </summary>
+    public bool CurrentSpinAllowsManualBrake
+    {
+        get;
+        private set;
+    } = true;
+
+    /// <summary>
     /// Nos permite saber si el jugador está manipulando
     /// directamente la rueda.
     /// </summary>
@@ -197,6 +226,15 @@ public class RouletteController : MonoBehaviour
     public void SetInputBlocked(bool v)
     {
         inputBlocked = v;
+    }
+
+    /// <summary>
+    /// Consumes the roulette pointer handling for the current frame.
+    /// Useful for world-space buttons that use the same mouse input.
+    /// </summary>
+    public void ConsumePointerInputThisFrame()
+    {
+        pointerInputConsumedThisFrame = true;
     }
 
     // =========================================================
@@ -253,6 +291,16 @@ public class RouletteController : MonoBehaviour
 
     void HandlePointer()
     {
+        // -----------------------------------------------------
+        // EXTERNAL WORLD-SPACE BUTTON
+        // -----------------------------------------------------
+
+        if (pointerInputConsumedThisFrame)
+        {
+            pointerInputConsumedThisFrame = false;
+            return;
+        }
+
         // -----------------------------------------------------
         // PLACEMENT LOCK
         // -----------------------------------------------------
@@ -326,7 +374,11 @@ public class RouletteController : MonoBehaviour
         {
 #if UNITY_EDITOR || UNITY_STANDALONE
 
-            if (Input.GetMouseButton(0))
+            if (!CurrentSpinAllowsManualBrake)
+            {
+                isBraking = false;
+            }
+            else if (Input.GetMouseButton(0))
             {
                 Vector2 mouseWorld =
                     Camera.main.ScreenToWorldPoint(
@@ -630,6 +682,74 @@ public class RouletteController : MonoBehaviour
     }
 
     // =========================================================
+    // LUCKY SHOT PUBLIC API
+    // =========================================================
+
+    /// <summary>
+    /// Starts an automatic Lucky Shot using the supplied normalized
+    /// power and reward percentage.
+    ///
+    /// power01:
+    /// 0 = 0% power
+    /// 1 = 100% power
+    ///
+    /// rewardPercent is clamped to 0 - 500.
+    /// </summary>
+    public bool TryStartLuckyShot(
+        float power01,
+        float rewardPercent,
+        bool allowManualBrake)
+    {
+        if (!CanStartNewSpin())
+            return false;
+
+        float normalizedPower =
+            Mathf.Clamp01(power01);
+
+        float allowedMaximum =
+            Mathf.Min(
+                powerSpinMaxSpeed,
+                maxSpinSpeed
+            );
+
+        float requestedSpeed =
+            normalizedPower *
+            allowedMaximum;
+
+        if (requestedSpeed <=
+            minThrowSpeed)
+        {
+            Debug.LogWarning(
+                "[LUCKY SHOT] Rolled power was below the roulette's " +
+                "minimum throw speed. Increase the Lucky Shot minimum power."
+            );
+
+            return false;
+        }
+
+        float direction =
+            powerSpinClockwise
+                ? -1f
+                : 1f;
+
+        requestedSpeed *=
+            direction;
+
+        return
+            TryBeginSpin(
+                requestedSpeed,
+                SpinMethod.LuckyShot,
+                normalizedPower,
+                Mathf.Clamp(
+                    rewardPercent,
+                    0f,
+                    500f
+                ),
+                allowManualBrake
+            );
+    }
+
+    // =========================================================
     // COMMON SPIN START
     // =========================================================
 
@@ -650,7 +770,9 @@ public class RouletteController : MonoBehaviour
     private bool TryBeginSpin(
         float requestedSpeed,
         SpinMethod method,
-        float displayPower01)
+        float displayPower01,
+        float luckyShotRewardPercent = 0f,
+        bool allowManualBrake = true)
     {
         if (SpinInProgress)
             return false;
@@ -679,6 +801,20 @@ public class RouletteController : MonoBehaviour
 
         CurrentSpinMethod =
             method;
+
+        CurrentLuckyShotRewardPercent =
+            method == SpinMethod.LuckyShot
+                ? Mathf.Clamp(
+                    luckyShotRewardPercent,
+                    0f,
+                    500f
+                )
+                : 0f;
+
+        CurrentSpinAllowsManualBrake =
+            method == SpinMethod.LuckyShot
+                ? allowManualBrake
+                : true;
 
         LastLaunchPower01 =
             Mathf.Clamp01(
@@ -870,6 +1006,7 @@ public class RouletteController : MonoBehaviour
             // -------------------------------------------------
 
             if (enableBrake &&
+                CurrentSpinAllowsManualBrake &&
                 isBraking &&
                 BloodManager.Instance != null)
             {
@@ -1023,10 +1160,23 @@ public class RouletteController : MonoBehaviour
          */
         if (GameLogManager.Instance != null)
         {
-            string methodLabel =
-                CurrentSpinMethod == SpinMethod.Power
-                    ? "POWER SWITCH"
-                    : "MANUAL";
+            string methodLabel;
+
+            if (CurrentSpinMethod == SpinMethod.Power)
+            {
+                methodLabel =
+                    "POWER SWITCH";
+            }
+            else if (CurrentSpinMethod == SpinMethod.LuckyShot)
+            {
+                methodLabel =
+                    "LUCKY SHOT";
+            }
+            else
+            {
+                methodLabel =
+                    "MANUAL";
+            }
 
             GameLogManager.Instance
                 .BeginValidSpinBlock(
@@ -1107,13 +1257,27 @@ public class RouletteController : MonoBehaviour
             .Invoke();
 
         /*
-         * 6. FIN COMPLETO DE LA RESOLUCIÓN
+         * 6. SPIN MONEY / LUCKY SHOT
+         *
+         * Currency tracking stays active through:
+         * - Flag Pin rewards
+         * - sticker money
+         * - any future money-producing enemy/effect
+         *
+         * Lucky Shot resolves only AFTER all those effects, but BEFORE
+         * RoundManager resolves the end-of-round debt. This means the
+         * bonus can legitimately help pay the debt from this spin.
+         */
+        ResolveSpinMoneyAndLuckyShotBonus();
+
+        /*
+         * 7. FIN COMPLETO DE LA RESOLUCIÓN
          */
         RoundManager.Instance?
             .NotifySpinResolved();
 
         /*
-         * 7. PUBLISH GAME LOG BLOCK
+         * 8. PUBLISH GAME LOG BLOCK
          *
          * Only now does the player see the completed spin.
          */
@@ -1128,6 +1292,104 @@ public class RouletteController : MonoBehaviour
         SpinInProgress =
             false;
     }
+
+    // =========================================================
+    // LUCKY SHOT REWARD
+    // =========================================================
+
+    private void ResolveSpinMoneyAndLuckyShotBonus()
+    {
+        if (CurrencyManager.Instance == null)
+            return;
+
+        /*
+         * End tracking BEFORE paying the Lucky Shot bonus so the bonus
+         * never counts itself as part of the spin earnings.
+         */
+        int moneyEarnedThisSpin =
+            CurrencyManager.Instance
+                .EndSpinEarningsTracking();
+
+        if (CurrentSpinMethod !=
+            SpinMethod.LuckyShot)
+        {
+            return;
+        }
+
+        float rewardPercent =
+            Mathf.Clamp(
+                CurrentLuckyShotRewardPercent,
+                0f,
+                500f
+            );
+
+        float rawBonus =
+            moneyEarnedThisSpin *
+            rewardPercent /
+            100f;
+
+        /*
+         * Currency is integer-based. Use normal human rounding:
+         * .5 and above rounds up.
+         */
+        int luckyBonus =
+            Mathf.Max(
+                0,
+                Mathf.FloorToInt(
+                    rawBonus +
+                    0.5f
+                )
+            );
+
+        if (luckyBonus > 0)
+        {
+            CurrencyManager.Instance
+                .AddDollar(
+                    luckyBonus
+                );
+        }
+
+        /*
+         * This line is intentionally added after stickers and enemies.
+         * Because the Game Log block is still open, it will appear as
+         * the final gameplay effect of the spin.
+         */
+        if (GameLogManager.Instance != null)
+        {
+            string percentLabel =
+                FormatPercent(
+                    rewardPercent
+                );
+
+            GameLogManager.Instance
+                .AddGameplayLine(
+                    $"Lucky Shot bonus ({percentLabel}): " +
+                    GameLogManager.Instance
+                        .MoneyText(
+                            $"+${luckyBonus}"
+                        )
+                );
+        }
+
+        Debug.Log(
+            $"[LUCKY SHOT] Spin earned ${moneyEarnedThisSpin}. " +
+            $"Bonus {rewardPercent:0.##}% = ${luckyBonus}."
+        );
+    }
+
+
+    private string FormatPercent(
+        float value)
+    {
+        return
+            Mathf.Approximately(
+                value,
+                Mathf.Round(value)
+            )
+                ? $"{Mathf.RoundToInt(value)}%"
+                : $"{value:0.##}%";
+    }
+
 
     // =========================================================
     // CURRENT SEGMENT
