@@ -337,6 +337,25 @@ public class WheelGenerator : MonoBehaviour
             if (s == null)
                 continue;
 
+            /*
+             * A sticker that has just spent its final use is already
+             * logically gone, even though Unity defers Destroy() until
+             * the end of the frame.
+             *
+             * This matters especially for WheelShifter / Magic Bean:
+             * it can consume its last use and regenerate the wheel during
+             * that very same activation. We must NOT preserve / restore
+             * that dying sticker onto the freshly generated wheel.
+             *
+             * We intentionally use BaseSticker's EXISTING public use API
+             * here, so no BaseSticker references or contracts change.
+             */
+            if (s.HasLimitedUses &&
+                s.RemainingUses <= 0)
+            {
+                continue;
+            }
+
             // Solo los stickers colocados en la ruleta.
             if (!s.isPlaced ||
                 s.currentSegment == null)

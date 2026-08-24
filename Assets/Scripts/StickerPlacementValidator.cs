@@ -116,6 +116,24 @@ public class StickerPlacementValidator : MonoBehaviour
         if (sticker == null)
             return true;
 
+        /*
+         * Destroy() is deferred until end-of-frame.
+         *
+         * A limited-use sticker at 0 uses has already completed its
+         * lifetime and must no longer be considered by placement
+         * validation. This prevents a WheelShifter / Magic Bean that
+         * dies on the same activation that regenerates the wheel from
+         * creating a one-frame false placement lock.
+         *
+         * No new BaseSticker API is introduced: these are the existing
+         * HasLimitedUses / RemainingUses properties from the stable code.
+         */
+        if (sticker.HasLimitedUses &&
+            sticker.RemainingUses <= 0)
+        {
+            return true;
+        }
+
         Transform root =
             sticker.stickerRoot != null
                 ? sticker.stickerRoot

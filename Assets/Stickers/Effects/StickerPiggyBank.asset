@@ -21,4 +21,4 @@ MonoBehaviour:
   consumeUseOnAlbumActivation: 0
   dollarReward: 0
   logDescription: 
-  moneyStoredPerMiss: 3
+  moneyStoredPerMiss: 1
