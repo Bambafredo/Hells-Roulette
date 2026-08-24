@@ -1904,14 +1904,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.44298324, g: 0.4693217, b: 0.8415094, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: dfaa73ec9b4f4da4f9212951a6a96b1d, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 7d3ead61f5cf9ad40823f882e24b2ff4, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -2278,14 +2278,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.44298324, g: 0.4693217, b: 0.8415094, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: dfaa73ec9b4f4da4f9212951a6a96b1d, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 7d3ead61f5cf9ad40823f882e24b2ff4, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -3120,6 +3120,68 @@ BoxCollider2D:
   serializedVersion: 2
   m_Size: {x: 2, y: 2}
   m_EdgeRadius: 0
+--- !u!1001 &715572975
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1156078942}
+    m_Modifications:
+    - target: {fileID: 577474978131120927, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_Name
+      value: Sticker_FakeChip
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0.757
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.533
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+--- !u!4 &715572976 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 9022462484478120845, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
+  m_PrefabInstance: {fileID: 715572975}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &737069200
 GameObject:
   m_ObjectHideFlags: 0
@@ -4252,6 +4314,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: e380f0cfcc88d914fa292738c551e8c0, type: 3}
   - {fileID: 577474978131120927, guid: f965114419bfca84882c753f6e65e0e7, type: 3}
   - {fileID: 577474978131120927, guid: 00e0f7cee6aad8440bee00663f654f25, type: 3}
+  - {fileID: 577474978131120927, guid: 7c05496de9fd9fa47ab3642a16874d39, type: 3}
   bloodPriceMultiplier: 2
   enableFirstPurchaseDiscount: 1
   firstPurchaseDiscountTarget: 0
@@ -4285,6 +4348,7 @@ MonoBehaviour:
   stickerColor: {r: 0, g: 1, b: 0, a: 1}
   bloodColor: {r: 1, g: 0, b: 0, a: 1}
   moneyColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  debtColor: {r: 0.8867924, g: 0, b: 0.8162863, a: 1}
   enemyColor: {r: 1, g: 0.5, b: 0.2, a: 1}
   segmentColor: {r: 0, g: 1, b: 1, a: 1}
 --- !u!1 &1004711265
@@ -5202,6 +5266,7 @@ Transform:
   - {fileID: 1616546517}
   - {fileID: 33877464}
   - {fileID: 1849301722}
+  - {fileID: 715572976}
   m_Father: {fileID: 1353839698}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1179771188
@@ -6661,6 +6726,7 @@ MonoBehaviour:
   minPowerPercent: 60
   maxPowerPercent: 100
   rewardPercent: 100
+  allowManualBrake: 0
 --- !u!1 &1430420672
 GameObject:
   m_ObjectHideFlags: 0
@@ -8051,14 +8117,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.44298324, g: 0.4693217, b: 0.8415094, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: dfaa73ec9b4f4da4f9212951a6a96b1d, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 7d3ead61f5cf9ad40823f882e24b2ff4, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1

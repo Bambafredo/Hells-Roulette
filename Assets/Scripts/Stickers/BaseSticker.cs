@@ -2,7 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-[RequireComponent(typeof(Collider2D))]
 public class BaseSticker : MonoBehaviour
 {
     [Header("Sticker Config")]
@@ -10,6 +9,39 @@ public class BaseSticker : MonoBehaviour
     public Transform wheelCenter;
     public WheelGenerator generator;
     public RouletteController controller;
+
+    [Header("Sticker Collider")]
+    [Tooltip(
+        "Collider físico que representa la forma real del sticker. " +
+        "Puede estar en este GameObject o en cualquier otro GameObject del prefab. " +
+        "Si se deja vacío, BaseSticker mantiene compatibilidad con los prefabs antiguos " +
+        "buscando un Collider2D en este mismo GameObject."
+    )]
+    [SerializeField]
+    private Collider2D stickerCollider;
+
+    /// <summary>
+    /// Única referencia pública al collider físico del sticker.
+    ///
+    /// Prefabs antiguos:
+    ///     campo vacío -> usa GetComponent<Collider2D>() como siempre.
+    ///
+    /// Prefabs nuevos:
+    ///     se puede asignar un collider situado en otro GameObject del prefab.
+    /// </summary>
+    public Collider2D StickerCollider
+    {
+        get
+        {
+            if (stickerCollider != null)
+                return stickerCollider;
+
+            if (myCollider == null)
+                myCollider = GetComponent<Collider2D>();
+
+            return myCollider;
+        }
+    }
 
     [Header("Placement")]
     public bool isPlaced = false;
@@ -39,6 +71,44 @@ public class BaseSticker : MonoBehaviour
     [Tooltip("GO raíz del sticker (prefab). Si no se asigna, se detecta en Awake una vez.")]
     public Transform stickerRoot;
 
+    // ===========================================================
+    // LIMITED USES - RUNTIME STATE
+    // ===========================================================
+
+    [Header("Runtime Uses")]
+    [Tooltip(
+        "Runtime only. -1 means unlimited. " +
+        "Limited stickers initialize this value from StickerEffect.maxUses."
+    )]
+    [SerializeField]
+    private int remainingUses = -1;
+
+    private bool useStateInitialized = false;
+    private StickerEffect useStateEffect = null;
+    private bool consumed = false;
+
+    public bool HasLimitedUses
+    {
+        get
+        {
+            EnsureUseStateInitialized();
+
+            return
+                effect != null &&
+                effect.HasLimitedUses;
+        }
+    }
+
+    public int RemainingUses
+    {
+        get
+        {
+            EnsureUseStateInitialized();
+
+            return remainingUses;
+        }
+    }
+
     private Camera cam;
     private bool isDragging = false;
     private Vector3 offset;
@@ -61,13 +131,28 @@ public class BaseSticker : MonoBehaviour
     protected virtual void Awake()
     {
         cam = Camera.main;
-        myCollider = GetComponent<Collider2D>();
+        myCollider = StickerCollider;
 
         // Root fijo del sticker.
         if (stickerRoot == null)
             stickerRoot = transform.parent != null ? transform.parent : transform;
 
         EnsureSceneReferences();
+        EnsureUseStateInitialized();
+    }
+
+    private void OnValidate()
+    {
+        /*
+         * Backwards compatibility for existing prefabs:
+         * if they still keep the collider beside BaseSticker,
+         * Unity fills the explicit reference automatically.
+         *
+         * We intentionally do NOT search children here: a sticker prefab can
+         * contain several unrelated colliders and we never want to guess.
+         */
+        if (stickerCollider == null)
+            stickerCollider = GetComponent<Collider2D>();
     }
 
     protected virtual void OnEnable()
@@ -78,6 +163,7 @@ public class BaseSticker : MonoBehaviour
          */
         EnsureSceneReferences();
         EnsureAlbumStateFromHierarchy();
+        EnsureUseStateInitialized();
     }
 
     protected virtual void Update()
@@ -585,7 +671,7 @@ public class BaseSticker : MonoBehaviour
         Vector3 dropPos)
     {
         if (myCollider == null)
-            myCollider = GetComponent<Collider2D>();
+            myCollider = StickerCollider;
 
         if (myCollider == null)
             return false;
@@ -629,7 +715,7 @@ public class BaseSticker : MonoBehaviour
     protected virtual void TryPlaceSticker()
     {
         if (myCollider == null)
-            myCollider = GetComponent<Collider2D>();
+            myCollider = StickerCollider;
 
         if (myCollider == null)
         {
@@ -786,10 +872,145 @@ public class BaseSticker : MonoBehaviour
     // El ScriptableObject recibe el contexto del sticker.
     public virtual void OnSegmentWin()
     {
-        if (effect == null)
+        if (effect == null ||
+            consumed)
+        {
             return;
+        }
+
+        EnsureUseStateInitialized();
 
         effect.ApplyEffect(this);
+    }
+
+
+    // ===========================================================
+    // LIMITED USES
+    // ===========================================================
+
+    /// <summary>
+    /// Initializes the runtime use counter for this physical sticker instance.
+    ///
+    /// IMPORTANT:
+    /// maxUses lives in the StickerEffect ScriptableObject because it is
+    /// configuration shared by every copy of that sticker.
+    ///
+    /// remainingUses lives here because every physical sticker instance
+    /// needs its own independent counter.
+    /// </summary>
+    private void EnsureUseStateInitialized()
+    {
+        /*
+         * If the effect reference changes at runtime, the new effect starts
+         * with its own configured use count.
+         */
+        if (useStateInitialized &&
+            useStateEffect == effect)
+        {
+            return;
+        }
+
+        useStateInitialized = true;
+        useStateEffect = effect;
+        consumed = false;
+
+        if (effect != null &&
+            effect.HasLimitedUses)
+        {
+            remainingUses =
+                Mathf.Max(
+                    1,
+                    effect.maxUses
+                );
+        }
+        else
+        {
+            /*
+             * -1 is our runtime marker for unlimited.
+             */
+            remainingUses = -1;
+        }
+    }
+
+
+    /// <summary>
+    /// Called by StickerEffect immediately after the activation itself has
+    /// been written to the Game Log.
+    ///
+    /// Unlimited stickers ignore this completely.
+    /// Limited stickers lose one use, report the new amount, and are
+    /// destroyed when the counter reaches zero.
+    /// </summary>
+    public void ConsumeUseAfterActivation()
+    {
+        EnsureUseStateInitialized();
+
+        if (effect == null ||
+            !effect.HasLimitedUses ||
+            consumed)
+        {
+            return;
+        }
+
+        remainingUses =
+            Mathf.Max(
+                0,
+                remainingUses - 1
+            );
+
+        LogRemainingUses();
+
+        if (remainingUses <= 0)
+        {
+            consumed = true;
+            DestroyStickerInstance();
+        }
+    }
+
+
+    private void LogRemainingUses()
+    {
+        if (GameLogManager.Instance == null)
+            return;
+
+        string stickerName =
+            effect != null &&
+            !string.IsNullOrWhiteSpace(
+                effect.stickerName
+            )
+                ? effect.stickerName
+                : gameObject.name;
+
+        GameLogManager.Instance
+            .AddGameplayLine(
+                GameLogManager.Instance
+                    .StickerText(
+                        stickerName
+                    ) +
+                $" uses remaining: {remainingUses}"
+            );
+    }
+
+
+    private void DestroyStickerInstance()
+    {
+        GameObject objectToDestroy =
+            stickerRoot != null
+                ? stickerRoot.gameObject
+                : gameObject;
+
+        Debug.Log(
+            $"[STICKER] '{effect?.stickerName ?? name}' " +
+            "ran out of uses and was destroyed."
+        );
+
+        /*
+         * Destroy is deferred until the end of the frame, so the current
+         * effect can safely finish resolving after scheduling destruction.
+         */
+        Destroy(
+            objectToDestroy
+        );
     }
 
     // ===========================================================
@@ -883,7 +1104,7 @@ public class BaseSticker : MonoBehaviour
     private float ApproxRadiusWorld()
     {
         if (myCollider == null)
-            myCollider = GetComponent<Collider2D>();
+            myCollider = StickerCollider;
 
         if (myCollider == null)
             return 0f;

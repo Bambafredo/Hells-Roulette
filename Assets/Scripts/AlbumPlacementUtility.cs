@@ -20,7 +20,7 @@ public class AlbumPlacementUtility : MonoBehaviour
         }
 
         Collider2D stickerCollider =
-            sticker.GetComponent<Collider2D>();
+            sticker.StickerCollider;
 
         if (stickerCollider == null ||
             !stickerCollider.enabled)
@@ -148,7 +148,7 @@ public class AlbumPlacementUtility : MonoBehaviour
                 continue;
 
             Collider2D otherCollider =
-                other.GetComponent<Collider2D>();
+                other.StickerCollider;
 
             if (otherCollider == null ||
                 !otherCollider.enabled)

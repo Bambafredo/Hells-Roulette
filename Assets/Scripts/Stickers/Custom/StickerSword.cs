@@ -9,7 +9,8 @@ public class StickerSword : StickerEffect
     public int damageAmount = 5;
 
 
-    public override void ApplyEffect()
+    public override void ApplyEffect(
+        BaseSticker owner)
     {
         // -----------------------------------------------------
         // VALID SPIN
@@ -58,8 +59,8 @@ public class StickerSword : StickerEffect
              * The sticker genuinely activated, but had no valid target.
              * This is still relevant gameplay information.
              */
-            LogActivation(
-                null,
+            RegisterActivation(
+                owner,
                 "No valid target"
             );
 
@@ -90,8 +91,8 @@ public class StickerSword : StickerEffect
         }
 
 
-        LogActivation(
-            null,
+        RegisterActivation(
+            owner,
             $"Deal {damageAmount} damage to {targetName}"
         );
 

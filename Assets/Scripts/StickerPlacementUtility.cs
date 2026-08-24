@@ -29,7 +29,7 @@ public static class StickerPlacementUtility
         if (sticker == null)
             return null;
 
-        Collider2D stickerCollider = sticker.GetComponent<Collider2D>();
+        Collider2D stickerCollider = sticker.StickerCollider;
 
         if (stickerCollider == null || !stickerCollider.enabled)
             return null;
@@ -66,7 +66,7 @@ public static class StickerPlacementUtility
         if (sticker == null || segment == null)
             return false;
 
-        Collider2D stickerCollider = sticker.GetComponent<Collider2D>();
+        Collider2D stickerCollider = sticker.StickerCollider;
 
         if (stickerCollider == null ||
             !stickerCollider.enabled ||
@@ -153,7 +153,7 @@ public static class StickerPlacementUtility
                 continue;
 
             Collider2D otherCollider =
-                other.GetComponent<Collider2D>();
+                other.StickerCollider;
 
             if (otherCollider == null ||
                 !otherCollider.enabled)
