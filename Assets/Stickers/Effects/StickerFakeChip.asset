@@ -16,5 +16,11 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 0b407be8e7e3d9f45bca0dfccc236c0c, type: 3}
   basePurchaseCost: 8
   maxUses: 1
+  consumeUseOnWinningActivation: 1
+  consumeUseOnNonWinningActivation: 0
+  consumeUseOnAlbumActivation: 0
   dollarReward: 0
   logDescription: 
+  winningSegmentTooltip: Earn a free spin
+  losingSegmentTooltip: 
+  albumTooltip: 

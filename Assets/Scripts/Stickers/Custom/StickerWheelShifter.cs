@@ -206,4 +206,41 @@ public class StickerWheelShifter : StickerEffect
                 ? Mathf.RoundToInt(value).ToString()
                 : value.ToString("0.##");
     }
+
+
+    // =========================================================
+    // TOOLTIP TOKENS
+    // =========================================================
+
+    /*
+     * Authoring example in the SO:
+     *
+     * Winning Segment Tooltip:
+     * Increase this segment by {selfIncrease}° and reduce adjacent
+     * segments by {adjacentDecrease}°
+     */
+    protected override string ResolveTooltipTokens(
+        BaseSticker owner,
+        StickerSpinLocation location,
+        string template)
+    {
+        string resolved =
+            base.ResolveTooltipTokens(
+                owner,
+                location,
+                template
+            );
+
+        return
+            resolved
+                .Replace(
+                    "{selfIncrease}",
+                    FormatAngle(selfIncrease)
+                )
+                .Replace(
+                    "{adjacentDecrease}",
+                    FormatAngle(adjacentDecrease)
+                );
+    }
+
 }

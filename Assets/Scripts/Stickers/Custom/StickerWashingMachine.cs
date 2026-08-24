@@ -264,4 +264,45 @@ public class StickerWashingMachine : StickerEffect
             $"Shrinks {targetCount} Album {stickerWord} " +
             $"by {shrinkPercentPerActivation:0.##}%";
     }
+
+
+    // =========================================================
+    // TOOLTIP
+    // =========================================================
+
+    protected override bool SupportsTooltipLocation(
+        StickerSpinLocation location)
+    {
+        return
+            location ==
+            StickerSpinLocation.Album;
+    }
+
+
+    /*
+     * Authoring example in the SO:
+     *
+     * Album Tooltip:
+     * Shrink all other Album stickers by {shrinkPercent}%
+     */
+    protected override string ResolveTooltipTokens(
+        BaseSticker owner,
+        StickerSpinLocation location,
+        string template)
+    {
+        string resolved =
+            base.ResolveTooltipTokens(
+                owner,
+                location,
+                template
+            );
+
+        return
+            resolved.Replace(
+                "{shrinkPercent}",
+                shrinkPercentPerActivation
+                    .ToString("0.##")
+            );
+    }
+
 }

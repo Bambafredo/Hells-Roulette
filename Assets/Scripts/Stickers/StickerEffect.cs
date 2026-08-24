@@ -82,6 +82,35 @@ public class StickerEffect : ScriptableObject
 
 
     // =========================================================
+    // TOOLTIP AUTHORING
+    // =========================================================
+
+    [Header("Tooltip")]
+
+    [Tooltip(
+        "English text shown for this sticker when it is on the WINNING segment. " +
+        "Leave empty to hide this line. " +
+        "Generic tokens available: {stickerName}, {dollarReward}."
+    )]
+    [TextArea(2, 5)]
+    public string winningSegmentTooltip = "";
+
+    [Tooltip(
+        "English text shown for this sticker when it is on a LOSING roulette segment. " +
+        "Leave empty to hide this line. Custom stickers may expose extra dynamic tokens."
+    )]
+    [TextArea(2, 5)]
+    public string losingSegmentTooltip = "";
+
+    [Tooltip(
+        "English text shown for this sticker when it is in the ALBUM. " +
+        "Leave empty to hide this line. Custom stickers may expose extra dynamic tokens."
+    )]
+    [TextArea(2, 5)]
+    public string albumTooltip = "";
+
+
+    // =========================================================
     // SPIN LOCATION RESOLUTION
     // =========================================================
 
@@ -192,6 +221,117 @@ public class StickerEffect : ScriptableObject
         BaseSticker owner)
     {
         return logDescription;
+    }
+
+
+    // =========================================================
+    // TOOLTIP API
+    // =========================================================
+
+    /// <summary>
+    /// Ordinary StickerEffects only have gameplay behaviour on the
+    /// winning segment. Location-aware custom stickers override this.
+    /// </summary>
+    protected virtual bool SupportsTooltipLocation(
+        StickerSpinLocation location)
+    {
+        return
+            location ==
+            StickerSpinLocation.WinningSegment;
+    }
+
+
+    /// <summary>
+    /// Returns the author-written template for a location.
+    /// Empty text means that line is intentionally hidden.
+    /// </summary>
+    public string GetTooltipTemplate(
+        StickerSpinLocation location)
+    {
+        switch (location)
+        {
+            case StickerSpinLocation.WinningSegment:
+                return winningSegmentTooltip;
+
+            case StickerSpinLocation.NonWinningSegment:
+                return losingSegmentTooltip;
+
+            case StickerSpinLocation.Album:
+                return albumTooltip;
+        }
+
+        return "";
+    }
+
+
+    public virtual bool HasTooltipEffect(
+        BaseSticker owner,
+        StickerSpinLocation location)
+    {
+        if (!SupportsTooltipLocation(location))
+            return false;
+
+        return
+            !string.IsNullOrWhiteSpace(
+                GetTooltipTemplate(location)
+            );
+    }
+
+
+    /// <summary>
+    /// Gets the final tooltip description after replacing dynamic tokens.
+    ///
+    /// The wording itself stays editable in the ScriptableObject.
+    /// Custom sticker classes only provide the VALUES for their tokens.
+    /// </summary>
+    public virtual string GetTooltipDescription(
+        BaseSticker owner,
+        StickerSpinLocation location)
+    {
+        if (!HasTooltipEffect(
+            owner,
+            location))
+        {
+            return "";
+        }
+
+        string template =
+            GetTooltipTemplate(location);
+
+        return
+            ResolveTooltipTokens(
+                owner,
+                location,
+                template
+            );
+    }
+
+
+    /// <summary>
+    /// Generic tokens shared by every sticker.
+    ///
+    /// Custom stickers should call base and then replace their own tokens.
+    /// Unknown tokens are deliberately left untouched, which makes authoring
+    /// mistakes visible instead of silently deleting information.
+    /// </summary>
+    protected virtual string ResolveTooltipTokens(
+        BaseSticker owner,
+        StickerSpinLocation location,
+        string template)
+    {
+        if (string.IsNullOrEmpty(template))
+            return "";
+
+        return
+            template
+                .Replace(
+                    "{stickerName}",
+                    stickerName ?? ""
+                )
+                .Replace(
+                    "{dollarReward}",
+                    dollarReward.ToString()
+                );
     }
 
 

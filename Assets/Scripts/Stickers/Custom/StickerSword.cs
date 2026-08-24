@@ -110,4 +110,35 @@ public class StickerSword : StickerEffect
             $"StickerSword deals {damageAmount} damage to {target.enemyName}."
         );
     }
+
+
+    // =========================================================
+    // TOOLTIP TOKENS
+    // =========================================================
+
+    /*
+     * Authoring example in the SO:
+     *
+     * Winning Segment Tooltip:
+     * Deal {damage} damage to the leftmost enemy
+     */
+    protected override string ResolveTooltipTokens(
+        BaseSticker owner,
+        StickerSpinLocation location,
+        string template)
+    {
+        string resolved =
+            base.ResolveTooltipTokens(
+                owner,
+                location,
+                template
+            );
+
+        return
+            resolved.Replace(
+                "{damage}",
+                damageAmount.ToString()
+            );
+    }
+
 }

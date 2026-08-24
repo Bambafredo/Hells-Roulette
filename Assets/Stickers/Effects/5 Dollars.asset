@@ -15,4 +15,12 @@ MonoBehaviour:
   stickerName: 5 Dollars
   icon: {fileID: 21300000, guid: b5ac78f4a4fc95f4299d205bcb4d2c6c, type: 3}
   basePurchaseCost: 3
+  maxUses: 0
+  consumeUseOnWinningActivation: 1
+  consumeUseOnNonWinningActivation: 0
+  consumeUseOnAlbumActivation: 0
   dollarReward: 5
+  logDescription: 
+  winningSegmentTooltip: 'Earn ${dollarReward} '
+  losingSegmentTooltip: 
+  albumTooltip: 

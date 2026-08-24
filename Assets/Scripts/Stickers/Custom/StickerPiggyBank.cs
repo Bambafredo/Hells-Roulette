@@ -208,4 +208,70 @@ public class StickerPiggyBank : StickerEffect
         return
             $"Stores ${added} (banked: ${total})";
     }
+
+
+    // =========================================================
+    // TOOLTIP
+    // =========================================================
+
+    protected override bool SupportsTooltipLocation(
+        StickerSpinLocation location)
+    {
+        return
+            location ==
+                StickerSpinLocation.WinningSegment ||
+            location ==
+                StickerSpinLocation.NonWinningSegment;
+    }
+
+
+    /*
+     * Authoring examples in the SO:
+     *
+     * Winning Segment Tooltip:
+     * Cash out ${banked}
+     *
+     * Losing Segment Tooltip:
+     * Store ${storedPerMiss} (currently banked: ${banked})
+     */
+    protected override string ResolveTooltipTokens(
+        BaseSticker owner,
+        StickerSpinLocation location,
+        string template)
+    {
+        string resolved =
+            base.ResolveTooltipTokens(
+                owner,
+                location,
+                template
+            );
+
+
+        int banked =
+            owner != null
+                ? Mathf.Max(
+                    0,
+                    owner.GetRuntimeInt(
+                        StoredMoneyKey,
+                        0
+                    )
+                )
+                : 0;
+
+
+        return
+            resolved
+                .Replace(
+                    "{storedPerMiss}",
+                    Mathf.Max(
+                        0,
+                        moneyStoredPerMiss
+                    ).ToString()
+                )
+                .Replace(
+                    "{banked}",
+                    banked.ToString()
+                );
+    }
+
 }

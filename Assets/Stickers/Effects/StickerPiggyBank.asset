@@ -21,4 +21,7 @@ MonoBehaviour:
   consumeUseOnAlbumActivation: 0
   dollarReward: 0
   logDescription: 
+  winningSegmentTooltip: Cash out ${banked}
+  losingSegmentTooltip: 'Store ${storedPerMiss} (currently banked: ${banked})'
+  albumTooltip: 
   moneyStoredPerMiss: 1

@@ -21,4 +21,7 @@ MonoBehaviour:
   consumeUseOnAlbumActivation: 1
   dollarReward: 0
   logDescription: 
+  winningSegmentTooltip: 
+  losingSegmentTooltip: 
+  albumTooltip: Shrink all other Album stickers by {shrinkPercent}%
   shrinkPercentPerActivation: 10
