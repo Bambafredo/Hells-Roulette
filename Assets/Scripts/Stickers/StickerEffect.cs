@@ -30,11 +30,29 @@ public class StickerEffect : ScriptableObject
     [Header("Uses")]
 
     [Tooltip(
-        "How many activations this sticker survives before being destroyed. " +
-        "0 = unlimited uses. 1 = consumed after its first activation."
+        "How many use-consuming activations this sticker survives before being destroyed. " +
+        "0 = unlimited uses. 1 = destroyed after its first consumed use."
     )]
     [Min(0)]
     public int maxUses = 0;
+
+
+    [Header("Use Consumption")]
+
+    [Tooltip(
+        "If enabled, an activation while this sticker is on the winning segment consumes one use."
+    )]
+    public bool consumeUseOnWinningActivation = true;
+
+    [Tooltip(
+        "If enabled, an activation while this sticker is on a non-winning roulette segment consumes one use."
+    )]
+    public bool consumeUseOnNonWinningActivation = false;
+
+    [Tooltip(
+        "If enabled, an activation while this sticker is in the Album consumes one use."
+    )]
+    public bool consumeUseOnAlbumActivation = false;
 
 
     public bool HasLimitedUses =>
@@ -61,6 +79,34 @@ public class StickerEffect : ScriptableObject
     )]
     [TextArea(2, 4)]
     public string logDescription = "";
+
+
+    // =========================================================
+    // SPIN LOCATION RESOLUTION
+    // =========================================================
+
+    /// <summary>
+    /// Generic location-aware entry point called once for this sticker
+    /// when a valid spin finishes.
+    ///
+    /// Default behaviour intentionally preserves every sticker we already
+    /// have: ordinary stickers only activate on the winning segment.
+    ///
+    /// Stateful / conditional stickers can override this method and react
+    /// differently to WinningSegment, NonWinningSegment or Album.
+    /// </summary>
+    public virtual void ResolveSpinLocation(
+        BaseSticker owner,
+        StickerSpinLocation location)
+    {
+        if (location !=
+            StickerSpinLocation.WinningSegment)
+        {
+            return;
+        }
+
+        ApplyEffect(owner);
+    }
 
 
     // =========================================================
@@ -108,13 +154,9 @@ public class StickerEffect : ScriptableObject
 
 
         /*
-         * Register the activation BEFORE applying the gameplay result.
-         *
-         * This gives us the causal log order:
-         *
-         * Sticker activates
-         * Sticker uses remaining
-         * -> currency / damage / other consequences
+         * Ordinary StickerEffects are winning-segment effects.
+         * RegisterActivation writes the effect first, then consumes a use
+         * according to the winning-location consumption setting.
          */
         RegisterActivation(
             owner
@@ -154,28 +196,84 @@ public class StickerEffect : ScriptableObject
 
 
     // =========================================================
-    // ACTIVATION REGISTRATION
+    // USE CONSUMPTION QUERY
+    // =========================================================
+
+    public bool ShouldConsumeUseOnActivation(
+        StickerSpinLocation location)
+    {
+        switch (location)
+        {
+            case StickerSpinLocation.WinningSegment:
+                return consumeUseOnWinningActivation;
+
+            case StickerSpinLocation.NonWinningSegment:
+                return consumeUseOnNonWinningActivation;
+
+            case StickerSpinLocation.Album:
+                return consumeUseOnAlbumActivation;
+        }
+
+        return false;
+    }
+
+
+    // =========================================================
+    // ACTIVATION REGISTRATION - BACKWARDS-COMPATIBLE
     // =========================================================
 
     /// <summary>
-    /// Shared route used by this effect and custom StickerEffect subclasses.
-    ///
-    /// It does two things, in this exact order:
-    ///
-    /// 1. Writes the activation to the Game Log.
-    /// 2. Consumes one use from the physical BaseSticker instance.
-    ///
-    /// Custom effects should call this ONCE when they have confirmed that
-    /// the sticker genuinely activates.
+    /// Existing custom stickers call RegisterActivation(owner, description).
+    /// Keep that API intact and interpret it as a winning-segment activation.
     /// </summary>
     protected void RegisterActivation(
         BaseSticker owner,
         string overrideDescription = null)
     {
+        RegisterActivation(
+            owner,
+            StickerSpinLocation.WinningSegment,
+            overrideDescription,
+            null,
+            null
+        );
+    }
+
+
+    // =========================================================
+    // ACTIVATION REGISTRATION - LOCATION AWARE
+    // =========================================================
+
+    /// <summary>
+    /// Shared location-aware activation route.
+    ///
+    /// Exact order:
+    /// 1. Write the activation to the Game Log.
+    /// 2. Optionally consume one use from the physical sticker instance.
+    /// 3. The custom effect continues and applies its gameplay consequence.
+    ///
+    /// overrideDollarReward lets stateful stickers log a dynamic money value
+    /// without putting that value in the shared ScriptableObject.
+    ///
+    /// consumeUseOverride is optional. If null, the Inspector toggle for the
+    /// supplied location decides whether this activation consumes a use.
+    /// </summary>
+    protected void RegisterActivation(
+        BaseSticker owner,
+        StickerSpinLocation location,
+        string overrideDescription = null,
+        int? overrideDollarReward = null,
+        bool? consumeUseOverride = null)
+    {
         string description =
             overrideDescription != null
                 ? overrideDescription
                 : GetLogDescription(owner);
+
+        int logDollarReward =
+            overrideDollarReward.HasValue
+                ? overrideDollarReward.Value
+                : dollarReward;
 
 
         if (GameLogManager.Instance != null)
@@ -184,17 +282,24 @@ public class StickerEffect : ScriptableObject
                 .LogStickerActivation(
                     stickerName,
                     description,
-                    dollarReward
+                    logDollarReward
                 );
         }
 
 
-        /*
-         * Use state belongs to the physical BaseSticker instance,
-         * never to this ScriptableObject.
-         */
-        owner?
-            .ConsumeUseAfterActivation();
+        bool shouldConsumeUse =
+            consumeUseOverride.HasValue
+                ? consumeUseOverride.Value
+                : ShouldConsumeUseOnActivation(
+                    location
+                );
+
+
+        if (shouldConsumeUse)
+        {
+            owner?
+                .ConsumeUseAfterActivation();
+        }
     }
 
 
@@ -203,11 +308,8 @@ public class StickerEffect : ScriptableObject
     // =========================================================
 
     /// <summary>
-    /// Kept so existing custom stickers that already used LogActivation()
-    /// continue to compile. It now routes through RegisterActivation(),
-    /// so limited-use stickers also work correctly.
-    ///
-    /// New custom effects should prefer RegisterActivation().
+    /// Existing custom stickers that use LogActivation() continue to compile.
+    /// It remains a winning-segment activation by default.
     /// </summary>
     protected void LogActivation(
         BaseSticker owner,

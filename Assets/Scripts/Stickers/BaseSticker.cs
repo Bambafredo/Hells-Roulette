@@ -87,6 +87,16 @@ public class BaseSticker : MonoBehaviour
     private StickerEffect useStateEffect = null;
     private bool consumed = false;
 
+    /*
+     * Generic per-instance runtime memory for stateful stickers.
+     *
+     * Example:
+     * Piggy Bank can store money on THIS physical sticker without
+     * putting mutable runtime state inside the shared ScriptableObject.
+     */
+    private readonly Dictionary<string, int> runtimeIntState =
+        new Dictionary<string, int>();
+
     public bool HasLimitedUses
     {
         get
@@ -869,8 +879,26 @@ public class BaseSticker : MonoBehaviour
     // EFFECT
     // ===========================================================
 
-    // El ScriptableObject recibe el contexto del sticker.
-    public virtual void OnSegmentWin()
+    // ===========================================================
+    // SPIN LOCATION RESOLUTION
+    // ===========================================================
+
+    /// <summary>
+    /// Generic entry point used when a valid spin finishes.
+    ///
+    /// The roulette snapshots every sticker's location BEFORE any
+    /// sticker effect runs, then calls this method with one of:
+    ///
+    /// - WinningSegment
+    /// - NonWinningSegment
+    /// - Album
+    ///
+    /// This means effects such as WheelShifter cannot retroactively
+    /// change where another sticker was considered to be when the
+    /// spin stopped.
+    /// </summary>
+    public virtual void ResolveSpinLocation(
+        StickerSpinLocation location)
     {
         if (effect == null ||
             consumed)
@@ -880,7 +908,23 @@ public class BaseSticker : MonoBehaviour
 
         EnsureUseStateInitialized();
 
-        effect.ApplyEffect(this);
+        effect.ResolveSpinLocation(
+            this,
+            location
+        );
+    }
+
+
+    /// <summary>
+    /// Backwards-compatible API.
+    /// Existing code that explicitly triggers a winning sticker can
+    /// continue to call OnSegmentWin().
+    /// </summary>
+    public virtual void OnSegmentWin()
+    {
+        ResolveSpinLocation(
+            StickerSpinLocation.WinningSegment
+        );
     }
 
 
@@ -913,6 +957,13 @@ public class BaseSticker : MonoBehaviour
         useStateInitialized = true;
         useStateEffect = effect;
         consumed = false;
+
+        /*
+         * Runtime memory belongs to the current effect configuration.
+         * If a prefab swaps to another StickerEffect at runtime, the
+         * new effect must not inherit the previous effect's state.
+         */
+        runtimeIntState.Clear();
 
         if (effect != null &&
             effect.HasLimitedUses)
@@ -989,6 +1040,66 @@ public class BaseSticker : MonoBehaviour
                     ) +
                 $" uses remaining: {remainingUses}"
             );
+    }
+
+
+    // ===========================================================
+    // GENERIC PER-INSTANCE RUNTIME STATE
+    // ===========================================================
+
+    /// <summary>
+    /// Reads an integer value stored only on this physical sticker.
+    /// Useful for stateful effects such as Piggy Bank.
+    /// </summary>
+    public int GetRuntimeInt(
+        string key,
+        int defaultValue = 0)
+    {
+        if (string.IsNullOrEmpty(key))
+            return defaultValue;
+
+        if (runtimeIntState.TryGetValue(
+                key,
+                out int value))
+        {
+            return value;
+        }
+
+        return defaultValue;
+    }
+
+
+    /// <summary>
+    /// Stores an integer value only on this physical sticker instance.
+    /// </summary>
+    public void SetRuntimeInt(
+        string key,
+        int value)
+    {
+        if (string.IsNullOrEmpty(key))
+            return;
+
+        runtimeIntState[key] = value;
+    }
+
+
+    /// <summary>
+    /// Adds to an integer value and returns the new total.
+    /// </summary>
+    public int AddRuntimeInt(
+        string key,
+        int amount)
+    {
+        int newValue =
+            GetRuntimeInt(key) +
+            amount;
+
+        SetRuntimeInt(
+            key,
+            newValue
+        );
+
+        return newValue;
     }
 
 

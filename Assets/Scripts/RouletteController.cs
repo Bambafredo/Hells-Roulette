@@ -1247,8 +1247,19 @@ public class RouletteController : MonoBehaviour
 
         /*
          * 4. STICKERS
+         *
+         * Snapshot where every relevant sticker was when the physical
+         * spin ended, then resolve location-aware effects.
+         *
+         * This supports:
+         * - winning-segment effects
+         * - non-winning-segment effects
+         * - Album effects
+         *
+         * without allowing an early effect such as WheelShifter to change
+         * the location classification of stickers that resolve later.
          */
-        TriggerStickersOnWinningSegment();
+        ResolveStickerEffectsForSpin();
 
         /*
          * 5. ENEMIGOS
@@ -1482,27 +1493,132 @@ public class RouletteController : MonoBehaviour
     }
 
     // =========================================================
-    // WINNING STICKERS
+    // LOCATION-AWARE STICKER RESOLUTION
     // =========================================================
 
-    void TriggerStickersOnWinningSegment()
+    private struct StickerResolutionEntry
+    {
+        public BaseSticker sticker;
+        public StickerSpinLocation location;
+
+        public StickerResolutionEntry(
+            BaseSticker sticker,
+            StickerSpinLocation location)
+        {
+            this.sticker = sticker;
+            this.location = location;
+        }
+    }
+
+
+    /// <summary>
+    /// Resolves every sticker that has a spin-end location:
+    ///
+    /// 1. Winning segment stickers.
+    /// 2. Non-winning roulette segment stickers.
+    /// 3. Album stickers.
+    ///
+    /// The complete list is captured BEFORE any sticker effect executes.
+    /// This is important because effects such as WheelShifter can rebuild
+    /// the roulette hierarchy during resolution.
+    /// </summary>
+    private void ResolveStickerEffectsForSpin()
+    {
+        List<StickerResolutionEntry> snapshot =
+            BuildStickerResolutionSnapshot();
+
+
+        foreach (StickerResolutionEntry entry in snapshot)
+        {
+            if (entry.sticker == null)
+                continue;
+
+            entry.sticker
+                .ResolveSpinLocation(
+                    entry.location
+                );
+        }
+    }
+
+
+    private List<StickerResolutionEntry>
+        BuildStickerResolutionSnapshot()
+    {
+        List<StickerResolutionEntry> snapshot =
+            new List<StickerResolutionEntry>();
+
+        HashSet<BaseSticker> alreadyAdded =
+            new HashSet<BaseSticker>();
+
+
+        // -----------------------------------------------------
+        // 1. WINNING SEGMENT FIRST
+        // -----------------------------------------------------
+
+        AddSegmentStickersToSnapshot(
+            endSegmentIndex,
+            StickerSpinLocation.WinningSegment,
+            snapshot,
+            alreadyAdded
+        );
+
+
+        // -----------------------------------------------------
+        // 2. ALL NON-WINNING SEGMENTS
+        // -----------------------------------------------------
+
+        if (generator != null &&
+            generator.segments != null)
+        {
+            for (int i = 0;
+                 i < generator.segments.Count;
+                 i++)
+            {
+                if (i == endSegmentIndex)
+                    continue;
+
+                AddSegmentStickersToSnapshot(
+                    i,
+                    StickerSpinLocation.NonWinningSegment,
+                    snapshot,
+                    alreadyAdded
+                );
+            }
+        }
+
+
+        // -----------------------------------------------------
+        // 3. ALBUM
+        // -----------------------------------------------------
+
+        AddAlbumStickersToSnapshot(
+            snapshot,
+            alreadyAdded
+        );
+
+
+        return snapshot;
+    }
+
+
+    private void AddSegmentStickersToSnapshot(
+        int segmentIndex,
+        StickerSpinLocation location,
+        List<StickerResolutionEntry> snapshot,
+        HashSet<BaseSticker> alreadyAdded)
     {
         if (generator == null ||
-            generator.segments == null)
+            generator.segments == null ||
+            segmentIndex < 0 ||
+            segmentIndex >= generator.segments.Count)
         {
             return;
         }
 
-        if (endSegmentIndex < 0 ||
-            endSegmentIndex >=
-            generator.segments.Count)
-        {
-            return;
-        }
 
         var segData =
             generator.segments[
-                endSegmentIndex
+                segmentIndex
             ];
 
         if (segData == null ||
@@ -1511,27 +1627,87 @@ public class RouletteController : MonoBehaviour
             return;
         }
 
-        Transform winningTransform =
-            segData.collider.transform;
 
-        /*
-         * Guardamos primero el array completo.
-         *
-         * Un sticker como WheelShifter puede regenerar
-         * la rueda mientras resolvemos efectos.
-         */
         BaseSticker[] stickers =
-            winningTransform
+            segData.collider.transform
                 .GetComponentsInChildren<BaseSticker>(
                     true
                 );
 
+
         foreach (BaseSticker sticker in stickers)
         {
-            if (sticker == null)
+            if (sticker == null ||
+                alreadyAdded.Contains(sticker))
+            {
                 continue;
+            }
 
-            sticker.OnSegmentWin();
+            alreadyAdded.Add(sticker);
+
+            snapshot.Add(
+                new StickerResolutionEntry(
+                    sticker,
+                    location
+                )
+            );
         }
     }
+
+
+    private void AddAlbumStickersToSnapshot(
+        List<StickerResolutionEntry> snapshot,
+        HashSet<BaseSticker> alreadyAdded)
+    {
+        if (AlbumManager.Instance == null ||
+            AlbumManager.Instance.albumZone == null)
+        {
+            return;
+        }
+
+
+        Transform contentRoot =
+            AlbumManager.Instance.albumZone
+                .GetContentRoot();
+
+        if (contentRoot == null)
+            return;
+
+
+        BaseSticker[] stickers =
+            contentRoot
+                .GetComponentsInChildren<BaseSticker>(
+                    true
+                );
+
+
+        foreach (BaseSticker sticker in stickers)
+        {
+            if (sticker == null ||
+                alreadyAdded.Contains(sticker))
+            {
+                continue;
+            }
+
+            /*
+             * Verify logical / hierarchy membership instead of assuming every
+             * BaseSticker below ContentRoot is currently an Album sticker.
+             */
+            if (!AlbumManager.Instance
+                .IsStickerInAlbum(sticker))
+            {
+                continue;
+            }
+
+            alreadyAdded.Add(sticker);
+
+            snapshot.Add(
+                new StickerResolutionEntry(
+                    sticker,
+                    StickerSpinLocation.Album
+                )
+            );
+        }
+    }
+
 }
