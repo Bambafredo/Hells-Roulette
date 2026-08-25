@@ -162,7 +162,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 84d28e295ccd56a469f32288a07ea3a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enemyName: Enemy
+  enemyName: Imp
   maxHP: 10
   damageToPlayer: 10
   hpText: {fileID: 4695612484063555935}
