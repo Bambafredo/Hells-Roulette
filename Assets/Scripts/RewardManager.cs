@@ -39,6 +39,20 @@ public class RewardManager : MonoBehaviour
     public Transform rewardSlotB;
 
 
+    // =========================================================
+    // ENEMY VIEW
+    // =========================================================
+
+    [Header("Enemy View")]
+
+    [Tooltip(
+        "Optional camera that renders the enemy corridor. " +
+        "It is temporarily disabled during the modal Reward Phase so the " +
+        "world-space Reward Panel is never covered by the corridor camera."
+    )]
+    public Camera enemyCamera;
+
+
     [Header("Buttons")]
     public Collider2D rerollButtonCollider;
     public Collider2D skipButtonCollider;
@@ -272,6 +286,12 @@ public class RewardManager : MonoBehaviour
 
     private Camera cam;
 
+    /*
+     * Preserve the camera's previous state instead of blindly enabling it
+     * when the Reward Phase closes.
+     */
+    private bool enemyCameraWasEnabledBeforeReward = false;
+
 
     // =========================================================
     // EVENTS
@@ -424,6 +444,30 @@ public class RewardManager : MonoBehaviour
             );
 
             return;
+        }
+
+
+        // -----------------------------------------------------
+        // MODAL REWARD LAYERING
+        // -----------------------------------------------------
+
+        /*
+         * EnemyCamera renders directly into the left third of the screen
+         * with a higher camera priority than the Main Camera.
+         *
+         * RewardPanel is world-space and belongs to the Main Camera, so the
+         * enemy camera would otherwise paint over it.
+         *
+         * Reward is a modal phase anyway, so the cleanest low-risk solution
+         * is simply to stop rendering the corridor while the shop is open.
+         */
+        if (enemyCamera != null)
+        {
+            enemyCameraWasEnabledBeforeReward =
+                enemyCamera.enabled;
+
+            enemyCamera.enabled =
+                false;
         }
 
 
@@ -1396,6 +1440,17 @@ public class RewardManager : MonoBehaviour
         if (rewardPanel != null)
         {
             rewardPanel.SetActive(false);
+        }
+
+
+        // -----------------------------------------------------
+        // RESTORE ENEMY VIEW
+        // -----------------------------------------------------
+
+        if (enemyCamera != null)
+        {
+            enemyCamera.enabled =
+                enemyCameraWasEnabledBeforeReward;
         }
 
 

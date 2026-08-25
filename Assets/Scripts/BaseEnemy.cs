@@ -30,7 +30,30 @@ public class BaseEnemy : MonoBehaviour
 
     private int currentHP;
     private bool isDead = false;
+    private bool combatActive = true;
     private RouletteController roulette;
+
+
+    // =========================================================
+    // PUBLIC STATE
+    // =========================================================
+
+    public bool CombatActive
+    {
+        get { return combatActive; }
+    }
+
+
+    public bool IsDead
+    {
+        get { return isDead; }
+    }
+
+
+    public int CurrentHP
+    {
+        get { return currentHP; }
+    }
 
 
     // =========================================================
@@ -67,12 +90,34 @@ public class BaseEnemy : MonoBehaviour
 
 
     // =========================================================
+    // COMBAT ACTIVATION
+    // =========================================================
+
+    public void SetCombatActive(
+        bool active)
+    {
+        combatActive =
+            active;
+    }
+
+
+    // =========================================================
     // ENEMY TURN
     // =========================================================
 
     private void OnSpinEnd()
     {
         if (isDead)
+            return;
+
+
+        /*
+         * Enemies in Next/Future corridor rows stay fully visible and
+         * initialized, but they are previews only. Event subscriptions
+         * still exist, so this explicit combat gate is what prevents them
+         * from attacking before they reach CurrentRow.
+         */
+        if (!combatActive)
             return;
 
 
