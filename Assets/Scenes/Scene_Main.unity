@@ -2105,11 +2105,8 @@ MonoBehaviour:
   - {fileID: 7377409930441240661, guid: a6802fa4c6cc26e4fab29f97242fc621, type: 3}
   regenerateFutureRowOnAdvance: 1
   currentBrightness: 1
-  currentAlpha: 1
   nextBrightness: 0.65
-  nextAlpha: 0.65
-  futureBrightness: 0.35
-  futureAlpha: 0.35
+  futureBrightness: 0.15
   advanceDuration: 0.65
   enableDebugKey: 1
   debugAdvanceKey: 110

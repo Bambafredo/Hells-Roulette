@@ -50,12 +50,6 @@ public class EnemyCorridorController : MonoBehaviour
     [Range(0f, 1f)]
     public float currentBrightness = 1f;
 
-    [Tooltip(
-        "Opacity multiplier for enemies in CurrentRow."
-    )]
-    [Range(0f, 1f)]
-    public float currentAlpha = 1f;
-
 
     [Space]
 
@@ -63,13 +57,7 @@ public class EnemyCorridorController : MonoBehaviour
         "Brightness multiplier for enemies in NextRow."
     )]
     [Range(0f, 1f)]
-    public float nextBrightness = 0.65f;
-
-    [Tooltip(
-        "Opacity multiplier for enemies in NextRow."
-    )]
-    [Range(0f, 1f)]
-    public float nextAlpha = 0.65f;
+    public float nextBrightness = 0.55f;
 
 
     [Space]
@@ -78,13 +66,7 @@ public class EnemyCorridorController : MonoBehaviour
         "Brightness multiplier for enemies in FutureRow."
     )]
     [Range(0f, 1f)]
-    public float futureBrightness = 0.35f;
-
-    [Tooltip(
-        "Opacity multiplier for enemies in FutureRow."
-    )]
-    [Range(0f, 1f)]
-    public float futureAlpha = 0.35f;
+    public float futureBrightness = 0.25f;
 
 
     // =========================================================
@@ -462,33 +444,26 @@ public class EnemyCorridorController : MonoBehaviour
              * As the enemies physically approach the player, they also
              * emerge from the darkness.
              *
+             * Only RGB brightness changes. Alpha stays untouched so
+             * overlapping rows remain visually solid.
+             *
              * No fake scale is involved: perspective still controls size.
              */
-            SetRowVisual(
+            SetRowBrightness(
                 oldNext,
                 Mathf.Lerp(
                     nextBrightness,
                     currentBrightness,
                     smoothT
-                ),
-                Mathf.Lerp(
-                    nextAlpha,
-                    currentAlpha,
-                    smoothT
                 )
             );
 
 
-            SetRowVisual(
+            SetRowBrightness(
                 oldFuture,
                 Mathf.Lerp(
                     futureBrightness,
                     nextBrightness,
-                    smoothT
-                ),
-                Mathf.Lerp(
-                    futureAlpha,
-                    nextAlpha,
                     smoothT
                 )
             );
@@ -794,32 +769,28 @@ public class EnemyCorridorController : MonoBehaviour
 
     private void ApplyRowVisualStates()
     {
-        SetRowVisual(
+        SetRowBrightness(
             currentRow,
-            currentBrightness,
-            currentAlpha
+            currentBrightness
         );
 
 
-        SetRowVisual(
+        SetRowBrightness(
             nextRow,
-            nextBrightness,
-            nextAlpha
+            nextBrightness
         );
 
 
-        SetRowVisual(
+        SetRowBrightness(
             futureRow,
-            futureBrightness,
-            futureAlpha
+            futureBrightness
         );
     }
 
 
-    private void SetRowVisual(
+    private void SetRowBrightness(
         Transform row,
-        float brightness,
-        float alpha)
+        float brightness)
     {
         if (row == null)
             return;
@@ -839,12 +810,6 @@ public class EnemyCorridorController : MonoBehaviour
         float clampedBrightness =
             Mathf.Clamp01(
                 brightness
-            );
-
-
-        float clampedAlpha =
-            Mathf.Clamp01(
-                alpha
             );
 
 
@@ -869,6 +834,12 @@ public class EnemyCorridorController : MonoBehaviour
             }
 
 
+            /*
+             * Only RGB is darkened.
+             *
+             * Alpha remains exactly as authored in the sprite, so enemies
+             * stay fully solid even when rows overlap in perspective.
+             */
             spriteRenderer.color =
                 new Color(
                     baseColor.r *
@@ -880,8 +851,7 @@ public class EnemyCorridorController : MonoBehaviour
                     baseColor.b *
                     clampedBrightness,
 
-                    baseColor.a *
-                    clampedAlpha
+                    baseColor.a
                 );
         }
     }
