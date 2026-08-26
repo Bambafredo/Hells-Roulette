@@ -59,6 +59,13 @@ public class BaseFlagPin : MonoBehaviour
         {
             if (GetComponent<Collider2D>().OverlapPoint(mouseWorld))
             {
+                /*
+                 * Subclasses can veto the START of a drag without
+                 * duplicating the whole placement system.
+                 */
+                if (!CanBeginDrag())
+                    return;
+
                 isDragging = true;
                 if (controller) controller.SetInputBlocked(true);
 
@@ -127,12 +134,51 @@ public class BaseFlagPin : MonoBehaviour
         transform.rotation = Quaternion.Euler(0, 0, ang + 90f);
     }
 
-    public virtual void RegisterHit()
+    // =========================================================
+    // DRAG POLICY
+    // =========================================================
+
+    protected virtual bool CanBeginDrag()
     {
-        if (Time.time - _lastHitTime < selfMinInterval) return;
-        _lastHitTime = Time.time;
+        return true;
+    }
+
+
+    // =========================================================
+    // HIT REGISTRATION
+    // =========================================================
+
+    /*
+     * Returns true only when this hit passes the pin's own cooldown.
+     * Subclasses can therefore award effects only for accepted hits.
+     */
+    protected bool TryRegisterHitInternal(
+        FlagPin flagPin)
+    {
+        if (Time.time - _lastHitTime <
+            selfMinInterval)
+        {
+            return false;
+        }
+
+        _lastHitTime =
+            Time.time;
 
         if (round != null)
-            round.RegisterPinHit(this as FlagPin);
+        {
+            round.RegisterPinHit(
+                flagPin
+            );
+        }
+
+        return true;
+    }
+
+
+    public virtual void RegisterHit()
+    {
+        TryRegisterHitInternal(
+            this as FlagPin
+        );
     }
 }

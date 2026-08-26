@@ -4,8 +4,29 @@ using UnityEngine;
 
 public class FlagPin : BaseFlagPin
 {
+    public enum SpinInteractionMode
+    {
+        LockMovementDuringSpin,
+        AllowMovementPinnedHitsOnly
+    }
+
+
     [Header("Rewards")]
     public int moneyReward = 1;
+
+
+    [Header("Spin Interaction")]
+
+    [Tooltip(
+        "Lock Movement During Spin: the Flag Pin cannot be picked up once " +
+        "a real spin has started.\n\n" +
+        "Allow Movement Pinned Hits Only: the Flag Pin can still be moved " +
+        "during the spin, but flapper contacts only count while the Flag " +
+        "Pin is actually pinned to the wheel."
+    )]
+    public SpinInteractionMode spinInteractionMode =
+        SpinInteractionMode.AllowMovementPinnedHitsOnly;
+
 
     [Header("Round Logic")]
     public RoundManager roundManager;
@@ -48,17 +69,68 @@ public class FlagPin : BaseFlagPin
         transform.rotation = originalRotation;
     }
 
+    // =========================================================
+    // SPIN INTERACTION
+    // =========================================================
+
+    protected override bool CanBeginDrag()
+    {
+        if (controller != null &&
+            controller.SpinInProgress &&
+            spinInteractionMode ==
+                SpinInteractionMode.LockMovementDuringSpin)
+        {
+            return false;
+        }
+
+        return base.CanBeginDrag();
+    }
+
+
+    // =========================================================
+    // HIT
+    // =========================================================
+
     public override void RegisterHit()
     {
-        base.RegisterHit();
+        /*
+         * During a real spin, a loose Flag Pin can never generate money
+         * or validation hits. This is what makes the movable mode safe.
+         *
+         * The same safety check also applies in locked mode.
+         */
+        if (controller != null &&
+            controller.SpinInProgress &&
+            !isPlaced)
+        {
+            return;
+        }
 
-        if (controller == null || CurrencyManager.Instance == null)
+
+        /*
+         * Only award money if the hit was genuinely accepted by the
+         * Flag Pin's own cooldown / RoundManager hit path.
+         */
+        if (!TryRegisterHitInternal(this))
             return;
 
-        CurrencyManager.Instance.AddPending(moneyReward);
 
-        MoneyEarnedThisSpin += moneyReward;
+        if (CurrencyManager.Instance == null)
+            return;
 
-        Debug.Log($"💰 Pending +{moneyReward} (pending total: {CurrencyManager.Instance.pendingDollars})");
+
+        CurrencyManager.Instance.AddPending(
+            moneyReward
+        );
+
+        MoneyEarnedThisSpin +=
+            moneyReward;
+
+
+        Debug.Log(
+            $"💰 Pending +{moneyReward} " +
+            $"(pending total: " +
+            $"{CurrencyManager.Instance.pendingDollars})"
+        );
     }
 }
