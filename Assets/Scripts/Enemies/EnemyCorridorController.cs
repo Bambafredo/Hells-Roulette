@@ -303,13 +303,87 @@ public class EnemyCorridorController : MonoBehaviour
     // PUBLIC API
     // =========================================================
 
+    public int GetLivingEnemyCountInCurrentRow()
+    {
+        if (currentRow == null)
+            return 0;
+
+
+        BaseEnemy[] enemies =
+            currentRow.GetComponentsInChildren<BaseEnemy>(
+                true
+            );
+
+
+        int livingCount =
+            0;
+
+
+        foreach (BaseEnemy enemy in enemies)
+        {
+            if (enemy == null ||
+                enemy.IsDead ||
+                !enemy.gameObject.activeInHierarchy)
+            {
+                continue;
+            }
+
+
+            livingCount++;
+        }
+
+
+        return livingCount;
+    }
+
+
+    public bool IsCurrentEncounterCleared()
+    {
+        return
+            GetLivingEnemyCountInCurrentRow() <=
+            0;
+    }
+
+
+    /*
+     * Manual/debug advance.
+     *
+     * This keeps the old protection against changing rows during a spin.
+     */
     public void AdvanceEncounter()
+    {
+        TryAdvanceEncounter(
+            false
+        );
+    }
+
+
+    /*
+     * RoundManager calls this only after the previous round has completely
+     * resolved.
+     *
+     * In scenes without a Reward Phase, StartNextRound can technically be
+     * reached while RouletteController is still finishing the final frame
+     * of spin resolution. The coroutine itself moves on the following
+     * frames, so this automatic transition is safe to queue here.
+     */
+    public void AdvanceEncounterForRoundTransition()
+    {
+        TryAdvanceEncounter(
+            true
+        );
+    }
+
+
+    private void TryAdvanceEncounter(
+        bool ignoreSpinInProgress)
     {
         if (IsAdvancing)
             return;
 
 
-        if (RouletteController.Instance != null &&
+        if (!ignoreSpinInProgress &&
+            RouletteController.Instance != null &&
             RouletteController.Instance.SpinInProgress)
         {
             Debug.Log(

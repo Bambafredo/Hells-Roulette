@@ -24,6 +24,15 @@ public class RoundManager : MonoBehaviour
     )]
     public RewardManager rewardManager;
 
+
+    [Header("Enemy Corridor")]
+
+    [Tooltip(
+        "Optional. Controls round-based enemy row progression and " +
+        "the debt penalty for surviving enemies."
+    )]
+    public EnemyCorridorController enemyCorridorController;
+
     // =========================================================
     // VALID SPIN CONDITIONS
     // =========================================================
@@ -72,11 +81,113 @@ public class RoundManager : MonoBehaviour
     [Min(0)]
     public int debtIncreasePerRound = 5;
 
+
+    [Header("Enemy Debt Penalty")]
+
+    [Tooltip(
+        "Porcentaje que se añade a la deuda BASE de la siguiente ronda " +
+        "cada vez que termina una ronda con enemigos vivos."
+    )]
+    [Min(0)]
+    public int enemyDebtPenaltyPerFailedRoundPercent = 20;
+
+
     [SerializeField]
     private int currentDebt = 0;
 
     [SerializeField]
+    private int currentBaseDebt = 0;
+
+    [SerializeField]
+    private int currentEnemyDebtPenaltyAmount = 0;
+
+    [SerializeField]
+    private int enemyDebtPenaltyPercent = 0;
+
+    [SerializeField]
     private bool debtPending = false;
+
+
+    // =========================================================
+    // ENEMY ROUND OUTCOME
+    // =========================================================
+
+    private void ResolveEnemyEncounterOutcome()
+    {
+        /*
+         * Scenes without the new corridor keep the old debt behaviour.
+         */
+        if (enemyCorridorController == null)
+            return;
+
+
+        bool encounterCleared =
+            enemyCorridorController
+                .IsCurrentEncounterCleared();
+
+
+        // -----------------------------------------------------
+        // SUCCESS: RESET THE SNOWBALL
+        // -----------------------------------------------------
+
+        if (encounterCleared)
+        {
+            if (enemyDebtPenaltyPercent != 0)
+            {
+                Debug.Log(
+                    $"[ENEMY DEBT] Encounter cleared. " +
+                    $"Penalty reset from {enemyDebtPenaltyPercent}% to 0%."
+                );
+            }
+            else
+            {
+                Debug.Log(
+                    "[ENEMY DEBT] Encounter cleared. " +
+                    "Penalty remains at 0%."
+                );
+            }
+
+
+            enemyDebtPenaltyPercent =
+                0;
+        }
+
+        // -----------------------------------------------------
+        // FAILURE: DEVIL INTEREST
+        // -----------------------------------------------------
+
+        else
+        {
+            int livingEnemies =
+                enemyCorridorController
+                    .GetLivingEnemyCountInCurrentRow();
+
+
+            enemyDebtPenaltyPercent =
+                Mathf.Max(
+                    0,
+                    enemyDebtPenaltyPercent +
+                    enemyDebtPenaltyPerFailedRoundPercent
+                );
+
+
+            Debug.Log(
+                $"[ENEMY DEBT] {livingEnemies} enemy/enemies survived. " +
+                $"Next-round debt penalty is now " +
+                $"{enemyDebtPenaltyPercent}%."
+            );
+        }
+
+
+        UpdateEnemyDebtPenaltyUI();
+
+
+        OnEnemyDebtPenaltyChanged?
+            .Invoke(
+                enemyDebtPenaltyPercent
+            );
+    }
+
 
     // =========================================================
     // REWARD PHASE
@@ -98,6 +209,12 @@ public class RoundManager : MonoBehaviour
 
     [Tooltip("Texto de deuda. Ejemplo: DEBT: $10")]
     public TMP_Text debtText;
+
+    [Tooltip(
+        "Muestra únicamente el porcentaje actual del extra de deuda. " +
+        "Ejemplo: 40%"
+    )]
+    public TMP_Text enemyDebtPenaltyText;
 
     [Tooltip(
         "Opcional. Texto numérico de fichas, por ejemplo 2 / 3."
@@ -138,6 +255,7 @@ public class RoundManager : MonoBehaviour
     public event Action<int> OnTokensChanged;
     public event Action<int> OnDebtChanged;
     public event Action<int> OnDebtPaid;
+    public event Action<int> OnEnemyDebtPenaltyChanged;
     public event Action<bool> OnSpinValidated;
     public event Action OnGameOver;
 
@@ -152,6 +270,15 @@ public class RoundManager : MonoBehaviour
 
     public int CurrentDebt =>
         currentDebt;
+
+    public int CurrentBaseDebt =>
+        currentBaseDebt;
+
+    public int CurrentEnemyDebtPenaltyAmount =>
+        currentEnemyDebtPenaltyAmount;
+
+    public int EnemyDebtPenaltyPercent =>
+        enemyDebtPenaltyPercent;
 
     public bool DebtPending =>
         debtPending;
@@ -185,6 +312,12 @@ public class RoundManager : MonoBehaviour
 
             if (waitingForRewardCompletion)
                 return false;
+
+            if (enemyCorridorController != null &&
+                enemyCorridorController.IsAdvancing)
+            {
+                return false;
+            }
 
             if (RewardManager.Instance != null &&
                 RewardManager.Instance.RewardPhaseActive)
@@ -239,6 +372,12 @@ public class RoundManager : MonoBehaviour
                 rewardManager = managers[0];
         }
 
+        if (enemyCorridorController == null)
+        {
+            enemyCorridorController =
+                FindObjectOfType<EnemyCorridorController>();
+        }
+
         // -----------------------------------------------------
         // REWARD EVENT
         // -----------------------------------------------------
@@ -258,10 +397,12 @@ public class RoundManager : MonoBehaviour
         tokensRemaining =
             tokensPerRound;
 
-        currentDebt =
-            CalculateDebtForRound(
-                currentRound
-            );
+        enemyDebtPenaltyPercent =
+            0;
+
+        SetDebtForRound(
+            currentRound
+        );
 
         debtPending = false;
 
@@ -604,6 +745,17 @@ public class RoundManager : MonoBehaviour
             OnDebtPaid?
                 .Invoke(paidAmount);
 
+
+            /*
+             * La ronda ya está cerrada económicamente.
+             *
+             * Antes de Rewards registramos si quedaron enemigos vivos.
+             * Ese resultado NO cambia la deuda que acabamos de pagar:
+             * modifica únicamente la deuda BASE de la SIGUIENTE ronda.
+             */
+            ResolveEnemyEncounterOutcome();
+
+
             /*
              * La deuda ya está PAGADA.
              *
@@ -732,15 +884,27 @@ public class RoundManager : MonoBehaviour
 
     private void StartNextRound()
     {
+        /*
+         * Enemy progression is tied to ROUND progression, not kills.
+         *
+         * Even if CurrentRow still contains living enemies, it is removed
+         * now. NextRow physically advances and becomes the new combat row.
+         */
+        if (enemyCorridorController != null)
+        {
+            enemyCorridorController
+                .AdvanceEncounterForRoundTransition();
+        }
+
+
         currentRound++;
 
         tokensRemaining =
             tokensPerRound;
 
-        currentDebt =
-            CalculateDebtForRound(
-                currentRound
-            );
+        SetDebtForRound(
+            currentRound
+        );
 
         debtPending =
             false;
@@ -768,11 +932,15 @@ public class RoundManager : MonoBehaviour
         Debug.Log(
             $"[ROUND] Starting R-{currentRound}. " +
             $"Tokens = {tokensRemaining}, " +
-            $"Debt = ${currentDebt}"
+            $"Base debt = ${currentBaseDebt}, " +
+            $"Enemy penalty = {enemyDebtPenaltyPercent}% " +
+            $"(+${currentEnemyDebtPenaltyAmount}), " +
+            $"Total debt = ${currentDebt}"
         );
     }
 
-    private int CalculateDebtForRound(
+
+    private int CalculateBaseDebtForRound(
         int round)
     {
         return
@@ -780,6 +948,56 @@ public class RoundManager : MonoBehaviour
             (round *
              debtIncreasePerRound);
     }
+
+
+    private int CalculateEnemyDebtPenaltyAmount(
+        int baseDebt)
+    {
+        if (baseDebt <= 0 ||
+            enemyDebtPenaltyPercent <= 0)
+        {
+            return 0;
+        }
+
+
+        /*
+         * Money is integer-based.
+         *
+         * With the current default debt progression (10, 15, 20, ...)
+         * every 20% step is already an exact integer. RoundToInt also keeps
+         * this sane if those design values change later.
+         */
+        return
+            Mathf.RoundToInt(
+                baseDebt *
+                (
+                    enemyDebtPenaltyPercent /
+                    100f
+                )
+            );
+    }
+
+
+    private void SetDebtForRound(
+        int round)
+    {
+        currentBaseDebt =
+            CalculateBaseDebtForRound(
+                round
+            );
+
+
+        currentEnemyDebtPenaltyAmount =
+            CalculateEnemyDebtPenaltyAmount(
+                currentBaseDebt
+            );
+
+
+        currentDebt =
+            currentBaseDebt +
+            currentEnemyDebtPenaltyAmount;
+    }
+
 
     // =========================================================
     // GAME OVER
@@ -815,6 +1033,7 @@ public class RoundManager : MonoBehaviour
     {
         UpdateRoundUI();
         UpdateDebtUI();
+        UpdateEnemyDebtPenaltyUI();
         UpdateTokensUI();
     }
 
@@ -835,6 +1054,17 @@ public class RoundManager : MonoBehaviour
                 $"${currentDebt}";
         }
     }
+
+
+    private void UpdateEnemyDebtPenaltyUI()
+    {
+        if (enemyDebtPenaltyText != null)
+        {
+            enemyDebtPenaltyText.text =
+                $"{enemyDebtPenaltyPercent}%";
+        }
+    }
+
 
     private void UpdateTokensUI()
     {
