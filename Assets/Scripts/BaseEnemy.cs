@@ -22,11 +22,27 @@ public class BaseEnemy : MonoBehaviour
     // ACTION SEQUENCE
     // =========================================================
 
+    public enum ActionSequenceOrderMode
+    {
+        Fixed,
+        ShuffleOnceOnSpawn
+    }
+
+
     [Header("Action Sequence")]
 
     [Tooltip(
+        "Fixed keeps the authored order. Shuffle Once On Spawn creates an " +
+        "independent random order for each enemy instance, then repeats that " +
+        "same runtime pattern for extra spins."
+    )]
+    public ActionSequenceOrderMode actionSequenceOrderMode =
+        ActionSequenceOrderMode.Fixed;
+
+
+    [Tooltip(
         "Actions resolved after each VALID spin while this enemy is in " +
-        "CurrentRow. The sequence loops automatically: 1 -> 2 -> 3 -> 1..."
+        "CurrentRow. The runtime sequence loops automatically."
     )]
     public EnemyAction[] actionSequence =
         new EnemyAction[3];
@@ -63,6 +79,8 @@ public class BaseEnemy : MonoBehaviour
 
     private int currentActionIndex =
         0;
+
+    private EnemyAction[] runtimeActionSequence;
 
     private RouletteController roulette;
 
@@ -116,6 +134,12 @@ public class BaseEnemy : MonoBehaviour
     // =========================================================
     // UNITY
     // =========================================================
+
+    private void Awake()
+    {
+        BuildRuntimeActionSequence();
+    }
+
 
     private void Start()
     {
@@ -247,11 +271,94 @@ public class BaseEnemy : MonoBehaviour
     // ACTION SEQUENCE
     // =========================================================
 
-    private EnemyAction GetActionForIndex(
-        int index)
+    private void BuildRuntimeActionSequence()
     {
         if (actionSequence == null ||
             actionSequence.Length == 0)
+        {
+            runtimeActionSequence =
+                new EnemyAction[0];
+
+            return;
+        }
+
+
+        runtimeActionSequence =
+            new EnemyAction[
+                actionSequence.Length
+            ];
+
+
+        for (int i = 0;
+             i < actionSequence.Length;
+             i++)
+        {
+            runtimeActionSequence[i] =
+                actionSequence[i];
+        }
+
+
+        if (actionSequenceOrderMode ==
+            ActionSequenceOrderMode.ShuffleOnceOnSpawn)
+        {
+            ShuffleRuntimeActionSequence();
+        }
+    }
+
+
+    private void ShuffleRuntimeActionSequence()
+    {
+        if (runtimeActionSequence == null)
+            return;
+
+
+        /*
+         * Fisher-Yates shuffle.
+         *
+         * Example for the Imp:
+         * Attack / Wait / Attack
+         *
+         * Each fresh Imp independently becomes one of:
+         * A-W-A, W-A-A or A-A-W.
+         *
+         * The chosen runtime order then stays stable and loops if the
+         * player gains extra spins.
+         */
+        for (int i =
+                 runtimeActionSequence.Length - 1;
+             i > 0;
+             i--)
+        {
+            int j =
+                Random.Range(
+                    0,
+                    i + 1
+                );
+
+
+            EnemyAction temp =
+                runtimeActionSequence[i];
+
+            runtimeActionSequence[i] =
+                runtimeActionSequence[j];
+
+            runtimeActionSequence[j] =
+                temp;
+        }
+    }
+
+
+    private EnemyAction GetActionForIndex(
+        int index)
+    {
+        if (runtimeActionSequence == null)
+        {
+            BuildRuntimeActionSequence();
+        }
+
+
+        if (runtimeActionSequence == null ||
+            runtimeActionSequence.Length == 0)
         {
             return null;
         }
@@ -259,18 +366,18 @@ public class BaseEnemy : MonoBehaviour
 
         int safeIndex =
             index %
-            actionSequence.Length;
+            runtimeActionSequence.Length;
 
 
         if (safeIndex < 0)
         {
             safeIndex +=
-                actionSequence.Length;
+                runtimeActionSequence.Length;
         }
 
 
         return
-            actionSequence[
+            runtimeActionSequence[
                 safeIndex
             ];
     }
@@ -278,8 +385,8 @@ public class BaseEnemy : MonoBehaviour
 
     private void AdvanceActionSequence()
     {
-        if (actionSequence == null ||
-            actionSequence.Length == 0)
+        if (runtimeActionSequence == null ||
+            runtimeActionSequence.Length == 0)
         {
             return;
         }
@@ -290,7 +397,7 @@ public class BaseEnemy : MonoBehaviour
                 currentActionIndex +
                 1
             ) %
-            actionSequence.Length;
+            runtimeActionSequence.Length;
 
 
         /*
@@ -360,20 +467,6 @@ public class BaseEnemy : MonoBehaviour
             shouldShow;
 
 
-        /*
-         * Keep the intention visually above the enemy sprite when both use
-         * SpriteRenderers at the same Z.
-         */
-        if (shouldShow &&
-            sprite != null)
-        {
-            actionIconRenderer.sortingLayerID =
-                sprite.sortingLayerID;
-
-            actionIconRenderer.sortingOrder =
-                sprite.sortingOrder +
-                10;
-        }
     }
 
 

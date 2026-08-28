@@ -17,6 +17,15 @@ public abstract class EnemyAction : ScriptableObject
     [SerializeField]
     private Sprite icon;
 
+    [SerializeField]
+    [TextArea(2, 5)]
+    [Tooltip(
+        "Text shown when hovering the action icon. " +
+        "Individual action types may support dynamic tokens."
+    )]
+    private string tooltipDescription =
+        "";
+
 
     // =========================================================
     // PUBLIC STATE
@@ -40,6 +49,18 @@ public abstract class EnemyAction : ScriptableObject
     public Sprite Icon
     {
         get { return icon; }
+    }
+
+
+    // =========================================================
+    // TOOLTIP
+    // =========================================================
+
+    public virtual string GetTooltipDescription(
+        BaseEnemy enemy)
+    {
+        return
+            tooltipDescription;
     }
 
 

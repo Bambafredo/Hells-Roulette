@@ -20,6 +20,35 @@ public class EnemyActionAttack : EnemyAction
 
 
     // =========================================================
+    // TOOLTIP
+    // =========================================================
+
+    public override string GetTooltipDescription(
+        BaseEnemy enemy)
+    {
+        string description =
+            base.GetTooltipDescription(
+                enemy
+            );
+
+
+        if (string.IsNullOrWhiteSpace(
+            description))
+        {
+            return
+                $"Lose {bloodDamage} Blood.";
+        }
+
+
+        return
+            description.Replace(
+                "{damage}",
+                bloodDamage.ToString()
+            );
+    }
+
+
+    // =========================================================
     // EXECUTION
     // =========================================================
 
