@@ -33,6 +33,13 @@ public class EnemyCorridorController : MonoBehaviour
     public GameObject[] enemyPrefabs;
 
     [Tooltip(
+        "If true, Current / Next / Future are all filled from Enemy Prefabs " +
+        "when the scene starts. Any enemy instances manually left inside " +
+        "the row Slots are replaced."
+    )]
+    public bool randomizeInitialRowsOnStart = true;
+
+    [Tooltip(
         "If true, when a row is recycled to the back it gets fresh enemies."
     )]
     public bool regenerateFutureRowOnAdvance = true;
@@ -135,41 +142,23 @@ public class EnemyCorridorController : MonoBehaviour
 
 
     /*
-     * Each physical row remembers WHERE its enemies were authored.
+     * Each row uses its DIRECT children as persistent enemy Slots.
      *
-     * This supports both hierarchies:
-     *
-     * Row
-     * ├ Enemy_Imp
-     * ├ Enemy_Imp
-     * └ Enemy_Imp
-     *
-     * and:
+     * Expected hierarchy:
      *
      * Row
      * ├ Slot_L
-     * │  └ Enemy_Imp
      * ├ Slot_C
-     * │  └ Enemy_Imp
      * └ Slot_R
-     *    └ Enemy_Imp
      *
-     * When the row is recycled to Future, the old enemy instances are
-     * removed and brand-new prefab instances are created in these same
-     * authored spawn points.
+     * The Slots stay forever. Enemy prefab instances are created and
+     * destroyed underneath them.
+     *
+     * This means the scene no longer needs placeholder Imps in the Slots.
      */
-    private class RowSpawnPoint
-    {
-        public Transform parent;
-        public Vector3 localPosition;
-        public Quaternion localRotation;
-        public Vector3 localScale;
-    }
-
-
-    private readonly Dictionary<Transform, List<RowSpawnPoint>>
-        rowSpawnPoints =
-            new Dictionary<Transform, List<RowSpawnPoint>>();
+    private readonly Dictionary<Transform, List<Transform>>
+        rowSpawnSlots =
+            new Dictionary<Transform, List<Transform>>();
 
 
     /*
@@ -191,7 +180,24 @@ public class EnemyCorridorController : MonoBehaviour
     {
         CaptureSlotPositions();
 
-        CaptureRowSpawnPositions();
+        CaptureRowSpawnSlots();
+
+
+        if (randomizeInitialRowsOnStart)
+        {
+            RegenerateRowWithFreshEnemies(
+                currentRow
+            );
+
+            RegenerateRowWithFreshEnemies(
+                nextRow
+            );
+
+            RegenerateRowWithFreshEnemies(
+                futureRow
+            );
+        }
+
 
         RegisterBaseColorsForRow(
             currentRow
@@ -268,185 +274,77 @@ public class EnemyCorridorController : MonoBehaviour
     }
 
 
-    private void CaptureRowSpawnPositions()
+    private void CaptureRowSpawnSlots()
     {
-        CacheSpawnPointsForRow(
+        CacheSpawnSlotsForRow(
             currentRow
         );
 
-        CacheSpawnPointsForRow(
+        CacheSpawnSlotsForRow(
             nextRow
         );
 
-        CacheSpawnPointsForRow(
+        CacheSpawnSlotsForRow(
             futureRow
         );
     }
 
 
-    private void CacheSpawnPointsForRow(
+    private void CacheSpawnSlotsForRow(
         Transform row)
     {
         if (row == null ||
-            rowSpawnPoints.ContainsKey(row))
+            rowSpawnSlots.ContainsKey(row))
         {
             return;
         }
 
 
-        List<RowSpawnPoint> spawnPoints =
-            new List<RowSpawnPoint>();
+        List<Transform> slots =
+            new List<Transform>();
 
 
         /*
-         * We inspect the DIRECT children of the row.
+         * Every DIRECT child of a Row is treated as an enemy Slot.
          *
-         * A direct child can either be:
-         *
-         * 1) the enemy instance itself
-         * 2) a persistent Slot object that contains the enemy instance
+         * With the current setup these are Slot_L / Slot_C / Slot_R.
          */
         foreach (Transform child in row)
         {
-            // -------------------------------------------------
-            // DIRECT ENEMY
-            // -------------------------------------------------
-
-            BaseEnemy directEnemy =
-                child.GetComponent<BaseEnemy>();
-
-
-            if (directEnemy != null)
-            {
-                spawnPoints.Add(
-                    new RowSpawnPoint
-                    {
-                        parent = row,
-                        localPosition =
-                            child.localPosition,
-                        localRotation =
-                            child.localRotation,
-                        localScale =
-                            child.localScale
-                    }
-                );
-
-                continue;
-            }
-
-
-            // -------------------------------------------------
-            // SLOT CONTAINING AN ENEMY
-            // -------------------------------------------------
-
-            BaseEnemy nestedEnemy =
-                child.GetComponentInChildren<BaseEnemy>(
-                    true
-                );
-
-
-            if (nestedEnemy == null)
+            if (child == null)
                 continue;
 
 
-            /*
-             * Find the top-level enemy instance underneath this Slot.
-             *
-             * Example:
-             *
-             * Slot_L
-             * └ Enemy_Imp        <- instanceRoot
-             *    └ Visual
-             *       └ BaseEnemy
-             */
-            Transform instanceRoot =
-                GetTopLevelChildUnderParent(
-                    nestedEnemy.transform,
-                    child
-                );
-
-
-            if (instanceRoot == null)
-                continue;
-
-
-            spawnPoints.Add(
-                new RowSpawnPoint
-                {
-                    parent = child,
-                    localPosition =
-                        instanceRoot.localPosition,
-                    localRotation =
-                        instanceRoot.localRotation,
-                    localScale =
-                        instanceRoot.localScale
-                }
+            slots.Add(
+                child
             );
         }
 
 
         /*
-         * Keep left-to-right ordering deterministic.
+         * Deterministic left-to-right slot order.
+         *
+         * The PREFAB selected for each slot is still random, so the visual
+         * order of enemy types changes every generated row.
          */
-        spawnPoints.Sort(
+        slots.Sort(
             (a, b) =>
-            {
-                float ax =
-                    a.parent.TransformPoint(
-                        a.localPosition
-                    ).x;
-
-                float bx =
-                    b.parent.TransformPoint(
-                        b.localPosition
-                    ).x;
-
-                return
-                    ax.CompareTo(bx);
-            }
+                a.localPosition.x
+                    .CompareTo(
+                        b.localPosition.x
+                    )
         );
 
 
-        rowSpawnPoints[row] =
-            spawnPoints;
+        rowSpawnSlots[row] =
+            slots;
 
 
         Debug.Log(
             $"[ENEMY CORRIDOR] Cached " +
-            $"{spawnPoints.Count} spawn point(s) for " +
+            $"{slots.Count} enemy slot(s) for " +
             $"{row.name}."
         );
-    }
-
-
-    private Transform GetTopLevelChildUnderParent(
-        Transform descendant,
-        Transform parent)
-    {
-        if (descendant == null ||
-            parent == null)
-        {
-            return null;
-        }
-
-
-        Transform current =
-            descendant;
-
-
-        while (current.parent != null &&
-               current.parent != parent)
-        {
-            current =
-                current.parent;
-        }
-
-
-        if (current.parent != parent)
-            return null;
-
-
-        return current;
     }
 
 
@@ -775,19 +673,19 @@ public class EnemyCorridorController : MonoBehaviour
         {
             Debug.LogWarning(
                 "[ENEMY CORRIDOR] No enemy prefabs assigned. " +
-                "Cannot regenerate FutureRow."
+                "Cannot generate row."
             );
 
             return;
         }
 
 
-        if (!rowSpawnPoints.TryGetValue(
+        if (!rowSpawnSlots.TryGetValue(
             row,
-            out List<RowSpawnPoint> spawnPoints))
+            out List<Transform> slots))
         {
             Debug.LogWarning(
-                "[ENEMY CORRIDOR] No cached spawn points for row: " +
+                "[ENEMY CORRIDOR] No cached Slots for row: " +
                 row.name
             );
 
@@ -795,13 +693,12 @@ public class EnemyCorridorController : MonoBehaviour
         }
 
 
-        if (spawnPoints.Count == 0)
+        if (slots.Count == 0)
         {
             Debug.LogWarning(
                 "[ENEMY CORRIDOR] Row '" +
                 row.name +
-                "' has zero cached spawn points. " +
-                "Fresh enemies cannot be generated."
+                "' contains no direct-child Slots."
             );
 
             return;
@@ -809,26 +706,23 @@ public class EnemyCorridorController : MonoBehaviour
 
 
         /*
-         * IMPORTANT:
+         * Remove the previous physical enemy instances.
          *
-         * Clear the OLD enemy instances first.
-         *
-         * Persistent Slot_L / Slot_C / Slot_R objects are NOT destroyed.
-         * Only the enemy GameObjects living inside them are removed.
+         * Slot_L / Slot_C / Slot_R themselves are never destroyed.
          */
         ClearEnemyRootsFromRow(
             row
         );
 
 
-        foreach (RowSpawnPoint spawnPoint in
-                 spawnPoints)
+        int spawnedCount =
+            0;
+
+
+        foreach (Transform slot in slots)
         {
-            if (spawnPoint == null ||
-                spawnPoint.parent == null)
-            {
+            if (slot == null)
                 continue;
-            }
 
 
             GameObject prefab =
@@ -839,25 +733,31 @@ public class EnemyCorridorController : MonoBehaviour
                 continue;
 
 
+            /*
+             * Each slot rolls independently from the pool.
+             *
+             * Duplicates are intentionally allowed. With Imp + TaxCollector,
+             * examples include:
+             *
+             * Imp / Imp / TaxCollector
+             * TaxCollector / Imp / TaxCollector
+             * Imp / TaxCollector / Imp
+             */
             GameObject instance =
                 Instantiate(
                     prefab,
-                    spawnPoint.parent
+                    slot
                 );
 
 
             instance.transform.localPosition =
-                spawnPoint.localPosition;
+                Vector3.zero;
 
             instance.transform.localRotation =
-                spawnPoint.localRotation;
+                Quaternion.identity;
 
-            /*
-             * Preserve the scale that was authored in the row/slot rather
-             * than assuming the prefab's default scale.
-             */
             instance.transform.localScale =
-                spawnPoint.localScale;
+                prefab.transform.localScale;
 
 
             RegisterBaseColorsForRoot(
@@ -874,8 +774,9 @@ public class EnemyCorridorController : MonoBehaviour
             if (enemy != null)
             {
                 /*
-                 * This is FutureRow, so the new enemy is visible but cannot
-                 * participate in combat until the row reaches Current.
+                 * Regenerated rows are previews by default.
+                 *
+                 * ApplyCombatStates() will enable ONLY CurrentRow.
                  */
                 enemy.SetCombatActive(
                     false
@@ -886,16 +787,18 @@ public class EnemyCorridorController : MonoBehaviour
                 Debug.LogWarning(
                     "[ENEMY CORRIDOR] Spawned prefab '" +
                     prefab.name +
-                    "' does not contain a BaseEnemy."
+                    "' does not contain BaseEnemy."
                 );
             }
+
+
+            spawnedCount++;
         }
 
 
         Debug.Log(
-            $"[ENEMY CORRIDOR] Regenerated " +
-            $"{spawnPoints.Count} fresh enemy instance(s) in " +
-            $"{row.name}."
+            $"[ENEMY CORRIDOR] Generated random row '{row.name}' " +
+            $"with {spawnedCount} fresh enemy instance(s)."
         );
     }
 
@@ -951,67 +854,58 @@ public class EnemyCorridorController : MonoBehaviour
             return;
 
 
-        if (!rowSpawnPoints.TryGetValue(
+        if (!rowSpawnSlots.TryGetValue(
             row,
-            out List<RowSpawnPoint> spawnPoints))
+            out List<Transform> slots))
         {
             return;
         }
 
 
-        HashSet<GameObject> rootsToDestroy =
-            new HashSet<GameObject>();
+        List<GameObject> rootsToDestroy =
+            new List<GameObject>();
 
 
-        foreach (RowSpawnPoint spawnPoint in
-                 spawnPoints)
+        foreach (Transform slot in slots)
         {
-            if (spawnPoint == null ||
-                spawnPoint.parent == null)
-            {
+            if (slot == null)
                 continue;
-            }
 
 
-            BaseEnemy[] enemies =
-                spawnPoint.parent
-                    .GetComponentsInChildren<BaseEnemy>(
+            /*
+             * Enemy prefab ROOTS are direct children of the persistent Slot.
+             *
+             * We only remove children that actually contain a BaseEnemy,
+             * so future decorative/helper children inside a Slot are not
+             * accidentally deleted.
+             */
+            foreach (Transform child in slot)
+            {
+                if (child == null)
+                    continue;
+
+
+                BaseEnemy enemy =
+                    child.GetComponentInChildren<BaseEnemy>(
                         true
                     );
 
 
-            foreach (BaseEnemy enemy in enemies)
-            {
                 if (enemy == null)
                     continue;
 
 
-                Transform instanceRoot =
-                    GetTopLevelChildUnderParent(
-                        enemy.transform,
-                        spawnPoint.parent
-                    );
+                ForgetBaseColorsForRoot(
+                    child
+                );
 
 
-                if (instanceRoot == null)
-                    continue;
-
-
-                /*
-                 * If the row itself is the spawn parent, this is a direct
-                 * enemy child.
-                 *
-                 * If a Slot is the spawn parent, this is the enemy instance
-                 * inside that Slot.
-                 *
-                 * In neither case do we destroy the persistent Slot itself.
-                 */
-                if (instanceRoot == row)
-                    continue;
+                child.gameObject
+                    .SetActive(false);
 
 
                 rootsToDestroy.Add(
-                    instanceRoot.gameObject
+                    child.gameObject
                 );
             }
         }
@@ -1022,16 +916,6 @@ public class EnemyCorridorController : MonoBehaviour
         {
             if (enemyRoot == null)
                 continue;
-
-
-            ForgetBaseColorsForRoot(
-                enemyRoot.transform
-            );
-
-
-            enemyRoot.SetActive(
-                false
-            );
 
 
             Destroy(
@@ -1083,8 +967,11 @@ public class EnemyCorridorController : MonoBehaviour
         foreach (BaseEnemy enemy in
                  enemies)
         {
-            if (enemy == null)
+            if (enemy == null ||
+                !enemy.gameObject.activeInHierarchy)
+            {
                 continue;
+            }
 
 
             enemy.SetCombatActive(

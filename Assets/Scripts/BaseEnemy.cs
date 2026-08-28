@@ -49,6 +49,27 @@ public class BaseEnemy : MonoBehaviour
 
 
     // =========================================================
+    // CURSE
+    // =========================================================
+
+    [Header("Curse")]
+
+    [Tooltip(
+        "Optional persistent effect. The curse is active only while this " +
+        "enemy is alive AND combat-active in CurrentRow."
+    )]
+    public EnemyCurse curse;
+
+    [Tooltip(
+        "Generic numeric value passed to this enemy's curse. " +
+        "For Debt Increase, this is the percentage."
+    )]
+    [Min(0)]
+    public int curseValue =
+        0;
+
+
+    // =========================================================
     // REFERENCES
     // =========================================================
 
@@ -63,6 +84,13 @@ public class BaseEnemy : MonoBehaviour
         "It is only enabled while this enemy is combat-active in CurrentRow."
     )]
     public SpriteRenderer actionIconRenderer;
+
+    [Tooltip(
+        "SpriteRenderer used to show this enemy's Curse. " +
+        "It is hidden when the enemy has no curse, is dead, or is outside " +
+        "CurrentRow."
+    )]
+    public SpriteRenderer curseIconRenderer;
 
 
     // =========================================================
@@ -81,6 +109,9 @@ public class BaseEnemy : MonoBehaviour
         0;
 
     private EnemyAction[] runtimeActionSequence;
+
+    private bool curseActive =
+        false;
 
     private RouletteController roulette;
 
@@ -131,6 +162,18 @@ public class BaseEnemy : MonoBehaviour
     }
 
 
+    public EnemyCurse CurrentCurse
+    {
+        get { return curse; }
+    }
+
+
+    public int CurseValue
+    {
+        get { return curseValue; }
+    }
+
+
     // =========================================================
     // UNITY
     // =========================================================
@@ -154,6 +197,8 @@ public class BaseEnemy : MonoBehaviour
 
         UpdateActionFeedback();
 
+        UpdateCurseFeedback();
+
 
         roulette =
             FindObjectOfType<RouletteController>();
@@ -169,6 +214,9 @@ public class BaseEnemy : MonoBehaviour
 
     private void OnDestroy()
     {
+        DeactivateCurseIfNeeded();
+
+
         if (roulette != null)
         {
             roulette.OnSpinEnd -=
@@ -189,11 +237,13 @@ public class BaseEnemy : MonoBehaviour
 
 
         /*
-         * Next/Future enemies remain visible, but their intention icon is
-         * hidden. When this exact instance reaches CurrentRow, its first
-         * pending action becomes visible immediately.
+         * Next/Future enemies remain visible, but their action and curse
+         * feedback stay hidden. Persistent curses are gameplay-active only
+         * while the enemy is in CurrentRow.
          */
         UpdateActionFeedback();
+
+        RefreshCurseState();
     }
 
 
@@ -420,6 +470,128 @@ public class BaseEnemy : MonoBehaviour
 
         return
             action.ActionName;
+    }
+
+
+    // =========================================================
+    // CURSE
+    // =========================================================
+
+    private void RefreshCurseState()
+    {
+        bool shouldBeActive =
+            combatActive &&
+            !isDead &&
+            curse != null;
+
+
+        if (shouldBeActive)
+        {
+            ActivateCurseIfNeeded();
+        }
+        else
+        {
+            DeactivateCurseIfNeeded();
+        }
+
+
+        UpdateCurseFeedback();
+    }
+
+
+    private void ActivateCurseIfNeeded()
+    {
+        if (curseActive ||
+            curse == null)
+        {
+            return;
+        }
+
+
+        curseActive =
+            true;
+
+
+        curse.Activate(
+            this,
+            curseValue
+        );
+
+
+        Debug.Log(
+            $"[ENEMY CURSE] {enemyName}: " +
+            $"{curse.CurseName} activated " +
+            $"(value {curseValue})."
+        );
+    }
+
+
+    private void DeactivateCurseIfNeeded()
+    {
+        if (!curseActive ||
+            curse == null)
+        {
+            curseActive =
+                false;
+
+            UpdateCurseFeedback();
+
+            return;
+        }
+
+
+        curse.Deactivate(
+            this,
+            curseValue
+        );
+
+
+        curseActive =
+            false;
+
+
+        Debug.Log(
+            $"[ENEMY CURSE] {enemyName}: " +
+            $"{curse.CurseName} removed."
+        );
+
+
+        UpdateCurseFeedback();
+    }
+
+
+    private void UpdateCurseFeedback()
+    {
+        if (curseIconRenderer == null)
+            return;
+
+
+        bool shouldShow =
+            combatActive &&
+            !isDead &&
+            curse != null &&
+            curse.Icon != null;
+
+
+        if (curse != null)
+        {
+            curseIconRenderer.sprite =
+                curse.Icon;
+        }
+
+
+        /*
+         * Same setup as Action_Icon:
+         * the whole child GameObject may be disabled in the prefab.
+         */
+        curseIconRenderer.gameObject
+            .SetActive(
+                shouldShow
+            );
+
+
+        curseIconRenderer.enabled =
+            shouldShow;
     }
 
 
@@ -700,6 +872,12 @@ public class BaseEnemy : MonoBehaviour
         isDead =
             true;
 
+
+        /*
+         * A persistent curse ends immediately when its owner dies.
+         * This happens before round-end debt is collected.
+         */
+        RefreshCurseState();
 
         UpdateActionFeedback();
 

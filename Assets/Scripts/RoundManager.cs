@@ -104,6 +104,26 @@ public class RoundManager : MonoBehaviour
     [SerializeField]
     private int enemyDebtPenaltyPercent = 0;
 
+
+    [Header("Active Enemy Curses")]
+
+    [SerializeField]
+    private int activeEnemyCurseDebtPercent = 0;
+
+    [SerializeField]
+    private int currentEnemyCurseDebtAmount = 0;
+
+    /*
+     * Keyed by physical enemy instance so:
+     * - multiple Tax Collectors stack additively;
+     * - the same enemy can never register twice;
+     * - killing/removing one enemy removes only its own contribution.
+     */
+    private readonly Dictionary<BaseEnemy, int>
+        activeEnemyDebtCurses =
+            new Dictionary<BaseEnemy, int>();
+
+
     [SerializeField]
     private bool debtPending = false;
 
@@ -279,6 +299,22 @@ public class RoundManager : MonoBehaviour
 
     public int EnemyDebtPenaltyPercent =>
         enemyDebtPenaltyPercent;
+
+    public int ActiveEnemyCurseDebtPercent =>
+        activeEnemyCurseDebtPercent;
+
+    public int CurrentEnemyCurseDebtAmount =>
+        currentEnemyCurseDebtAmount;
+
+    /*
+     * This is the number shown by the existing Extra Debt TMP.
+     *
+     * Ascension penalty + all currently active enemy curses stack
+     * additively into one readable percentage.
+     */
+    public int CurrentTotalDebtExtraPercent =>
+        enemyDebtPenaltyPercent +
+        activeEnemyCurseDebtPercent;
 
     public bool DebtPending =>
         debtPending;
@@ -855,6 +891,153 @@ public class RoundManager : MonoBehaviour
     }
 
     // =========================================================
+    // ENEMY DEBT CURSES
+    // =========================================================
+
+    public void RegisterEnemyDebtCurse(
+        BaseEnemy source,
+        int percent)
+    {
+        if (source == null ||
+            percent <= 0)
+        {
+            return;
+        }
+
+
+        activeEnemyDebtCurses[source] =
+            percent;
+
+
+        RefreshEnemyCurseDebtContribution();
+
+
+        Debug.Log(
+            $"[DEBT CURSE] {source.EnemyName} adds " +
+            $"+{percent}% Debt. " +
+            $"Active curse extra = " +
+            $"{activeEnemyCurseDebtPercent}%."
+        );
+    }
+
+
+    public void UnregisterEnemyDebtCurse(
+        BaseEnemy source)
+    {
+        if (source == null)
+            return;
+
+
+        if (!activeEnemyDebtCurses.Remove(
+            source))
+        {
+            return;
+        }
+
+
+        RefreshEnemyCurseDebtContribution();
+
+
+        Debug.Log(
+            $"[DEBT CURSE] {source.EnemyName}'s Debt curse removed. " +
+            $"Active curse extra = " +
+            $"{activeEnemyCurseDebtPercent}%."
+        );
+    }
+
+
+    private void RefreshEnemyCurseDebtContribution()
+    {
+        int previousAmount =
+            currentEnemyCurseDebtAmount;
+
+
+        activeEnemyCurseDebtPercent =
+            CalculateActiveEnemyCurseDebtPercent();
+
+
+        currentEnemyCurseDebtAmount =
+            CalculatePercentAmount(
+                currentBaseDebt,
+                activeEnemyCurseDebtPercent
+            );
+
+
+        /*
+         * Apply only the DELTA.
+         *
+         * This preserves any other direct debt modifications that may have
+         * happened during the round instead of rebuilding currentDebt from
+         * scratch.
+         */
+        int amountDelta =
+            currentEnemyCurseDebtAmount -
+            previousAmount;
+
+
+        currentDebt =
+            Mathf.Max(
+                0,
+                currentDebt +
+                amountDelta
+            );
+
+
+        UpdateDebtUI();
+
+        UpdateEnemyDebtPenaltyUI();
+
+
+        OnDebtChanged?
+            .Invoke(
+                currentDebt
+            );
+    }
+
+
+    private int CalculateActiveEnemyCurseDebtPercent()
+    {
+        int total =
+            0;
+
+
+        foreach (
+            KeyValuePair<BaseEnemy, int> entry
+            in activeEnemyDebtCurses)
+        {
+            if (entry.Key == null ||
+                entry.Value <= 0)
+            {
+                continue;
+            }
+
+
+            total +=
+                entry.Value;
+        }
+
+
+        return
+            Mathf.Max(
+                0,
+                total
+            );
+    }
+
+
+    private void ClearEnemyDebtCursesForRoundTransition()
+    {
+        activeEnemyDebtCurses.Clear();
+
+        activeEnemyCurseDebtPercent =
+            0;
+
+        currentEnemyCurseDebtAmount =
+            0;
+    }
+
+
+    // =========================================================
     // MODIFY DEBT
     // =========================================================
 
@@ -884,6 +1067,16 @@ public class RoundManager : MonoBehaviour
 
     private void StartNextRound()
     {
+        /*
+         * The previous CurrentRow no longer belongs to the new round.
+         *
+         * Clear its curse registrations immediately. The enemies that move
+         * into CurrentRow will register their own curses when the corridor
+         * finishes advancing and SetCombatActive(true) is called.
+         */
+        ClearEnemyDebtCursesForRoundTransition();
+
+
         /*
          * Enemy progression is tied to ROUND progression, not kills.
          *
@@ -933,8 +1126,10 @@ public class RoundManager : MonoBehaviour
             $"[ROUND] Starting R-{currentRound}. " +
             $"Tokens = {tokensRemaining}, " +
             $"Base debt = ${currentBaseDebt}, " +
-            $"Enemy penalty = {enemyDebtPenaltyPercent}% " +
+            $"Ascension extra = {enemyDebtPenaltyPercent}% " +
             $"(+${currentEnemyDebtPenaltyAmount}), " +
+            $"Curse extra = {activeEnemyCurseDebtPercent}% " +
+            $"(+${currentEnemyCurseDebtAmount}), " +
             $"Total debt = ${currentDebt}"
         );
     }
@@ -953,25 +1148,33 @@ public class RoundManager : MonoBehaviour
     private int CalculateEnemyDebtPenaltyAmount(
         int baseDebt)
     {
+        return
+            CalculatePercentAmount(
+                baseDebt,
+                enemyDebtPenaltyPercent
+            );
+    }
+
+
+    private int CalculatePercentAmount(
+        int baseDebt,
+        int percent)
+    {
         if (baseDebt <= 0 ||
-            enemyDebtPenaltyPercent <= 0)
+            percent <= 0)
         {
             return 0;
         }
 
 
         /*
-         * Money is integer-based.
-         *
-         * With the current default debt progression (10, 15, 20, ...)
-         * every 20% step is already an exact integer. RoundToInt also keeps
-         * this sane if those design values change later.
+         * All extra-debt percentage sources use the same rounding rule.
          */
         return
             Mathf.RoundToInt(
                 baseDebt *
                 (
-                    enemyDebtPenaltyPercent /
+                    percent /
                     100f
                 )
             );
@@ -993,9 +1196,26 @@ public class RoundManager : MonoBehaviour
             );
 
 
+        /*
+         * Usually zero at this exact moment because the corridor is still
+         * advancing. If a curse is already registered (e.g. initial round),
+         * it is included here too.
+         */
+        activeEnemyCurseDebtPercent =
+            CalculateActiveEnemyCurseDebtPercent();
+
+
+        currentEnemyCurseDebtAmount =
+            CalculatePercentAmount(
+                currentBaseDebt,
+                activeEnemyCurseDebtPercent
+            );
+
+
         currentDebt =
             currentBaseDebt +
-            currentEnemyDebtPenaltyAmount;
+            currentEnemyDebtPenaltyAmount +
+            currentEnemyCurseDebtAmount;
     }
 
 
@@ -1061,7 +1281,7 @@ public class RoundManager : MonoBehaviour
         if (enemyDebtPenaltyText != null)
         {
             enemyDebtPenaltyText.text =
-                $"{enemyDebtPenaltyPercent}%";
+                $"{CurrentTotalDebtExtraPercent}%";
         }
     }
 
