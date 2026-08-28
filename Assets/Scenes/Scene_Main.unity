@@ -4587,6 +4587,7 @@ MonoBehaviour:
   controller: {fileID: 1075813796}
   selfMinInterval: 0
   moneyReward: 1
+  spinInteractionMode: 1
   roundManager: {fileID: 0}
   originalPosition: {x: 0, y: 0, z: 0}
   originalRotation: {x: 0, y: 0, z: 0, w: 0}
@@ -5163,7 +5164,7 @@ MonoBehaviour:
   tokensRemaining: 0
   startingDebt: 6
   debtIncreasePerRound: 10
-  enemyDebtPenaltyPerFailedRoundPercent: 20
+  enemyDebtPenaltyPerFailedRoundPercent: 0
   currentDebt: 0
   currentBaseDebt: 0
   currentEnemyDebtPenaltyAmount: 0

@@ -10,9 +10,26 @@ public class BaseEnemy : MonoBehaviour
     // =========================================================
 
     [Header("Enemy Stats")]
-    public string enemyName = "Enemy";
-    public int maxHP = 10;
-    public int damageToPlayer = 1;
+
+    public string enemyName =
+        "Enemy";
+
+    public int maxHP =
+        10;
+
+
+    // =========================================================
+    // ACTION SEQUENCE
+    // =========================================================
+
+    [Header("Action Sequence")]
+
+    [Tooltip(
+        "Actions resolved after each VALID spin while this enemy is in " +
+        "CurrentRow. The sequence loops automatically: 1 -> 2 -> 3 -> 1..."
+    )]
+    public EnemyAction[] actionSequence =
+        new EnemyAction[3];
 
 
     // =========================================================
@@ -20,8 +37,16 @@ public class BaseEnemy : MonoBehaviour
     // =========================================================
 
     [Header("References")]
+
     public TextMeshPro hpText;
+
     public SpriteRenderer sprite;
+
+    [Tooltip(
+        "SpriteRenderer used to show the enemy's CURRENT action. " +
+        "It is only enabled while this enemy is combat-active in CurrentRow."
+    )]
+    public SpriteRenderer actionIconRenderer;
 
 
     // =========================================================
@@ -29,14 +54,28 @@ public class BaseEnemy : MonoBehaviour
     // =========================================================
 
     private int currentHP;
-    private bool isDead = false;
-    private bool combatActive = true;
+
+    private bool isDead =
+        false;
+
+    private bool combatActive =
+        true;
+
+    private int currentActionIndex =
+        0;
+
     private RouletteController roulette;
 
 
     // =========================================================
     // PUBLIC STATE
     // =========================================================
+
+    public string EnemyName
+    {
+        get { return enemyName; }
+    }
+
 
     public bool CombatActive
     {
@@ -56,15 +95,40 @@ public class BaseEnemy : MonoBehaviour
     }
 
 
+    public int CurrentActionIndex
+    {
+        get { return currentActionIndex; }
+    }
+
+
+    public EnemyAction CurrentAction
+    {
+        get
+        {
+            return
+                GetActionForIndex(
+                    currentActionIndex
+                );
+        }
+    }
+
+
     // =========================================================
     // UNITY
     // =========================================================
 
     private void Start()
     {
-        currentHP = maxHP;
+        currentHP =
+            maxHP;
+
+        currentActionIndex =
+            0;
+
 
         UpdateHPDisplay();
+
+        UpdateActionFeedback();
 
 
         roulette =
@@ -98,11 +162,19 @@ public class BaseEnemy : MonoBehaviour
     {
         combatActive =
             active;
+
+
+        /*
+         * Next/Future enemies remain visible, but their intention icon is
+         * hidden. When this exact instance reaches CurrentRow, its first
+         * pending action becomes visible immediately.
+         */
+        UpdateActionFeedback();
     }
 
 
     // =========================================================
-    // ENEMY TURN
+    // ENEMY ACTION TURN
     // =========================================================
 
     private void OnSpinEnd()
@@ -112,10 +184,7 @@ public class BaseEnemy : MonoBehaviour
 
 
         /*
-         * Enemies in Next/Future corridor rows stay fully visible and
-         * initialized, but they are previews only. Event subscriptions
-         * still exist, so this explicit combat gate is what prevents them
-         * from attacking before they reach CurrentRow.
+         * Enemies in Next/Future are previews only.
          */
         if (!combatActive)
             return;
@@ -129,7 +198,8 @@ public class BaseEnemy : MonoBehaviour
             !RoundManager.Instance.WasLastSpinValid)
         {
             Debug.Log(
-                $"[ENEMY] {enemyName} does not attack because the spin was invalid."
+                $"[ENEMY] {enemyName} keeps action " +
+                $"{GetCurrentActionDebugName()} because the spin was invalid."
             );
 
             return;
@@ -137,22 +207,209 @@ public class BaseEnemy : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // ATTACK ANIMATION
+        // EXECUTE CURRENT ACTION
         // -----------------------------------------------------
+
+        EnemyAction action =
+            CurrentAction;
+
+
+        if (action != null)
+        {
+            Debug.Log(
+                $"[ENEMY] {enemyName} executes action: " +
+                $"{action.ActionName}."
+            );
+
+
+            action.Execute(
+                this
+            );
+        }
+        else
+        {
+            Debug.LogWarning(
+                $"[ENEMY] {enemyName} has no action assigned at " +
+                $"sequence index {currentActionIndex}."
+            );
+        }
+
+
+        // -----------------------------------------------------
+        // ADVANCE PATTERN
+        // -----------------------------------------------------
+
+        AdvanceActionSequence();
+    }
+
+
+    // =========================================================
+    // ACTION SEQUENCE
+    // =========================================================
+
+    private EnemyAction GetActionForIndex(
+        int index)
+    {
+        if (actionSequence == null ||
+            actionSequence.Length == 0)
+        {
+            return null;
+        }
+
+
+        int safeIndex =
+            index %
+            actionSequence.Length;
+
+
+        if (safeIndex < 0)
+        {
+            safeIndex +=
+                actionSequence.Length;
+        }
+
+
+        return
+            actionSequence[
+                safeIndex
+            ];
+    }
+
+
+    private void AdvanceActionSequence()
+    {
+        if (actionSequence == null ||
+            actionSequence.Length == 0)
+        {
+            return;
+        }
+
+
+        currentActionIndex =
+            (
+                currentActionIndex +
+                1
+            ) %
+            actionSequence.Length;
+
+
+        /*
+         * The icon immediately changes to show what will happen after the
+         * NEXT valid spin.
+         */
+        UpdateActionFeedback();
+    }
+
+
+    private string GetCurrentActionDebugName()
+    {
+        EnemyAction action =
+            CurrentAction;
+
+
+        if (action == null)
+            return "<none>";
+
+
+        return
+            action.ActionName;
+    }
+
+
+    // =========================================================
+    // ACTION FEEDBACK
+    // =========================================================
+
+    private void UpdateActionFeedback()
+    {
+        if (actionIconRenderer == null)
+            return;
+
+
+        EnemyAction action =
+            CurrentAction;
+
+
+        bool shouldShow =
+            combatActive &&
+            !isDead &&
+            action != null &&
+            action.Icon != null;
+
+
+        if (action != null)
+        {
+            actionIconRenderer.sprite =
+                action.Icon;
+        }
+
+
+        /*
+         * The Action_Icon child may be disabled in the prefab.
+         *
+         * Toggling SpriteRenderer.enabled is not enough when the whole
+         * GameObject is inactive, so we explicitly toggle the child GO too.
+         */
+        actionIconRenderer.gameObject
+            .SetActive(
+                shouldShow
+            );
+
+
+        actionIconRenderer.enabled =
+            shouldShow;
+
+
+        /*
+         * Keep the intention visually above the enemy sprite when both use
+         * SpriteRenderers at the same Z.
+         */
+        if (shouldShow &&
+            sprite != null)
+        {
+            actionIconRenderer.sortingLayerID =
+                sprite.sortingLayerID;
+
+            actionIconRenderer.sortingOrder =
+                sprite.sortingOrder +
+                10;
+        }
+    }
+
+
+    // =========================================================
+    // ACTION API
+    // =========================================================
+
+    /*
+     * EnemyAction assets call public methods like this one.
+     *
+     * BaseEnemy owns the actual gameplay integrations (BloodManager,
+     * GameLog, animations, etc.), while the EnemyAction asset only decides
+     * WHAT the enemy does.
+     *
+     * This keeps actions reusable between different enemy prefabs.
+     */
+    public void PerformBloodAttack(
+        int damage)
+    {
+        if (isDead ||
+            damage <= 0)
+        {
+            return;
+        }
+
 
         StartCoroutine(
             AttackAnimation()
         );
 
 
-        // -----------------------------------------------------
-        // ATTACK PLAYER
-        // -----------------------------------------------------
-
         if (BloodManager.Instance == null)
         {
             Debug.LogWarning(
-                $"[ENEMY] {enemyName} cannot attack because BloodManager is missing."
+                $"[ENEMY] {enemyName} cannot attack because " +
+                $"BloodManager is missing."
             );
 
             return;
@@ -166,7 +423,7 @@ public class BaseEnemy : MonoBehaviour
         bool consumed =
             BloodManager.Instance
                 .ConsumeBlood(
-                    damageToPlayer
+                    damage
                 );
 
 
@@ -177,15 +434,11 @@ public class BaseEnemy : MonoBehaviour
         int actualBloodLost =
             Mathf.Max(
                 0,
-                bloodBefore - bloodAfter
+                bloodBefore -
+                bloodAfter
             );
 
 
-        /*
-         * We log the ACTUAL Blood lost rather than blindly using
-         * damageToPlayer. This remains correct if the player has
-         * less Blood remaining than the enemy's nominal damage.
-         */
         if (consumed)
         {
             GameLogManager.Instance?
@@ -197,7 +450,8 @@ public class BaseEnemy : MonoBehaviour
 
 
         Debug.Log(
-            $"[ENEMY] {enemyName} attacks for {actualBloodLost} Blood."
+            $"[ENEMY] {enemyName} attacks for " +
+            $"{actualBloodLost} Blood."
         );
     }
 
@@ -213,9 +467,12 @@ public class BaseEnemy : MonoBehaviour
             return;
 
 
-        currentHP -= dmg;
+        currentHP -=
+            dmg;
+
 
         UpdateHPDisplay();
+
 
         StartCoroutine(
             HitFlash()
@@ -272,7 +529,8 @@ public class BaseEnemy : MonoBehaviour
 
 
         Vector3 big =
-            original * 1.12f;
+            original *
+            1.12f;
 
 
         float speed =
@@ -283,13 +541,15 @@ public class BaseEnemy : MonoBehaviour
             0f;
 
 
-        while (timer < speed)
+        while (timer <
+               speed)
         {
             t.localScale =
                 Vector3.Lerp(
                     original,
                     big,
-                    timer / speed
+                    timer /
+                    speed
                 );
 
 
@@ -309,13 +569,15 @@ public class BaseEnemy : MonoBehaviour
             0f;
 
 
-        while (timer < speed)
+        while (timer <
+               speed)
         {
             t.localScale =
                 Vector3.Lerp(
                     big,
                     original,
-                    timer / speed
+                    timer /
+                    speed
                 );
 
 
@@ -342,14 +604,13 @@ public class BaseEnemy : MonoBehaviour
             return;
 
 
-        isDead = true;
+        isDead =
+            true;
 
 
-        /*
-         * Die() is reached synchronously from TakeDamage(), so this
-         * line enters the Game Log immediately after the sticker/event
-         * that caused the lethal damage.
-         */
+        UpdateActionFeedback();
+
+
         GameLogManager.Instance?
             .LogEnemyDeath(
                 enemyName
