@@ -15,14 +15,14 @@ MonoBehaviour:
   stickerName: Rat Poison
   icon: {fileID: 21300000, guid: 75c76c60e3c82864a94c81e242ef49b8, type: 3}
   basePurchaseCost: 3
-  maxUses: 0
+  maxUses: 6
   consumeUseOnWinningActivation: 1
-  consumeUseOnNonWinningActivation: 0
+  consumeUseOnNonWinningActivation: 1
   consumeUseOnAlbumActivation: 0
   dollarReward: 0
   logDescription: 
-  winningSegmentTooltip: Take {damage} damage
-  losingSegmentTooltip: Deal {damage} damage to all enemies
+  winningSegmentTooltip: Take {playerDamage} damage
+  losingSegmentTooltip: Deal {enemyDamage} damage to all enemies
   albumTooltip: 
   playerDamageAmount: 5
   enemyDamageAmount: 1

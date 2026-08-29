@@ -2053,6 +2053,7 @@ MonoBehaviour:
   - {fileID: 7377409930441240661, guid: a6802fa4c6cc26e4fab29f97242fc621, type: 3}
   - {fileID: 7377409930441240661, guid: 2c56bdfc28c67c0499f6c1451cd9c0fc, type: 3}
   - {fileID: 7377409930441240661, guid: 28a550bcd9a8ce64e9e958379143d5fe, type: 3}
+  - {fileID: 7377409930441240661, guid: 9ac71f69cd3dc114481700ac64e0265f, type: 3}
   randomizeInitialRowsOnStart: 1
   regenerateFutureRowOnAdvance: 1
   currentBrightness: 1

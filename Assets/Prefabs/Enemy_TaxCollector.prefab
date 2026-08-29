@@ -426,6 +426,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enemyName: Imp
   maxHP: 5
+  rowPlacementPriority: 1
   actionSequenceOrderMode: 1
   actionSequence:
   - {fileID: 11400000, guid: 1b0d369592f3f0141a911c6e159b11aa, type: 2}
