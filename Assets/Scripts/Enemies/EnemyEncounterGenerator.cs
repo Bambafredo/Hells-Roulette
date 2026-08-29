@@ -22,6 +22,33 @@ public class EnemyEncounterGenerator : MonoBehaviour
 
 
     // =========================================================
+    // ROUND WEIGHT SCHEDULE
+    // =========================================================
+
+    [System.Serializable]
+    public class RoundWeightStage
+    {
+        [Tooltip(
+            "Playable round from which this weight becomes active. " +
+            "1 = first round / UI R-0, 2 = second / UI R-1, etc."
+        )]
+        [Min(1)]
+        public int fromRound =
+            1;
+
+
+        [Tooltip(
+            "Relative selection weight from this round onward, until a later " +
+            "stage overrides it. Set Weight = 0 to remove this entry from " +
+            "the pool from that round onward."
+        )]
+        [Min(0f)]
+        public float weight =
+            1f;
+    }
+
+
+    // =========================================================
     // ENEMY POOL MODE
     // =========================================================
 
@@ -31,20 +58,17 @@ public class EnemyEncounterGenerator : MonoBehaviour
         [Tooltip("Enemy prefab that can be rolled.")]
         public GameObject enemyPrefab;
 
-        [Tooltip(
-            "First PLAYABLE round in which this enemy enters the pool. " +
-            "1 = first round / UI R-0, 2 = second / UI R-1, etc."
-        )]
-        [Min(1)]
-        public int firstRound =
-            1;
 
         [Tooltip(
-            "Relative chance of this enemy being rolled once it is eligible."
+            "Weight progression for this enemy. The latest stage whose " +
+            "From Round has been reached determines the current weight. " +
+            "Before the first stage, the enemy is not in the pool."
         )]
-        [Min(0f)]
-        public float weight =
-            1f;
+        public List<RoundWeightStage> weightSchedule =
+            new List<RoundWeightStage>()
+            {
+                new RoundWeightStage()
+            };
     }
 
 
@@ -67,28 +91,17 @@ public class EnemyEncounterGenerator : MonoBehaviour
         )]
         public EnemyEncounterPreset preset;
 
-        [Tooltip(
-            "First PLAYABLE round in which this preset can be selected. " +
-            "1 = first round / UI R-0."
-        )]
-        [Min(1)]
-        public int firstRound =
-            1;
 
         [Tooltip(
-            "Last PLAYABLE round in which this preset can be selected. " +
-            "0 = no maximum."
+            "Weight progression for this preset. The latest stage whose " +
+            "From Round has been reached determines the current weight. " +
+            "Before the first stage, the preset is unavailable."
         )]
-        [Min(0)]
-        public int lastRound =
-            0;
-
-        [Tooltip(
-            "Relative chance of this preset being selected while eligible."
-        )]
-        [Min(0f)]
-        public float weight =
-            1f;
+        public List<RoundWeightStage> weightSchedule =
+            new List<RoundWeightStage>()
+            {
+                new RoundWeightStage()
+            };
     }
 
 
@@ -213,28 +226,40 @@ public class EnemyEncounterGenerator : MonoBehaviour
         }
 
 
-        List<EnemyPoolEntry> eligible =
-            new List<EnemyPoolEntry>();
+        List<WeightedEnemyEntry> eligible =
+            new List<WeightedEnemyEntry>();
 
 
         foreach (EnemyPoolEntry entry in
                  enemyPool)
         {
             if (entry == null ||
-                entry.enemyPrefab == null ||
-                entry.weight <= 0f ||
-                playableRound <
-                    Mathf.Max(
-                        1,
-                        entry.firstRound
-                    ))
+                entry.enemyPrefab == null)
             {
                 continue;
             }
 
 
+            float activeWeight =
+                GetWeightForRound(
+                    entry.weightSchedule,
+                    playableRound
+                );
+
+
+            if (activeWeight <= 0f)
+                continue;
+
+
             eligible.Add(
-                entry
+                new WeightedEnemyEntry
+                {
+                    entry =
+                        entry,
+
+                    weight =
+                        activeWeight
+                }
             );
         }
 
@@ -242,8 +267,8 @@ public class EnemyEncounterGenerator : MonoBehaviour
         if (eligible.Count == 0)
         {
             Debug.LogWarning(
-                $"[ENCOUNTER GENERATOR] No Enemy Pool entry is eligible " +
-                $"for playable round {playableRound} " +
+                $"[ENCOUNTER GENERATOR] No Enemy Pool entry has positive " +
+                $"weight for playable round {playableRound} " +
                 $"(UI R-{playableRound - 1})."
             );
 
@@ -251,17 +276,25 @@ public class EnemyEncounterGenerator : MonoBehaviour
         }
 
 
-        EnemyPoolEntry rolled =
+        WeightedEnemyEntry rolled =
             WeightedRoll(
                 eligible,
-                entry => entry.weight
+                item => item.weight
             );
 
 
         return
-            rolled != null
-                ? rolled.enemyPrefab
+            rolled != null &&
+            rolled.entry != null
+                ? rolled.entry.enemyPrefab
                 : null;
+    }
+
+
+    private class WeightedEnemyEntry
+    {
+        public EnemyPoolEntry entry;
+        public float weight;
     }
 
 
@@ -288,52 +321,40 @@ public class EnemyEncounterGenerator : MonoBehaviour
         }
 
 
-        List<PresetPoolEntry> eligible =
-            new List<PresetPoolEntry>();
+        List<WeightedPresetEntry> eligible =
+            new List<WeightedPresetEntry>();
 
 
         foreach (PresetPoolEntry entry in
                  presetPool)
         {
             if (entry == null ||
-                entry.preset == null ||
-                entry.weight <= 0f)
+                entry.preset == null)
             {
                 continue;
             }
 
 
-            int first =
-                Mathf.Max(
-                    1,
-                    entry.firstRound
+            float activeWeight =
+                GetWeightForRound(
+                    entry.weightSchedule,
+                    playableRound
                 );
 
 
-            int last =
-                Mathf.Max(
-                    0,
-                    entry.lastRound
-                );
-
-
-            if (playableRound <
-                first)
-            {
+            if (activeWeight <= 0f)
                 continue;
-            }
-
-
-            if (last > 0 &&
-                playableRound >
-                last)
-            {
-                continue;
-            }
 
 
             eligible.Add(
-                entry
+                new WeightedPresetEntry
+                {
+                    entry =
+                        entry,
+
+                    weight =
+                        activeWeight
+                }
             );
         }
 
@@ -341,8 +362,8 @@ public class EnemyEncounterGenerator : MonoBehaviour
         if (eligible.Count == 0)
         {
             Debug.LogWarning(
-                $"[ENCOUNTER GENERATOR] No Preset Pool entry is eligible " +
-                $"for playable round {playableRound} " +
+                $"[ENCOUNTER GENERATOR] No Preset Pool entry has positive " +
+                $"weight for playable round {playableRound} " +
                 $"(UI R-{playableRound - 1})."
             );
 
@@ -354,15 +375,16 @@ public class EnemyEncounterGenerator : MonoBehaviour
         }
 
 
-        PresetPoolEntry rolled =
+        WeightedPresetEntry rolled =
             WeightedRoll(
                 eligible,
-                entry => entry.weight
+                item => item.weight
             );
 
 
         if (rolled == null ||
-            rolled.preset == null)
+            rolled.entry == null ||
+            rolled.entry.preset == null)
         {
             return
                 EmptyEncounter(
@@ -373,7 +395,8 @@ public class EnemyEncounterGenerator : MonoBehaviour
 
 
         GameObject[] authored =
-            rolled.preset.GetEnemies();
+            rolled.entry.preset
+                .GetEnemies();
 
 
         GameObject[] result =
@@ -399,9 +422,10 @@ public class EnemyEncounterGenerator : MonoBehaviour
 
 
         Debug.Log(
-            $"[ENCOUNTER GENERATOR] Preset '{rolled.preset.name}' selected " +
-            $"for playable round {playableRound} " +
-            $"(UI R-{playableRound - 1})."
+            $"[ENCOUNTER GENERATOR] Preset " +
+            $"'{rolled.entry.preset.name}' selected for playable round " +
+            $"{playableRound} (UI R-{playableRound - 1}) " +
+            $"with active weight {rolled.weight}."
         );
 
 
@@ -414,6 +438,99 @@ public class EnemyEncounterGenerator : MonoBehaviour
                 preserveSlotOrder =
                     true
             };
+    }
+
+
+    private class WeightedPresetEntry
+    {
+        public PresetPoolEntry entry;
+        public float weight;
+    }
+
+
+    // =========================================================
+    // ROUND WEIGHT SCHEDULE
+    // =========================================================
+
+    private float GetWeightForRound(
+        List<RoundWeightStage> schedule,
+        int playableRound)
+    {
+        if (schedule == null ||
+            schedule.Count == 0)
+        {
+            return 0f;
+        }
+
+
+        /*
+         * The ACTIVE weight is the stage with the highest From Round that
+         * has already been reached.
+         *
+         * The Inspector list does NOT need to be manually sorted.
+         *
+         * Example:
+         *
+         * From 1 -> Weight 1.0
+         * From 4 -> Weight 2.0
+         * From 8 -> Weight 0.0
+         *
+         * Rounds 1-3: weight 1
+         * Rounds 4-7: weight 2
+         * Round 8+:   unavailable
+         */
+        RoundWeightStage activeStage =
+            null;
+
+        int activeFromRound =
+            int.MinValue;
+
+
+        foreach (RoundWeightStage stage in
+                 schedule)
+        {
+            if (stage == null)
+                continue;
+
+
+            int stageRound =
+                Mathf.Max(
+                    1,
+                    stage.fromRound
+                );
+
+
+            if (stageRound >
+                playableRound)
+            {
+                continue;
+            }
+
+
+            if (stageRound <
+                activeFromRound)
+            {
+                continue;
+            }
+
+
+            activeStage =
+                stage;
+
+            activeFromRound =
+                stageRound;
+        }
+
+
+        if (activeStage == null)
+            return 0f;
+
+
+        return
+            Mathf.Max(
+                0f,
+                activeStage.weight
+            );
     }
 
 
