@@ -1,10 +1,14 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 [DefaultExecutionOrder(-100)]
 public class PowerSpinController : MonoBehaviour
 {
+    public static PowerSpinController Instance;
+
+
     // =========================================================
     // REFERENCES
     // =========================================================
@@ -42,6 +46,80 @@ public class PowerSpinController : MonoBehaviour
     )]
     [Range(0.05f, 1f)]
     public float maxSwitchPower = 1f;
+
+
+    // =========================================================
+    // POWER SPIN COST
+    // =========================================================
+
+    [Header("Power Spin Cost")]
+
+    [Tooltip(
+        "Base Blood cost paid when a Power Spin actually launches. " +
+        "0 = no Blood cost."
+    )]
+    [Min(0)]
+    public int baseBloodCost = 0;
+
+    [Tooltip(
+        "Base Coin cost paid when a Power Spin actually launches. " +
+        "0 = no Coin cost."
+    )]
+    [Min(0)]
+    public int baseCoinCost = 0;
+
+    [Tooltip(
+        "If true, an invalid Power Spin refunds its full Blood / Coin cost. " +
+        "Useful for a more forgiving default ruleset. Disable for harsher " +
+        "modes, Curses or Ascension rules."
+    )]
+    public bool refundCostOnInvalidSpin =
+        true;
+
+
+    [Tooltip(
+        "TMP child of the Power Switch that continuously displays " +
+        "the current effective cost."
+    )]
+    public TMP_Text costText;
+
+    [Tooltip("Color used when the effective cost is Blood.")]
+    public Color bloodCostColor = Color.red;
+
+    [Tooltip("Color used when the effective cost is Coin.")]
+    public Color coinCostColor = Color.yellow;
+
+    [Tooltip("Color used when Power Spin is free.")]
+    public Color freeCostColor = Color.white;
+
+
+    // =========================================================
+    // RUNTIME COST MODIFIERS
+    // =========================================================
+
+    /*
+     * Base costs are authored above.
+     *
+     * Runtime systems such as:
+     * - enemy Curses
+     * - Ascension rules
+     * - temporary modifiers
+     *
+     * can add their own contribution without changing the authored base.
+     *
+     * Contributions are keyed by source so the same Curse can update or
+     * remove ONLY its own contribution cleanly.
+     */
+    private class RuntimeCostModifier
+    {
+        public int bloodCost;
+        public int coinCost;
+    }
+
+
+    private readonly Dictionary<Object, RuntimeCostModifier>
+        runtimeCostModifiers =
+            new Dictionary<Object, RuntimeCostModifier>();
 
 
     // =========================================================
@@ -112,12 +190,84 @@ public class PowerSpinController : MonoBehaviour
     }
 
 
+    public int CurrentBloodCost
+    {
+        get
+        {
+            int total =
+                Mathf.Max(
+                    0,
+                    baseBloodCost
+                );
+
+
+            foreach (RuntimeCostModifier modifier in
+                     runtimeCostModifiers.Values)
+            {
+                if (modifier == null)
+                    continue;
+
+
+                total +=
+                    Mathf.Max(
+                        0,
+                        modifier.bloodCost
+                    );
+            }
+
+
+            return
+                Mathf.Max(
+                    0,
+                    total
+                );
+        }
+    }
+
+
+    public int CurrentCoinCost
+    {
+        get
+        {
+            int total =
+                Mathf.Max(
+                    0,
+                    baseCoinCost
+                );
+
+
+            foreach (RuntimeCostModifier modifier in
+                     runtimeCostModifiers.Values)
+            {
+                if (modifier == null)
+                    continue;
+
+
+                total +=
+                    Mathf.Max(
+                        0,
+                        modifier.coinCost
+                    );
+            }
+
+
+            return
+                Mathf.Max(
+                    0,
+                    total
+                );
+        }
+    }
+
+
     // =========================================================
     // UNITY
     // =========================================================
 
     private void Awake()
     {
+        Instance = this;
+
         cam = Camera.main;
 
         ResolveReferences();
@@ -126,6 +276,8 @@ public class PowerSpinController : MonoBehaviour
 
         SetSwitchPressed(false);
         SetBarPower(0f);
+
+        UpdateCostText();
     }
 
 
@@ -135,6 +287,27 @@ public class PowerSpinController : MonoBehaviour
 
         if (!fillInitialized)
             CacheVisualState();
+
+        UpdateCostText();
+    }
+
+
+    private void OnValidate()
+    {
+        baseBloodCost =
+            Mathf.Max(
+                0,
+                baseBloodCost
+            );
+
+        baseCoinCost =
+            Mathf.Max(
+                0,
+                baseCoinCost
+            );
+
+
+        UpdateCostText();
     }
 
 
@@ -287,6 +460,11 @@ public class PowerSpinController : MonoBehaviour
     private void OnDestroy()
     {
         CancelCharge();
+
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
 
@@ -347,6 +525,15 @@ public class PowerSpinController : MonoBehaviour
             return;
 
 
+        /*
+         * Do not even begin charging if the player cannot currently pay
+         * the Power Spin cost. RouletteController checks again on release,
+         * so runtime cost changes can never create a free launch.
+         */
+        if (!CanAffordCurrentCost())
+            return;
+
+
         isCharging = true;
 
         chargeElapsed = 0f;
@@ -393,10 +580,19 @@ public class PowerSpinController : MonoBehaviour
          * inputBlocked porque ese flag bloquea únicamente
          * el input manual de RouletteController.
          */
+        int bloodCost =
+            CurrentBloodCost;
+
+        int coinCost =
+            CurrentCoinCost;
+
+
         bool started =
             roulette != null &&
             roulette.TryStartPowerSpin(
-                finalPower
+                finalPower,
+                bloodCost,
+                coinCost
             );
 
 
@@ -454,6 +650,237 @@ public class PowerSpinController : MonoBehaviour
         {
             roulette.SetInputBlocked(false);
         }
+    }
+
+
+    // =========================================================
+    // COST API
+    // =========================================================
+
+    /// <summary>
+    /// Adds or replaces an additive runtime Power Spin cost contribution.
+    ///
+    /// Intended for systems such as enemy Curses and Ascension rules.
+    /// Calling this again with the same source updates that source rather
+    /// than stacking duplicate registrations.
+    /// </summary>
+    public void RegisterCostModifier(
+        Object source,
+        int bloodCost,
+        int coinCost)
+    {
+        if (source == null)
+            return;
+
+
+        runtimeCostModifiers[
+            source
+        ] =
+            new RuntimeCostModifier
+            {
+                bloodCost =
+                    Mathf.Max(
+                        0,
+                        bloodCost
+                    ),
+
+                coinCost =
+                    Mathf.Max(
+                        0,
+                        coinCost
+                    )
+            };
+
+
+        UpdateCostText();
+    }
+
+
+    /// <summary>
+    /// Removes only the contribution registered by this source.
+    /// </summary>
+    public void UnregisterCostModifier(
+        Object source)
+    {
+        if (source == null)
+            return;
+
+
+        runtimeCostModifiers.Remove(
+            source
+        );
+
+
+        UpdateCostText();
+    }
+
+
+    public bool CanAffordCurrentCost()
+    {
+        int bloodCost =
+            CurrentBloodCost;
+
+        int coinCost =
+            CurrentCoinCost;
+
+
+        if (bloodCost > 0)
+        {
+            if (BloodManager.Instance == null ||
+                BloodManager.Instance.currentBlood <
+                    bloodCost)
+            {
+                return false;
+            }
+        }
+
+
+        if (coinCost > 0)
+        {
+            if (CurrencyManager.Instance == null ||
+                !CurrencyManager.Instance.CanAfford(
+                    coinCost
+                ))
+            {
+                return false;
+            }
+        }
+
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Refunds a Power Spin cost that was already paid on launch.
+    ///
+    /// This is deliberately separate from the authored/effective cost:
+    /// the caller passes the exact amounts that were actually paid by that
+    /// spin, so later runtime Curse changes cannot alter the refund.
+    /// </summary>
+    public void RefundPaidCost(
+        int bloodAmount,
+        int coinAmount)
+    {
+        int safeBlood =
+            Mathf.Max(
+                0,
+                bloodAmount
+            );
+
+        int safeCoin =
+            Mathf.Max(
+                0,
+                coinAmount
+            );
+
+
+        if (safeBlood > 0 &&
+            BloodManager.Instance != null)
+        {
+            BloodManager.Instance
+                .HealBlood(
+                    safeBlood
+                );
+        }
+
+
+        if (safeCoin > 0 &&
+            CurrencyManager.Instance != null)
+        {
+            CurrencyManager.Instance
+                .AddDollar(
+                    safeCoin
+                );
+        }
+    }
+
+
+    // =========================================================
+    // COST UI
+    // =========================================================
+
+    public void UpdateCostText()
+    {
+        if (costText == null)
+            return;
+
+
+        int bloodCost =
+            CurrentBloodCost;
+
+        int coinCost =
+            CurrentCoinCost;
+
+
+        costText.richText =
+            true;
+
+
+        if (bloodCost <= 0 &&
+            coinCost <= 0)
+        {
+            costText.text =
+                "0";
+
+            costText.color =
+                freeCostColor;
+
+            return;
+        }
+
+
+        if (bloodCost > 0 &&
+            coinCost <= 0)
+        {
+            costText.text =
+                bloodCost.ToString();
+
+            costText.color =
+                bloodCostColor;
+
+            return;
+        }
+
+
+        if (coinCost > 0 &&
+            bloodCost <= 0)
+        {
+            costText.text =
+                "$" +
+                coinCost;
+
+            costText.color =
+                coinCostColor;
+
+            return;
+        }
+
+
+        /*
+         * Normally you may author only one resource cost.
+         *
+         * But supporting both simultaneously lets future Curses and
+         * Ascension modifiers stack without requiring another refactor.
+         */
+        string bloodHex =
+            ColorUtility.ToHtmlStringRGB(
+                bloodCostColor
+            );
+
+        string coinHex =
+            ColorUtility.ToHtmlStringRGB(
+                coinCostColor
+            );
+
+
+        costText.color =
+            Color.white;
+
+        costText.text =
+            $"<color=#{bloodHex}>{bloodCost}</color>" +
+            " / " +
+            $"<color=#{coinHex}>${coinCost}</color>";
     }
 
 

@@ -1214,6 +1214,207 @@ public class GameLogManager : MonoBehaviour
     // REAL SPIN EVENTS
     // =========================================================
 
+    public void LogPowerSpinCost(
+        int bloodSpent,
+        int coinSpent)
+    {
+        int safeBlood =
+            Mathf.Max(
+                0,
+                bloodSpent
+            );
+
+        int safeCoin =
+            Mathf.Max(
+                0,
+                coinSpent
+            );
+
+
+        if (safeBlood <= 0 &&
+            safeCoin <= 0)
+        {
+            return;
+        }
+
+
+        string line =
+            "Power Switch cost: ";
+
+
+        bool hasBlood =
+            safeBlood > 0;
+
+        bool hasCoin =
+            safeCoin > 0;
+
+
+        if (hasBlood)
+        {
+            line +=
+                BloodText(
+                    $"-{safeBlood} Blood"
+                );
+        }
+
+
+        if (hasBlood &&
+            hasCoin)
+        {
+            line +=
+                ", ";
+        }
+
+
+        if (hasCoin)
+        {
+            line +=
+                MoneyText(
+                    $"-${safeCoin}"
+                );
+        }
+
+
+        AddGameplayLine(
+            line
+        );
+    }
+
+
+    public void LogInvalidPowerSpinCostRefunded(
+        int bloodRefunded,
+        int coinRefunded)
+    {
+        int safeBlood =
+            Mathf.Max(
+                0,
+                bloodRefunded
+            );
+
+        int safeCoin =
+            Mathf.Max(
+                0,
+                coinRefunded
+            );
+
+
+        if (safeBlood <= 0 &&
+            safeCoin <= 0)
+        {
+            return;
+        }
+
+
+        string line =
+            "Power Switch cost refunded (invalid spin): ";
+
+
+        bool hasBlood =
+            safeBlood > 0;
+
+        bool hasCoin =
+            safeCoin > 0;
+
+
+        if (hasBlood)
+        {
+            line +=
+                BloodText(
+                    $"+{safeBlood} Blood"
+                );
+        }
+
+
+        if (hasBlood &&
+            hasCoin)
+        {
+            line +=
+                ", ";
+        }
+
+
+        if (hasCoin)
+        {
+            line +=
+                MoneyText(
+                    $"+${safeCoin}"
+                );
+        }
+
+
+        AddGameplayLine(
+            line
+        );
+    }
+
+
+    public void LogInvalidPowerSpinCost(
+        int bloodSpent,
+        int coinSpent)
+    {
+        int safeBlood =
+            Mathf.Max(
+                0,
+                bloodSpent
+            );
+
+        int safeCoin =
+            Mathf.Max(
+                0,
+                coinSpent
+            );
+
+
+        if (safeBlood <= 0 &&
+            safeCoin <= 0)
+        {
+            return;
+        }
+
+
+        string line =
+            "Power Switch cost (invalid spin): ";
+
+
+        bool hasBlood =
+            safeBlood > 0;
+
+        bool hasCoin =
+            safeCoin > 0;
+
+
+        if (hasBlood)
+        {
+            line +=
+                BloodText(
+                    $"-{safeBlood} Blood"
+                );
+        }
+
+
+        if (hasBlood &&
+            hasCoin)
+        {
+            line +=
+                ", ";
+        }
+
+
+        if (hasCoin)
+        {
+            line +=
+                MoneyText(
+                    $"-${safeCoin}"
+                );
+        }
+
+
+        AddGameplayLine(
+            line
+        );
+    }
+
+
     public void LogManualBrake(
         int bloodSpent)
     {

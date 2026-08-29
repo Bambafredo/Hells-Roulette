@@ -182,6 +182,25 @@ public class RouletteController : MonoBehaviour
         private set;
     } = 0f;
 
+
+    /// <summary>
+    /// Up-front resource cost actually paid by the current / last Power Spin.
+    /// Always zero for Manual and Lucky Shot spins.
+    /// </summary>
+    public int CurrentPowerSpinBloodCostPaid
+    {
+        get;
+        private set;
+    } = 0;
+
+
+    public int CurrentPowerSpinCoinCostPaid
+    {
+        get;
+        private set;
+    } = 0;
+
+
     /// <summary>
     /// Whether the current physical spin allows the player to use
     /// the Blood-powered manual brake. Manual and Power spins allow
@@ -641,10 +660,43 @@ public class RouletteController : MonoBehaviour
     /// Si la velocidad no alcanza minThrowSpeed,
     /// no se inicia una tirada real.
     /// </summary>
-    public bool TryStartPowerSpin(float power01)
+    public bool TryStartPowerSpin(
+        float power01,
+        int bloodCost = 0,
+        int coinCost = 0)
     {
         if (!CanStartNewSpin())
             return false;
+
+
+        int safeBloodCost =
+            Mathf.Max(
+                0,
+                bloodCost
+            );
+
+        int safeCoinCost =
+            Mathf.Max(
+                0,
+                coinCost
+            );
+
+
+        /*
+         * Cost is checked before launch and paid only AFTER TryBeginSpin
+         * succeeds. This prevents:
+         *
+         * - paying for a charge released below minThrowSpeed
+         * - paying when the round currently blocks spins
+         * - paying for any other rejected Power Spin
+         */
+        if (!CanAffordPowerSpinCost(
+            safeBloodCost,
+            safeCoinCost))
+        {
+            return false;
+        }
+
 
         float normalizedPower =
             Mathf.Clamp01(power01);
@@ -673,13 +725,87 @@ public class RouletteController : MonoBehaviour
         requestedSpeed *=
             direction;
 
-        return
+
+        bool started =
             TryBeginSpin(
                 requestedSpeed,
                 SpinMethod.Power,
                 normalizedPower
             );
+
+
+        if (!started)
+            return false;
+
+
+        /*
+         * The affordability check happened immediately before TryBeginSpin,
+         * so these spends are now an atomic launch cost in normal gameplay.
+         *
+         * CurrencyManager.Spend does not count as positive spin earnings,
+         * so Lucky Shot accounting remains untouched.
+         */
+        if (safeCoinCost > 0 &&
+            CurrencyManager.Instance != null)
+        {
+            CurrencyManager.Instance
+                .Spend(
+                    safeCoinCost
+                );
+        }
+
+
+        if (safeBloodCost > 0 &&
+            BloodManager.Instance != null)
+        {
+            BloodManager.Instance
+                .ConsumeBlood(
+                    safeBloodCost
+                );
+        }
+
+
+        CurrentPowerSpinBloodCostPaid =
+            safeBloodCost;
+
+        CurrentPowerSpinCoinCostPaid =
+            safeCoinCost;
+
+
+        return true;
     }
+
+
+    private bool CanAffordPowerSpinCost(
+        int bloodCost,
+        int coinCost)
+    {
+        if (bloodCost > 0)
+        {
+            if (BloodManager.Instance == null ||
+                BloodManager.Instance.currentBlood <
+                    bloodCost)
+            {
+                return false;
+            }
+        }
+
+
+        if (coinCost > 0)
+        {
+            if (CurrencyManager.Instance == null ||
+                !CurrencyManager.Instance.CanAfford(
+                    coinCost
+                ))
+            {
+                return false;
+            }
+        }
+
+
+        return true;
+    }
+
 
     // =========================================================
     // LUCKY SHOT PUBLIC API
@@ -810,6 +936,18 @@ public class RouletteController : MonoBehaviour
                     500f
                 )
                 : 0f;
+
+
+        /*
+         * Every real spin begins with no Power Spin cost recorded.
+         * TryStartPowerSpin fills these only after the launch succeeds.
+         */
+        CurrentPowerSpinBloodCostPaid =
+            0;
+
+        CurrentPowerSpinCoinCostPaid =
+            0;
+
 
         CurrentSpinAllowsManualBrake =
             method == SpinMethod.LuckyShot
@@ -1132,6 +1270,57 @@ public class RouletteController : MonoBehaviour
 
         if (!validSpin)
         {
+            bool hasPaidPowerSpinCost =
+                CurrentSpinMethod ==
+                    SpinMethod.Power &&
+                (
+                    CurrentPowerSpinBloodCostPaid > 0 ||
+                    CurrentPowerSpinCoinCostPaid > 0
+                );
+
+
+            bool refundInvalidPowerSpinCost =
+                hasPaidPowerSpinCost &&
+                PowerSpinController.Instance != null &&
+                PowerSpinController.Instance
+                    .refundCostOnInvalidSpin;
+
+
+            if (refundInvalidPowerSpinCost)
+            {
+                /*
+                 * The exact amounts paid by THIS spin are refunded.
+                 *
+                 * We intentionally do not recalculate the current effective
+                 * cost here: a Curse may theoretically have changed between
+                 * launch and resolution.
+                 */
+                PowerSpinController.Instance
+                    .RefundPaidCost(
+                        CurrentPowerSpinBloodCostPaid,
+                        CurrentPowerSpinCoinCostPaid
+                    );
+
+
+                GameLogManager.Instance?
+                    .LogInvalidPowerSpinCostRefunded(
+                        CurrentPowerSpinBloodCostPaid,
+                        CurrentPowerSpinCoinCostPaid
+                    );
+            }
+            else if (hasPaidPowerSpinCost)
+            {
+                /*
+                 * Harsher rulesets may keep the cost even on an invalid spin.
+                 */
+                GameLogManager.Instance?
+                    .LogInvalidPowerSpinCost(
+                        CurrentPowerSpinBloodCostPaid,
+                        CurrentPowerSpinCoinCostPaid
+                    );
+            }
+
+
             OnSpinEnd?
                 .Invoke();
 
@@ -1183,6 +1372,22 @@ public class RouletteController : MonoBehaviour
                     methodLabel,
                     LastLaunchPower01
                 );
+
+
+            if (CurrentSpinMethod ==
+                    SpinMethod.Power &&
+                (
+                    CurrentPowerSpinBloodCostPaid > 0 ||
+                    CurrentPowerSpinCoinCostPaid > 0
+                ))
+            {
+                GameLogManager.Instance
+                    .LogPowerSpinCost(
+                        CurrentPowerSpinBloodCostPaid,
+                        CurrentPowerSpinCoinCostPaid
+                    );
+            }
+
 
             if (brakeBloodSpentThisSpin > 0)
             {
