@@ -51,6 +51,18 @@ public class RouletteController : MonoBehaviour
     // POWER SPIN
     // =========================================================
 
+    [Header("Sticker Physics Performance")]
+
+    [Tooltip(
+        "If enabled, colliders belonging to stickers currently placed on " +
+        "the wheel are temporarily disabled during the physical spin and " +
+        "restored before spin resolution. This reduces Physics2D work while " +
+        "the wheel is moving without affecting placement validation."
+    )]
+    public bool disableWheelStickerCollidersDuringSpin =
+        true;
+
+
     [Header("Power Spin")]
 
     [Tooltip(
@@ -64,6 +76,16 @@ public class RouletteController : MonoBehaviour
         "En Unity, rotación Z negativa = horario."
     )]
     public bool powerSpinClockwise = true;
+
+    private void OnDisable()
+    {
+        /*
+         * Editor stop, scene changes or disabling this component must never
+         * leave sticker colliders disabled.
+         */
+        RestoreWheelStickerCollidersAfterSpin();
+    }
+
 
     // =========================================================
     // INPUT
@@ -968,6 +990,10 @@ public class RouletteController : MonoBehaviour
         SpinInProgress =
             true;
 
+
+        DisableWheelStickerCollidersForSpin();
+
+
         isBraking =
             false;
 
@@ -1233,11 +1259,85 @@ public class RouletteController : MonoBehaviour
     }
 
     // =========================================================
+    // STICKER COLLIDER PERFORMANCE
+    // =========================================================
+
+    private void DisableWheelStickerCollidersForSpin()
+    {
+        if (!disableWheelStickerCollidersDuringSpin)
+            return;
+
+
+        BaseSticker[] stickers =
+            FindObjectsOfType<BaseSticker>(
+                true
+            );
+
+
+        foreach (BaseSticker sticker in
+                 stickers)
+        {
+            if (sticker == null)
+                continue;
+
+
+            sticker.DisableWheelColliderForPhysicalSpin();
+        }
+    }
+
+
+    private void RestoreWheelStickerCollidersAfterSpin()
+    {
+        /*
+         * Restore regardless of the current Inspector toggle.
+         *
+         * This makes the system safe if the option is changed in the Editor
+         * while a test spin is already in progress.
+         */
+        BaseSticker[] stickers =
+            FindObjectsOfType<BaseSticker>(
+                true
+            );
+
+
+        foreach (BaseSticker sticker in
+                 stickers)
+        {
+            if (sticker == null)
+                continue;
+
+
+            sticker.RestoreWheelColliderAfterPhysicalSpin();
+        }
+
+
+        /*
+         * Placement validation uses Collider2D geometry immediately after
+         * effects such as WheelShifter regenerate the wheel. Synchronizing
+         * now guarantees Physics2D sees every restored collider before any
+         * resolution code can query overlaps / distances / closest points.
+         */
+        Physics2D.SyncTransforms();
+    }
+
+
+    // =========================================================
     // SPIN RESOLUTION
     // =========================================================
 
     private void ResolveFinishedSpin()
     {
+        /*
+         * The physical movement is over.
+         *
+         * Restore sticker colliders BEFORE absolutely any spin-resolution
+         * work happens. This is especially important for WheelShifter /
+         * Magic Bean: their wheel regeneration ends by validating sticker
+         * placement, which requires the real sticker colliders to be active.
+         */
+        RestoreWheelStickerCollidersAfterSpin();
+
+
         /*
          * 1. Primero determinamos el segmento final.
          *

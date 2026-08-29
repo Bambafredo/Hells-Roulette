@@ -134,6 +134,28 @@ public class BaseSticker : MonoBehaviour
 
     private Collider2D myCollider;
 
+
+    // ===========================================================
+    // SPIN COLLIDER OPTIMIZATION
+    // ===========================================================
+
+    /*
+     * During the physical wheel spin, a sticker placed on the wheel
+     * cannot be dragged or hovered meaningfully, but its Collider2D
+     * would otherwise keep moving with the rotating wheel and continue
+     * participating in Physics2D broadphase updates.
+     *
+     * We temporarily disable ONLY the sticker's explicit interaction /
+     * placement collider, then restore its exact previous enabled state
+     * before spin resolution begins.
+     */
+    private bool spinColliderTemporarilyDisabled =
+        false;
+
+    private bool spinColliderPreviousEnabledState =
+        false;
+
+
     // ===========================================================
     // UNITY
     // ===========================================================
@@ -759,6 +781,87 @@ public class BaseSticker : MonoBehaviour
 
         currentAlbumZone = null;
     }
+
+    // ===========================================================
+    // SPIN COLLIDER OPTIMIZATION
+    // ===========================================================
+
+    /// <summary>
+    /// Temporarily disables this physical sticker collider while the wheel
+    /// is spinning.
+    ///
+    /// Only stickers currently placed on the wheel are eligible.
+    /// Album / reward / loose stickers remain untouched.
+    ///
+    /// The collider's exact previous enabled state is remembered so a
+    /// collider that was intentionally disabled before the spin is never
+    /// accidentally enabled afterwards.
+    /// </summary>
+    public void DisableWheelColliderForPhysicalSpin()
+    {
+        if (spinColliderTemporarilyDisabled)
+            return;
+
+
+        if (!isPlaced ||
+            currentSegment == null)
+        {
+            return;
+        }
+
+
+        Collider2D collider =
+            StickerCollider;
+
+
+        if (collider == null)
+            return;
+
+
+        spinColliderPreviousEnabledState =
+            collider.enabled;
+
+        spinColliderTemporarilyDisabled =
+            true;
+
+
+        if (collider.enabled)
+        {
+            collider.enabled =
+                false;
+        }
+    }
+
+
+    /// <summary>
+    /// Restores the collider state captured by
+    /// DisableWheelColliderForPhysicalSpin().
+    ///
+    /// This is called BEFORE any valid-spin sticker effects resolve, so
+    /// WheelShifter / Magic Bean wheel regeneration and placement validation
+    /// always see fully active sticker colliders.
+    /// </summary>
+    public void RestoreWheelColliderAfterPhysicalSpin()
+    {
+        if (!spinColliderTemporarilyDisabled)
+            return;
+
+
+        Collider2D collider =
+            StickerCollider;
+
+
+        if (collider != null)
+        {
+            collider.enabled =
+                spinColliderPreviousEnabledState;
+        }
+
+
+        spinColliderTemporarilyDisabled =
+            false;
+    }
+
 
     // ===========================================================
     // SEGMENT VALIDATION
