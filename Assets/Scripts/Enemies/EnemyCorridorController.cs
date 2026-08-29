@@ -162,6 +162,21 @@ public class EnemyCorridorController : MonoBehaviour
 
 
     /*
+     * A row first rolls its enemy PREFABS, then sorts those rolled choices
+     * by placement priority before instantiating them into Slot_L/C/R.
+     *
+     * randomTieBreaker makes equal-priority enemies random relative to one
+     * another instead of relying on List.Sort implementation details.
+     */
+    private class GeneratedEnemyChoice
+    {
+        public GameObject prefab;
+        public int placementPriority;
+        public float randomTieBreaker;
+    }
+
+
+    /*
      * Row dimming must be reversible.
      *
      * We therefore remember the original tint/alpha of every SpriteRenderer
@@ -719,12 +734,18 @@ public class EnemyCorridorController : MonoBehaviour
             0;
 
 
-        foreach (Transform slot in slots)
+        // -----------------------------------------------------
+        // 1) ROLL THE COMPOSITION
+        // -----------------------------------------------------
+
+        List<GeneratedEnemyChoice> choices =
+            new List<GeneratedEnemyChoice>();
+
+
+        for (int i = 0;
+             i < slots.Count;
+             i++)
         {
-            if (slot == null)
-                continue;
-
-
             GameObject prefab =
                 GetRandomEnemyPrefab();
 
@@ -733,16 +754,104 @@ public class EnemyCorridorController : MonoBehaviour
                 continue;
 
 
-            /*
-             * Each slot rolls independently from the pool.
-             *
-             * Duplicates are intentionally allowed. With Imp + TaxCollector,
-             * examples include:
-             *
-             * Imp / Imp / TaxCollector
-             * TaxCollector / Imp / TaxCollector
-             * Imp / TaxCollector / Imp
-             */
+            choices.Add(
+                new GeneratedEnemyChoice
+                {
+                    prefab =
+                        prefab,
+
+                    placementPriority =
+                        GetPrefabPlacementPriority(
+                            prefab
+                        ),
+
+                    randomTieBreaker =
+                        Random.value
+                }
+            );
+        }
+
+
+        // -----------------------------------------------------
+        // 2) ORDER LEFT -> RIGHT BY PRIORITY
+        // -----------------------------------------------------
+
+        /*
+         * Slots are cached left-to-right.
+         *
+         * Lower priority therefore goes left.
+         * Higher priority therefore goes right.
+         *
+         * Equal priorities use a random tie breaker.
+         *
+         * Example:
+         *
+         * Imp       priority 0
+         * Bomber    priority 10
+         *
+         * Rolled: Bomber / Imp / Bomber
+         * Placed: Imp / Bomber / Bomber
+         */
+        choices.Sort(
+            (a, b) =>
+            {
+                int priorityCompare =
+                    a.placementPriority
+                        .CompareTo(
+                            b.placementPriority
+                        );
+
+
+                if (priorityCompare != 0)
+                {
+                    return
+                        priorityCompare;
+                }
+
+
+                return
+                    a.randomTieBreaker
+                        .CompareTo(
+                            b.randomTieBreaker
+                        );
+            }
+        );
+
+
+        // -----------------------------------------------------
+        // 3) SPAWN INTO THE ORDERED SLOTS
+        // -----------------------------------------------------
+
+        int spawnCount =
+            Mathf.Min(
+                slots.Count,
+                choices.Count
+            );
+
+
+        for (int i = 0;
+             i < spawnCount;
+             i++)
+        {
+            Transform slot =
+                slots[i];
+
+            GeneratedEnemyChoice choice =
+                choices[i];
+
+
+            if (slot == null ||
+                choice == null ||
+                choice.prefab == null)
+            {
+                continue;
+            }
+
+
+            GameObject prefab =
+                choice.prefab;
+
+
             GameObject instance =
                 Instantiate(
                     prefab,
@@ -800,6 +909,28 @@ public class EnemyCorridorController : MonoBehaviour
             $"[ENEMY CORRIDOR] Generated random row '{row.name}' " +
             $"with {spawnedCount} fresh enemy instance(s)."
         );
+    }
+
+
+    private int GetPrefabPlacementPriority(
+        GameObject prefab)
+    {
+        if (prefab == null)
+            return 0;
+
+
+        BaseEnemy enemy =
+            prefab.GetComponentInChildren<BaseEnemy>(
+                true
+            );
+
+
+        if (enemy == null)
+            return 0;
+
+
+        return
+            enemy.RowPlacementPriority;
     }
 
 

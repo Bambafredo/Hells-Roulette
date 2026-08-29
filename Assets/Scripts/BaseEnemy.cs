@@ -19,6 +19,21 @@ public class BaseEnemy : MonoBehaviour
 
 
     // =========================================================
+    // ROW PLACEMENT
+    // =========================================================
+
+    [Header("Row Placement")]
+
+    [Tooltip(
+        "Controls preferred horizontal placement when a random row is " +
+        "generated. Higher values are placed farther to the RIGHT. " +
+        "Enemies with the same priority are ordered randomly."
+    )]
+    public int rowPlacementPriority =
+        0;
+
+
+    // =========================================================
     // ACTION SEQUENCE
     // =========================================================
 
@@ -141,6 +156,12 @@ public class BaseEnemy : MonoBehaviour
     public int CurrentHP
     {
         get { return currentHP; }
+    }
+
+
+    public int RowPlacementPriority
+    {
+        get { return rowPlacementPriority; }
     }
 
 
