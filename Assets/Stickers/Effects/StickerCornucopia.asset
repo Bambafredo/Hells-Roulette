@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6fbe8916037bb42468ab761a6c590e98, type: 3}
+  m_Name: StickerCornucopia
+  m_EditorClassIdentifier: 
+  stickerName: Cornucopia
+  icon: {fileID: 21300000, guid: 2e32b15032f23fa4b85f34e5d44d8cd6, type: 3}
+  basePurchaseCost: 8
+  maxUses: 3
+  consumeUseOnWinningActivation: 1
+  consumeUseOnNonWinningActivation: 0
+  consumeUseOnAlbumActivation: 0
+  dollarReward: 0
+  logDescription: 
+  winningSegmentTooltip: Earn ${moneyPerSticker} for every sticker in the wheel.
+    Current total is ${totalPayout} ({stickerCount} stickers).
+  losingSegmentTooltip: 
+  albumTooltip: 
+  moneyPerSticker: 1
