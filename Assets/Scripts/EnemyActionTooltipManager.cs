@@ -102,6 +102,8 @@ public class EnemyActionTooltipManager : MonoBehaviour
 
     private BaseEnemy currentEnemy;
     private EnemyAction currentAction;
+    private EnemyCurse currentCurse;
+
     private string currentText =
         "";
 
@@ -170,50 +172,106 @@ public class EnemyActionTooltipManager : MonoBehaviour
         }
 
 
-        BaseEnemy hoveredEnemy =
-            FindHoveredEnemyActionIcon();
+        HoverResult hover =
+            FindHoveredEnemyIcon();
 
 
-        if (hoveredEnemy == null ||
-            !hoveredEnemy.CombatActive ||
-            hoveredEnemy.IsDead)
+        if (hover.enemy == null ||
+            !hover.enemy.CombatActive ||
+            hover.enemy.IsDead)
         {
             HideTooltip();
             return;
         }
 
 
-        EnemyAction action =
-            hoveredEnemy.CurrentAction;
+        // -----------------------------------------------------
+        // ACTION ICON
+        // -----------------------------------------------------
 
-
-        if (action == null)
+        if (hover.kind ==
+            HoverKind.Action)
         {
-            HideTooltip();
-            return;
-        }
+            EnemyAction action =
+                hover.enemy.CurrentAction;
 
 
-        string tooltip =
-            BuildTooltip(
-                hoveredEnemy,
-                action
+            if (action == null)
+            {
+                HideTooltip();
+                return;
+            }
+
+
+            string tooltip =
+                BuildActionTooltip(
+                    hover.enemy,
+                    action
+                );
+
+
+            if (string.IsNullOrWhiteSpace(
+                tooltip))
+            {
+                HideTooltip();
+                return;
+            }
+
+
+            ShowActionTooltip(
+                hover.enemy,
+                action,
+                tooltip
             );
 
-
-        if (string.IsNullOrWhiteSpace(
-            tooltip))
-        {
-            HideTooltip();
             return;
         }
 
 
-        ShowTooltip(
-            hoveredEnemy,
-            action,
-            tooltip
-        );
+        // -----------------------------------------------------
+        // CURSE ICON
+        // -----------------------------------------------------
+
+        if (hover.kind ==
+            HoverKind.Curse)
+        {
+            EnemyCurse curse =
+                hover.enemy.CurrentCurse;
+
+
+            if (curse == null)
+            {
+                HideTooltip();
+                return;
+            }
+
+
+            string tooltip =
+                BuildCurseTooltip(
+                    hover.enemy,
+                    curse
+                );
+
+
+            if (string.IsNullOrWhiteSpace(
+                tooltip))
+            {
+                HideTooltip();
+                return;
+            }
+
+
+            ShowCurseTooltip(
+                hover.enemy,
+                curse,
+                tooltip
+            );
+
+            return;
+        }
+
+
+        HideTooltip();
 
 #endif
     }
@@ -331,8 +389,31 @@ public class EnemyActionTooltipManager : MonoBehaviour
     // HOVER
     // =========================================================
 
-    private BaseEnemy FindHoveredEnemyActionIcon()
+    private enum HoverKind
     {
+        None,
+        Action,
+        Curse
+    }
+
+
+    private struct HoverResult
+    {
+        public BaseEnemy enemy;
+        public HoverKind kind;
+    }
+
+
+    private HoverResult FindHoveredEnemyIcon()
+    {
+        HoverResult result =
+            new HoverResult
+            {
+                enemy = null,
+                kind = HoverKind.None
+            };
+
+
         Ray ray =
             enemyCamera.ScreenPointToRay(
                 Input.mousePosition
@@ -340,15 +421,11 @@ public class EnemyActionTooltipManager : MonoBehaviour
 
 
         /*
-         * This is the key for our setup:
+         * EnemyCamera is perspective while Action_Icon / Curse_Icon use
+         * Collider2D components in EnemyWorld.
          *
-         * - EnemyCamera is perspective.
-         * - Action_Icon is a SpriteRenderer in EnemyWorld.
-         * - Action_Icon uses a shader that ignores the 3D depth buffer.
-         * - Hover still uses its normal BoxCollider2D.
-         *
-         * Physics2D.GetRayIntersectionAll lets a 3D camera ray intersect
-         * Collider2D objects at their real Z depth.
+         * The AlwaysOnTop shader only changes rendering. It does not change
+         * physics, so the normal 2D colliders remain perfect hover targets.
          */
         RaycastHit2D[] hits =
             Physics2D.GetRayIntersectionAll(
@@ -361,7 +438,7 @@ public class EnemyActionTooltipManager : MonoBehaviour
         if (hits == null ||
             hits.Length == 0)
         {
-            return null;
+            return result;
         }
 
 
@@ -379,40 +456,75 @@ public class EnemyActionTooltipManager : MonoBehaviour
                     .GetComponentInParent<BaseEnemy>();
 
 
-            if (enemy == null ||
-                enemy.actionIconRenderer == null)
-            {
+            if (enemy == null)
                 continue;
-            }
-
-
-            Transform iconRoot =
-                enemy.actionIconRenderer
-                    .transform;
 
 
             Transform hitTransform =
-                hit.collider
-                    .transform;
+                hit.collider.transform;
 
 
-            /*
-             * Accept only colliders that belong to Action_Icon itself
-             * (or one of its children), not arbitrary colliders on the enemy.
-             */
-            if (hitTransform != iconRoot &&
-                !hitTransform.IsChildOf(
-                    iconRoot))
+            // -------------------------------------------------
+            // ACTION ICON
+            // -------------------------------------------------
+
+            if (BelongsToRenderer(
+                hitTransform,
+                enemy.actionIconRenderer))
             {
-                continue;
+                result.enemy =
+                    enemy;
+
+                result.kind =
+                    HoverKind.Action;
+
+                return result;
             }
 
 
-            return enemy;
+            // -------------------------------------------------
+            // CURSE ICON
+            // -------------------------------------------------
+
+            if (BelongsToRenderer(
+                hitTransform,
+                enemy.curseIconRenderer))
+            {
+                result.enemy =
+                    enemy;
+
+                result.kind =
+                    HoverKind.Curse;
+
+                return result;
+            }
         }
 
 
-        return null;
+        return result;
+    }
+
+
+    private bool BelongsToRenderer(
+        Transform hitTransform,
+        SpriteRenderer targetRenderer)
+    {
+        if (hitTransform == null ||
+            targetRenderer == null)
+        {
+            return false;
+        }
+
+
+        Transform targetRoot =
+            targetRenderer.transform;
+
+
+        return
+            hitTransform == targetRoot ||
+            hitTransform.IsChildOf(
+                targetRoot
+            );
     }
 
 
@@ -420,7 +532,7 @@ public class EnemyActionTooltipManager : MonoBehaviour
     // CONTENT
     // =========================================================
 
-    private string BuildTooltip(
+    private string BuildActionTooltip(
         BaseEnemy enemy,
         EnemyAction action)
     {
@@ -454,27 +566,56 @@ public class EnemyActionTooltipManager : MonoBehaviour
     }
 
 
+    private string BuildCurseTooltip(
+        BaseEnemy enemy,
+        EnemyCurse curse)
+    {
+        string description =
+            curse.GetTooltipDescription(
+                enemy,
+                enemy.CurseValue
+            );
+
+
+        string nameHex =
+            ColorUtility.ToHtmlStringRGB(
+                actionNameColor
+            );
+
+
+        if (string.IsNullOrWhiteSpace(
+            description))
+        {
+            return
+                $"<color=#{nameHex}>" +
+                $"{curse.CurseName}" +
+                "</color>";
+        }
+
+
+        return
+            $"<color=#{nameHex}>" +
+            $"{curse.CurseName}" +
+            "</color>\n" +
+            description;
+    }
+
+
     // =========================================================
     // SHOW / HIDE
     // =========================================================
 
-    private void ShowTooltip(
+    private void ShowActionTooltip(
         BaseEnemy enemy,
         EnemyAction action,
         string tooltip)
     {
-        if (!tooltipPanel.gameObject.activeSelf)
-        {
-            tooltipPanel.gameObject
-                .SetActive(true);
-
-            tooltipPanel
-                .SetAsLastSibling();
-        }
+        EnsureTooltipVisible();
 
 
         if (currentEnemy != enemy ||
             currentAction != action ||
+            currentCurse != null ||
             currentText != tooltip)
         {
             currentEnemy =
@@ -482,6 +623,9 @@ public class EnemyActionTooltipManager : MonoBehaviour
 
             currentAction =
                 action;
+
+            currentCurse =
+                null;
 
             currentText =
                 tooltip;
@@ -499,12 +643,66 @@ public class EnemyActionTooltipManager : MonoBehaviour
     }
 
 
+    private void ShowCurseTooltip(
+        BaseEnemy enemy,
+        EnemyCurse curse,
+        string tooltip)
+    {
+        EnsureTooltipVisible();
+
+
+        if (currentEnemy != enemy ||
+            currentCurse != curse ||
+            currentAction != null ||
+            currentText != tooltip)
+        {
+            currentEnemy =
+                enemy;
+
+            currentAction =
+                null;
+
+            currentCurse =
+                curse;
+
+            currentText =
+                tooltip;
+
+
+            tooltipText.text =
+                tooltip;
+
+
+            ResizePanelToText();
+        }
+
+
+        UpdateTooltipPosition();
+    }
+
+
+    private void EnsureTooltipVisible()
+    {
+        if (!tooltipPanel.gameObject.activeSelf)
+        {
+            tooltipPanel.gameObject
+                .SetActive(true);
+
+            tooltipPanel
+                .SetAsLastSibling();
+        }
+    }
+
+
     private void HideTooltip()
     {
         currentEnemy =
             null;
 
         currentAction =
+            null;
+
+        currentCurse =
             null;
 
         currentText =
