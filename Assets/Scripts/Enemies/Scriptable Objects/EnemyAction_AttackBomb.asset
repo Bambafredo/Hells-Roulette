@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 750a2324e12e9064daf8442b6382e15c, type: 3}
+  m_Name: EnemyAction_AttackBomb
+  m_EditorClassIdentifier: 
+  actionName: KABOOM
+  icon: {fileID: 21300000, guid: b3f90bae5b5ad684589fdb550c654018, type: 3}
+  tooltipDescription: Deals 10 damage
+  bloodDamage: 10
