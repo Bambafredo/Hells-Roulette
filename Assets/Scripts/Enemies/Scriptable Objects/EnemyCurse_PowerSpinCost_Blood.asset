@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f70d30cd54f72bb4a87192436783955c, type: 3}
+  m_Name: EnemyCurse_PowerSpinCost_Blood
+  m_EditorClassIdentifier: 
+  curseName: "Gambler\xB4s Temptation"
+  icon: {fileID: 21300000, guid: 1c65bf97eec4a2745b27175ea71aec94, type: 3}
+  tooltipDescription: Power Spins cost {blood} more Blood.
+  additionalBloodCost: 3
+  additionalCoinCost: 0
