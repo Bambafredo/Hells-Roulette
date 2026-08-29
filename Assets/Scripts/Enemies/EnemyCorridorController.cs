@@ -27,22 +27,22 @@ public class EnemyCorridorController : MonoBehaviour
     [Header("Encounter Generation")]
 
     [Tooltip(
-        "Pool used only to repopulate a recycled Future row with fresh " +
-        "enemy instances. For now this can contain only Enemy_Imp."
+        "Decides WHICH enemies belong to each encounter. " +
+        "The Corridor only handles rows, movement and placement."
     )]
-    public GameObject[] enemyPrefabs;
+    public EnemyEncounterGenerator encounterGenerator;
 
     [Tooltip(
-        "If true, Current / Next / Future are all filled from Enemy Prefabs " +
-        "when the scene starts. Any enemy instances manually left inside " +
-        "the row Slots are replaced."
+        "If true, Current / Next / Future are generated when the scene starts."
     )]
-    public bool randomizeInitialRowsOnStart = true;
+    public bool randomizeInitialRowsOnStart =
+        true;
 
     [Tooltip(
-        "If true, when a row is recycled to the back it gets fresh enemies."
+        "If true, the recycled Future row receives a newly generated encounter."
     )]
-    public bool regenerateFutureRowOnAdvance = true;
+    public bool regenerateFutureRowOnAdvance =
+        true;
 
 
     // =========================================================
@@ -142,6 +142,21 @@ public class EnemyCorridorController : MonoBehaviour
 
 
     /*
+     * Pool-round authoring is intentionally 1-based:
+     *
+     * 1 = first playable round = UI R-0
+     * 2 = second playable round = UI R-1
+     * 3 = third playable round = UI R-2
+     *
+     * At scene start we pre-generate rounds 1, 2 and 3 into
+     * Current / Next / Future. Every recycled FutureRow then consumes the
+     * next number from this counter.
+     */
+    private int nextPoolRoundToGenerate =
+        4;
+
+
+    /*
      * Each row uses its DIRECT children as persistent enemy Slots.
      *
      * Expected hierarchy:
@@ -198,20 +213,43 @@ public class EnemyCorridorController : MonoBehaviour
         CaptureRowSpawnSlots();
 
 
+        if (encounterGenerator == null)
+        {
+            encounterGenerator =
+                FindObjectOfType<EnemyEncounterGenerator>();
+        }
+
+
         if (randomizeInitialRowsOnStart)
         {
+            /*
+             * We are generating THREE future encounters at once, so each
+             * row must filter the enemy pool using the round that row
+             * actually represents, not simply the current game round.
+             *
+             * Current = playable round 1 (R-0)
+             * Next    = playable round 2 (R-1)
+             * Future  = playable round 3 (R-2)
+             */
             RegenerateRowWithFreshEnemies(
-                currentRow
+                currentRow,
+                1
             );
 
             RegenerateRowWithFreshEnemies(
-                nextRow
+                nextRow,
+                2
             );
 
             RegenerateRowWithFreshEnemies(
-                futureRow
+                futureRow,
+                3
             );
         }
+
+
+        nextPoolRoundToGenerate =
+            4;
 
 
         RegisterBaseColorsForRow(
@@ -639,8 +677,12 @@ public class EnemyCorridorController : MonoBehaviour
         if (regenerateFutureRowOnAdvance)
         {
             RegenerateRowWithFreshEnemies(
-                futureRow
+                futureRow,
+                nextPoolRoundToGenerate
             );
+
+
+            nextPoolRoundToGenerate++;
         }
 
 
@@ -677,18 +719,17 @@ public class EnemyCorridorController : MonoBehaviour
     // =========================================================
 
     private void RegenerateRowWithFreshEnemies(
-        Transform row)
+        Transform row,
+        int poolRoundNumber)
     {
         if (row == null)
             return;
 
 
-        if (enemyPrefabs == null ||
-            enemyPrefabs.Length == 0)
+        if (encounterGenerator == null)
         {
             Debug.LogWarning(
-                "[ENEMY CORRIDOR] No enemy prefabs assigned. " +
-                "Cannot generate row."
+                "[ENEMY CORRIDOR] Encounter Generator is missing."
             );
 
             return;
@@ -720,38 +761,47 @@ public class EnemyCorridorController : MonoBehaviour
         }
 
 
-        /*
-         * Remove the previous physical enemy instances.
-         *
-         * Slot_L / Slot_C / Slot_R themselves are never destroyed.
-         */
         ClearEnemyRootsFromRow(
             row
         );
 
 
-        int spawnedCount =
-            0;
+        EnemyEncounterGenerator.GeneratedEncounter generated =
+            encounterGenerator.GenerateEncounter(
+                poolRoundNumber,
+                slots.Count
+            );
 
 
-        // -----------------------------------------------------
-        // 1) ROLL THE COMPOSITION
-        // -----------------------------------------------------
+        if (generated == null ||
+            generated.enemies == null)
+        {
+            Debug.LogWarning(
+                $"[ENEMY CORRIDOR] Generator returned no encounter for " +
+                $"playable round {poolRoundNumber}."
+            );
+
+            return;
+        }
+
 
         List<GeneratedEnemyChoice> choices =
             new List<GeneratedEnemyChoice>();
 
 
+        int sourceCount =
+            Mathf.Min(
+                slots.Count,
+                generated.enemies.Length
+            );
+
+
         for (int i = 0;
-             i < slots.Count;
+             i < sourceCount;
              i++)
         {
             GameObject prefab =
-                GetRandomEnemyPrefab();
-
-
-            if (prefab == null)
-                continue;
+                generated.enemies[i];
 
 
             choices.Add(
@@ -761,9 +811,11 @@ public class EnemyCorridorController : MonoBehaviour
                         prefab,
 
                     placementPriority =
-                        GetPrefabPlacementPriority(
-                            prefab
-                        ),
+                        prefab != null
+                            ? GetPrefabPlacementPriority(
+                                prefab
+                            )
+                            : 0,
 
                     randomTieBreaker =
                         Random.value
@@ -772,55 +824,51 @@ public class EnemyCorridorController : MonoBehaviour
         }
 
 
-        // -----------------------------------------------------
-        // 2) ORDER LEFT -> RIGHT BY PRIORITY
-        // -----------------------------------------------------
-
         /*
-         * Slots are cached left-to-right.
+         * Enemy Pool has no authored formation, so placement priorities are
+         * applied.
          *
-         * Lower priority therefore goes left.
-         * Higher priority therefore goes right.
-         *
-         * Equal priorities use a random tie breaker.
-         *
-         * Example:
-         *
-         * Imp       priority 0
-         * Bomber    priority 10
-         *
-         * Rolled: Bomber / Imp / Bomber
-         * Placed: Imp / Bomber / Bomber
+         * Preset Pool preserves exact Left / Center / Right order.
          */
-        choices.Sort(
-            (a, b) =>
-            {
-                int priorityCompare =
-                    a.placementPriority
-                        .CompareTo(
-                            b.placementPriority
-                        );
+        if (!generated.preserveSlotOrder)
+        {
+            choices.RemoveAll(
+                choice =>
+                    choice == null ||
+                    choice.prefab == null
+            );
 
 
-                if (priorityCompare != 0)
+            choices.Sort(
+                (a, b) =>
                 {
+                    int priorityCompare =
+                        a.placementPriority
+                            .CompareTo(
+                                b.placementPriority
+                            );
+
+
+                    if (priorityCompare != 0)
+                    {
+                        return
+                            priorityCompare;
+                    }
+
+
                     return
-                        priorityCompare;
+                        a.randomTieBreaker
+                            .CompareTo(
+                                b.randomTieBreaker
+                            );
                 }
+            );
+        }
 
 
-                return
-                    a.randomTieBreaker
-                        .CompareTo(
-                            b.randomTieBreaker
-                        );
-            }
-        );
+        int spawnedCount =
+            0;
 
-
-        // -----------------------------------------------------
-        // 3) SPAWN INTO THE ORDERED SLOTS
-        // -----------------------------------------------------
 
         int spawnCount =
             Mathf.Min(
@@ -840,6 +888,10 @@ public class EnemyCorridorController : MonoBehaviour
                 choices[i];
 
 
+            /*
+             * In Preset Pool, null means an intentionally empty authored
+             * slot. Do not shift later enemies into that position.
+             */
             if (slot == null ||
                 choice == null ||
                 choice.prefab == null)
@@ -882,11 +934,6 @@ public class EnemyCorridorController : MonoBehaviour
 
             if (enemy != null)
             {
-                /*
-                 * Regenerated rows are previews by default.
-                 *
-                 * ApplyCombatStates() will enable ONLY CurrentRow.
-                 */
                 enemy.SetCombatActive(
                     false
                 );
@@ -906,8 +953,10 @@ public class EnemyCorridorController : MonoBehaviour
 
 
         Debug.Log(
-            $"[ENEMY CORRIDOR] Generated random row '{row.name}' " +
-            $"with {spawnedCount} fresh enemy instance(s)."
+            $"[ENEMY CORRIDOR] Generated row '{row.name}' " +
+            $"for playable round {poolRoundNumber} " +
+            $"(UI R-{poolRoundNumber - 1}) with " +
+            $"{spawnedCount} enemy instance(s)."
         );
     }
 
@@ -931,50 +980,6 @@ public class EnemyCorridorController : MonoBehaviour
 
         return
             enemy.RowPlacementPriority;
-    }
-
-
-    private GameObject GetRandomEnemyPrefab()
-    {
-        if (enemyPrefabs == null ||
-            enemyPrefabs.Length == 0)
-        {
-            return null;
-        }
-
-
-        /*
-         * This is intentionally only a minimal fresh-instance provider.
-         *
-         * Proper encounter composition / difficulty generation is a later
-         * system. With a single Enemy_Imp in the array, it simply creates
-         * fresh Imps.
-         */
-        int startIndex =
-            Random.Range(
-                0,
-                enemyPrefabs.Length
-            );
-
-
-        for (int i = 0;
-             i < enemyPrefabs.Length;
-             i++)
-        {
-            int index =
-                (
-                    startIndex +
-                    i
-                ) %
-                enemyPrefabs.Length;
-
-
-            if (enemyPrefabs[index] != null)
-                return enemyPrefabs[index];
-        }
-
-
-        return null;
     }
 
 

@@ -2049,11 +2049,7 @@ MonoBehaviour:
   currentRow: {fileID: 1329714115}
   nextRow: {fileID: 479383557}
   futureRow: {fileID: 1371605878}
-  enemyPrefabs:
-  - {fileID: 7377409930441240661, guid: a6802fa4c6cc26e4fab29f97242fc621, type: 3}
-  - {fileID: 7377409930441240661, guid: 2c56bdfc28c67c0499f6c1451cd9c0fc, type: 3}
-  - {fileID: 7377409930441240661, guid: 28a550bcd9a8ce64e9e958379143d5fe, type: 3}
-  - {fileID: 7377409930441240661, guid: 9ac71f69cd3dc114481700ac64e0265f, type: 3}
+  encounterGenerator: {fileID: 1403202720}
   randomizeInitialRowsOnStart: 1
   regenerateFutureRowOnAdvance: 1
   currentBrightness: 1
@@ -7836,6 +7832,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1403202719}
+  - component: {fileID: 1403202720}
   m_Layer: 3
   m_Name: EnemyWorld
   m_TagString: Untagged
@@ -7862,6 +7859,45 @@ Transform:
   - {fileID: 969265694}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1403202720
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1403202718}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4699203ca845ddc49a6e7370d31ada01, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  generationMode: 1
+  enemyPool:
+  - enemyPrefab: {fileID: 7377409930441240661, guid: a6802fa4c6cc26e4fab29f97242fc621, type: 3}
+    firstRound: 1
+    weight: 1
+  - enemyPrefab: {fileID: 7377409930441240661, guid: 2c56bdfc28c67c0499f6c1451cd9c0fc, type: 3}
+    firstRound: 1
+    weight: 1
+  - enemyPrefab: {fileID: 7377409930441240661, guid: 28a550bcd9a8ce64e9e958379143d5fe, type: 3}
+    firstRound: 3
+    weight: 1
+  - enemyPrefab: {fileID: 7377409930441240661, guid: 9ac71f69cd3dc114481700ac64e0265f, type: 3}
+    firstRound: 4
+    weight: 1
+  presetPool:
+  - preset: {fileID: 11400000, guid: c3efd99ae99b9674a8d3339b9261c0e6, type: 2}
+    firstRound: 1
+    lastRound: 1
+    weight: 1
+  - preset: {fileID: 11400000, guid: 35f1d438d02b7aa448976825d6bede43, type: 2}
+    firstRound: 2
+    lastRound: 2
+    weight: 1
+  - preset: {fileID: 11400000, guid: 4a206e4ef1cd2c443923237180679994, type: 2}
+    firstRound: 3
+    lastRound: 0
+    weight: 1
 --- !u!1 &1403957980
 GameObject:
   m_ObjectHideFlags: 0
