@@ -333,6 +333,23 @@ public class BaseSticker : MonoBehaviour
                 return;
             }
 
+            /*
+             * A SegmentBlock freezes every sticker already inside it.
+             *
+             * The segment remains visually readable, but its contents cannot
+             * be dragged out until the round ends.
+             */
+            if (isPlaced &&
+                currentSegment != null &&
+                generator != null &&
+                generator.IsSegmentBlocked(
+                    currentSegment
+                ))
+            {
+                return;
+            }
+
+
             if (myCollider.OverlapPoint(mouseWorld))
             {
                 isDragging = true;

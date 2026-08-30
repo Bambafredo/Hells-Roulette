@@ -533,6 +533,7 @@ MonoBehaviour:
   resolution: 20
   radius: 2.5
   angle: 60
+  wheelAngleOffset: 0
   color: {r: 0.14999998, g: 1, b: 0.14999998, a: 1}
 --- !u!23 &60537294
 MeshRenderer:
@@ -2602,6 +2603,7 @@ MonoBehaviour:
   resolution: 20
   radius: 2.5
   angle: 60
+  wheelAngleOffset: 0
   color: {r: 1, g: 0.14999998, b: 1, a: 1}
 --- !u!23 &482484561
 MeshRenderer:
@@ -5501,6 +5503,7 @@ MonoBehaviour:
   resolution: 20
   radius: 2.5
   angle: 60
+  wheelAngleOffset: 0
   color: {r: 0.14999998, g: 0.14999998, b: 1, a: 1}
 --- !u!23 &1009172662
 MeshRenderer:
@@ -5950,6 +5953,7 @@ MonoBehaviour:
   minThrowSpeed: 50
   wheelWeight: 1
   velocitySamples: 5
+  disableWheelStickerCollidersDuringSpin: 1
   powerSpinMaxSpeed: 2000
   powerSpinClockwise: 1
   blockInputMask:
@@ -6912,6 +6916,7 @@ MonoBehaviour:
   resolution: 20
   radius: 2.5
   angle: 60
+  wheelAngleOffset: 0
   color: {r: 1, g: 0.14999998, b: 0.14999998, a: 1}
 --- !u!23 &1269127762
 MeshRenderer:
@@ -8913,6 +8918,7 @@ MonoBehaviour:
   resolution: 20
   radius: 2.5
   angle: 60
+  wheelAngleOffset: 0
   color: {r: 1, g: 1, b: 0.14999998, a: 1}
 --- !u!23 &1522350731
 MeshRenderer:
@@ -9529,6 +9535,7 @@ MonoBehaviour:
   resolution: 20
   radius: 2.5
   angle: 60
+  wheelAngleOffset: 0
   color: {r: 0.14999998, g: 1, b: 1, a: 1}
 --- !u!23 &1633382975
 MeshRenderer:
@@ -12794,6 +12801,19 @@ MonoBehaviour:
   regenerateOnPlay: 1
   sortingLayerName: Default
   sortingOrder: 0
+  segmentVisualShader: {fileID: 4800000, guid: cace917b7bd8cac4bb6e5ef80b5dd01f, type: 3}
+  cosmeticPatternTexture: {fileID: 0}
+  cosmeticPatternColor: {r: 0, g: 0, b: 0, a: 1}
+  cosmeticPatternOpacity: 0
+  cosmeticPatternScale: 4
+  cosmeticPatternRotation: 0
+  blockedBaseBlend: 0.8
+  blockedBaseColor: {r: 1, g: 1, b: 1, a: 1}
+  blockedStripeColor: {r: 0, g: 0, b: 0, a: 1}
+  blockedStripeOpacity: 0.35
+  blockedStripeDensity: 10
+  blockedStripeWidth: 0.12
+  debugSegmentIndex: 1
   generatePins: 1
   pinRadiusOffset: -0.05
   pinSize: {x: 0.08, y: 0.3}

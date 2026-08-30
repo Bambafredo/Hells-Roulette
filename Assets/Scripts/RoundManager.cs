@@ -1068,6 +1068,21 @@ public class RoundManager : MonoBehaviour
     private void StartNextRound()
     {
         /*
+         * SegmentBlock lasts only until the end of the round.
+         *
+         * Clear it BEFORE the next round becomes playable. The generator
+         * revalidates sticker placement immediately after unblocking, which
+         * is important if WheelShifter resized a frozen segment.
+         */
+        if (controller != null &&
+            controller.generator != null)
+        {
+            controller.generator
+                .ClearAllSegmentBlocks();
+        }
+
+
+        /*
          * The previous CurrentRow no longer belongs to the new round.
          *
          * Clear its curse registrations immediately. The enemies that move

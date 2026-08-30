@@ -168,6 +168,32 @@ public class StickerPlacementValidator : MonoBehaviour
             if (segmentCollider == null)
                 return false;
 
+
+            /*
+             * A blocked segment freezes its contents.
+             *
+             * WheelShifter can still resize the roulette while that segment
+             * is blocked. If this makes one of its frozen stickers temporarily
+             * cross a boundary, we must NOT hard-lock the whole game: the
+             * player is explicitly forbidden from moving that sticker.
+             *
+             * Once the round ends, WheelGenerator clears all blocks and
+             * immediately runs this validator again. At that point normal
+             * geometry rules return and the player can reposition anything
+             * that no longer fits.
+             */
+            SegmentMesh segmentMesh =
+                sticker.currentSegment
+                    .GetComponent<SegmentMesh>();
+
+
+            if (segmentMesh != null &&
+                segmentMesh.IsBlocked)
+            {
+                return true;
+            }
+
+
             /*
              * ÚNICA FUENTE DE VERDAD GEOMÉTRICA.
              *

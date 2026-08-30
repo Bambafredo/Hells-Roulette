@@ -30,6 +30,78 @@ public class WheelGenerator : MonoBehaviour
     public string sortingLayerName = "Default";
     public int sortingOrder = 0;
 
+
+    [Header("Segment Visual Shader")]
+
+    [Tooltip(
+        "Assign Assets/Shaders/SegmentVisual.shader here. " +
+        "If left empty the wheel falls back to Sprites/Default, " +
+        "but pattern / SegmentBlock visuals will not be available."
+    )]
+    public Shader segmentVisualShader;
+
+
+    [Header("Cosmetic Pattern - Foundation")]
+
+    [Tooltip(
+        "Optional global pattern used as a foundation for future wheel " +
+        "customization. Keep opacity at 0 for the current plain-color wheel."
+    )]
+    public Texture cosmeticPatternTexture;
+
+    public Color cosmeticPatternColor =
+        Color.black;
+
+    [Range(0f, 1f)]
+    public float cosmeticPatternOpacity =
+        0f;
+
+    [Min(0.01f)]
+    public float cosmeticPatternScale =
+        4f;
+
+    public float cosmeticPatternRotation =
+        0f;
+
+
+    [Header("Segment Block Visual")]
+
+    [Tooltip(
+        "How strongly a blocked segment is pushed toward the Blocked Base Color."
+    )]
+    [Range(0f, 1f)]
+    public float blockedBaseBlend =
+        0.8f;
+
+    public Color blockedBaseColor =
+        Color.white;
+
+    public Color blockedStripeColor =
+        Color.black;
+
+    [Range(0f, 1f)]
+    public float blockedStripeOpacity =
+        0.35f;
+
+    [Min(0.01f)]
+    public float blockedStripeDensity =
+        10f;
+
+    [Range(0.01f, 0.45f)]
+    public float blockedStripeWidth =
+        0.12f;
+
+
+    [Header("Segment Block Debug")]
+
+    [Tooltip(
+        "0-based segment index used by the two DEBUG context-menu commands."
+    )]
+    [Min(0)]
+    [SerializeField]
+    private int debugSegmentIndex =
+        0;
+
     [Header("Pins (ticks)")]
     public bool generatePins = true;
     public float pinRadiusOffset = -0.05f;
@@ -59,6 +131,31 @@ public class WheelGenerator : MonoBehaviour
 
     private readonly List<StickerRegenInfo> stickerRegenInfos =
         new List<StickerRegenInfo>();
+
+
+    // =====================================================================
+    // SEGMENT VISUAL / GAMEPLAY RUNTIME STATE
+    // =====================================================================
+
+    /*
+     * Block state is stored by INDEX, never by Segment_X Transform.
+     *
+     * WheelShifter destroys and recreates every Segment_X GameObject.
+     * Keeping the state here means SegmentBlock survives that regeneration
+     * automatically and is simply re-applied to the new mesh.
+     */
+    private readonly HashSet<int> blockedSegmentIndices =
+        new HashSet<int>();
+
+
+    /*
+     * Every generated segment can share this one runtime material.
+     * Per-segment color / blocked state is supplied with
+     * MaterialPropertyBlock by SegmentMesh.
+     */
+    private Material runtimeSegmentMaterial;
+
+    private Shader runtimeSegmentMaterialShader;
 
     // =====================================================================
     // NORMALIZACIÓN DE ÁNGULOS = SIEMPRE 360º
@@ -146,6 +243,13 @@ public class WheelGenerator : MonoBehaviour
 
         float angleStart = 0f;
 
+        Material sharedSegmentMaterial =
+            GetOrCreateSegmentMaterial();
+
+
+        RemoveInvalidBlockedIndices();
+
+
         for (int i = 0; i < segmentCount; i++)
         {
             float angle = segmentAngles[i];
@@ -197,12 +301,50 @@ public class WheelGenerator : MonoBehaviour
             sm.radius = radius;
             sm.resolution = meshResolution;
 
+            /*
+             * Needed only for wheel-space UV generation.
+             * It makes pattern / hatch density independent from wedge size.
+             */
+            sm.wheelAngleOffset =
+                angleStart;
+
             sm.color =
                 Color.HSVToRGB(
                     i / (float)segmentCount,
                     0.85f,
                     1f
                 );
+
+
+            sm.SetVisualMaterial(
+                sharedSegmentMaterial
+            );
+
+
+            sm.ConfigureCosmeticPattern(
+                cosmeticPatternTexture,
+                cosmeticPatternColor,
+                cosmeticPatternOpacity,
+                cosmeticPatternScale,
+                cosmeticPatternRotation
+            );
+
+
+            sm.ConfigureBlockedVisual(
+                blockedBaseColor,
+                blockedBaseBlend,
+                blockedStripeColor,
+                blockedStripeOpacity,
+                blockedStripeDensity,
+                blockedStripeWidth
+            );
+
+
+            sm.SetBlocked(
+                blockedSegmentIndices
+                    .Contains(i)
+            );
+
 
             sm.GenerateMesh();
 
@@ -526,6 +668,325 @@ public class WheelGenerator : MonoBehaviour
     }
 
     // =====================================================================
+    // SEGMENT BLOCK STATE
+    // =====================================================================
+
+    public bool IsSegmentBlocked(
+        int index)
+    {
+        if (index < 0 ||
+            index >= segmentCount)
+        {
+            return false;
+        }
+
+
+        return
+            blockedSegmentIndices
+                .Contains(index);
+    }
+
+
+    public bool IsSegmentBlocked(
+        Transform segmentTransform)
+    {
+        int index =
+            GetSegmentIndexFromSegmentTransform(
+                segmentTransform
+            );
+
+
+        if (index < 0)
+        {
+            index =
+                ExtractIndexFromName(
+                    segmentTransform != null
+                        ? segmentTransform.name
+                        : null
+                );
+        }
+
+
+        return
+            IsSegmentBlocked(
+                index
+            );
+    }
+
+
+    /// <summary>
+    /// Blocks one segment until ClearAllSegmentBlocks() is called.
+    ///
+    /// Returns true only when this call created a NEW block.
+    /// </summary>
+    public bool BlockSegment(
+        int index)
+    {
+        if (index < 0 ||
+            index >= segmentCount)
+        {
+            return false;
+        }
+
+
+        bool added =
+            blockedSegmentIndices
+                .Add(index);
+
+
+        ApplyBlockedVisualToSegment(
+            index
+        );
+
+
+        if (added)
+        {
+            Debug.Log(
+                $"[SEGMENT BLOCK] Segment {index + 1} is now blocked."
+            );
+        }
+
+
+        return added;
+    }
+
+
+    public void ClearAllSegmentBlocks()
+    {
+        if (blockedSegmentIndices.Count == 0)
+            return;
+
+
+        blockedSegmentIndices.Clear();
+
+
+        if (segments != null)
+        {
+            foreach (WheelSegmentData segment in
+                     segments)
+            {
+                if (segment == null ||
+                    segment.meshComponent == null)
+                {
+                    continue;
+                }
+
+
+                segment.meshComponent
+                    .SetBlocked(
+                        false
+                    );
+            }
+        }
+
+
+        /*
+         * A WheelShifter may have resized a blocked segment while its
+         * stickers were frozen. Placement validity is intentionally ignored
+         * while blocked (see StickerPlacementValidator).
+         *
+         * The moment the new round unblocks the segment, run the normal
+         * validator again. If something genuinely no longer fits, the player
+         * can now move it normally.
+         */
+        Physics2D.SyncTransforms();
+
+        StickerPlacementValidator.Instance?
+            .ValidateAfterWheelRegeneration();
+
+
+        Debug.Log(
+            "[SEGMENT BLOCK] All segment blocks cleared."
+        );
+    }
+
+
+    private void ApplyBlockedVisualToSegment(
+        int index)
+    {
+        if (segments == null ||
+            index < 0 ||
+            index >= segments.Count)
+        {
+            return;
+        }
+
+
+        WheelSegmentData segment =
+            segments[index];
+
+
+        if (segment == null ||
+            segment.meshComponent == null)
+        {
+            return;
+        }
+
+
+        segment.meshComponent
+            .SetBlocked(
+                IsSegmentBlocked(index)
+            );
+    }
+
+
+    private void RemoveInvalidBlockedIndices()
+    {
+        if (blockedSegmentIndices.Count == 0)
+            return;
+
+
+        List<int> invalid =
+            new List<int>();
+
+
+        foreach (int index in
+                 blockedSegmentIndices)
+        {
+            if (index < 0 ||
+                index >= segmentCount)
+            {
+                invalid.Add(
+                    index
+                );
+            }
+        }
+
+
+        foreach (int index in
+                 invalid)
+        {
+            blockedSegmentIndices
+                .Remove(index);
+        }
+    }
+
+
+    // =====================================================================
+    // SEGMENT VISUAL MATERIAL
+    // =====================================================================
+
+    private Material GetOrCreateSegmentMaterial()
+    {
+        if (segmentVisualShader == null)
+            return null;
+
+
+        if (runtimeSegmentMaterial != null &&
+            runtimeSegmentMaterialShader ==
+                segmentVisualShader)
+        {
+            return
+                runtimeSegmentMaterial;
+        }
+
+
+        DestroyRuntimeSegmentMaterial();
+
+
+        runtimeSegmentMaterialShader =
+            segmentVisualShader;
+
+        runtimeSegmentMaterial =
+            new Material(
+                segmentVisualShader
+            );
+
+        runtimeSegmentMaterial.name =
+            "Runtime_SegmentVisual";
+
+        runtimeSegmentMaterial.hideFlags =
+            HideFlags.DontSave;
+
+
+        return
+            runtimeSegmentMaterial;
+    }
+
+
+    private void DestroyRuntimeSegmentMaterial()
+    {
+        if (runtimeSegmentMaterial == null)
+            return;
+
+
+#if UNITY_EDITOR
+
+        if (!Application.isPlaying)
+        {
+            DestroyImmediate(
+                runtimeSegmentMaterial
+            );
+        }
+        else
+        {
+            Destroy(
+                runtimeSegmentMaterial
+            );
+        }
+
+#else
+
+        Destroy(
+            runtimeSegmentMaterial
+        );
+
+#endif
+
+
+        runtimeSegmentMaterial =
+            null;
+
+        runtimeSegmentMaterialShader =
+            null;
+    }
+
+
+    // =====================================================================
+    // DEBUG - SEGMENT BLOCK
+    // =====================================================================
+
+    [ContextMenu(
+        "DEBUG - Block Selected Segment"
+    )]
+    private void DebugBlockSelectedSegment()
+    {
+        if (!Application.isPlaying)
+        {
+            Debug.LogWarning(
+                "[SEGMENT BLOCK] Enter Play Mode first."
+            );
+
+            return;
+        }
+
+
+        BlockSegment(
+            debugSegmentIndex
+        );
+    }
+
+
+    [ContextMenu(
+        "DEBUG - Clear Segment Blocks"
+    )]
+    private void DebugClearSegmentBlocks()
+    {
+        if (!Application.isPlaying)
+        {
+            Debug.LogWarning(
+                "[SEGMENT BLOCK] Enter Play Mode first."
+            );
+
+            return;
+        }
+
+
+        ClearAllSegmentBlocks();
+    }
+
+
+    // =====================================================================
     // GENERAR PINS
     // =====================================================================
 
@@ -703,6 +1164,16 @@ public class WheelGenerator : MonoBehaviour
 #endif
         }
     }
+
+    // =====================================================================
+    // UNITY CLEANUP
+    // =====================================================================
+
+    private void OnDestroy()
+    {
+        DestroyRuntimeSegmentMaterial();
+    }
+
 
     // =====================================================================
     // START

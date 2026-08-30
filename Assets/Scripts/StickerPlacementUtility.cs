@@ -45,11 +45,41 @@ public static class StickerPlacementUtility
 
         foreach (Collider2D candidate in candidates)
         {
-            if (candidate == null || !candidate.enabled)
+            if (candidate == null ||
+                !candidate.enabled)
+            {
                 continue;
+            }
 
-            if (CanPlaceOnSegment(sticker, candidate, boundaryTolerance))
+
+            /*
+             * SegmentBlock seals the segment:
+             * new stickers cannot be dropped into it.
+             *
+             * IMPORTANT:
+             * this restriction lives ONLY in FindValidSegment().
+             * CanPlaceOnSegment() remains pure geometry because the placement
+             * validator also uses it for stickers that are ALREADY inside a
+             * blocked segment.
+             */
+            SegmentMesh segmentMesh =
+                candidate.GetComponent<SegmentMesh>();
+
+
+            if (segmentMesh != null &&
+                segmentMesh.IsBlocked)
+            {
+                continue;
+            }
+
+
+            if (CanPlaceOnSegment(
+                    sticker,
+                    candidate,
+                    boundaryTolerance))
+            {
                 return candidate;
+            }
         }
 
         return null;

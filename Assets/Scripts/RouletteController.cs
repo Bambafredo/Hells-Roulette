@@ -152,6 +152,16 @@ public class RouletteController : MonoBehaviour
 
     public bool SpinInProgress { get; private set; } = false;
 
+
+    /// <summary>
+    /// Physical segment index where the current / last completed spin landed.
+    ///
+    /// Enemy actions execute after sticker resolution and use this value to
+    /// affect the segment that produced that spin.
+    /// </summary>
+    public int LastResolvedSegmentIndex =>
+        endSegmentIndex;
+
     /// <summary>
     /// Método utilizado para iniciar la tirada actual / última tirada.
     ///
@@ -1551,6 +1561,68 @@ public class RouletteController : MonoBehaviour
         }
 
         /*
+         * SegmentBlock does NOT rewrite the physical winner.
+         *
+         * We keep the real winning segment for:
+         * - spin validation
+         * - logs
+         * - enemy actions
+         * - all systems that need to know where the wheel really stopped
+         *
+         * The block only suppresses sticker resolution inside that segment.
+         */
+        bool winningSegmentBlocked =
+            generator != null &&
+            generator.IsSegmentBlocked(
+                endSegmentIndex
+            );
+
+
+        if (winningSegmentBlocked &&
+            GameLogManager.Instance != null)
+        {
+            int displaySegmentNumber =
+                endSegmentIndex + 1;
+
+            bool hasSegmentColor =
+                generator.segments != null &&
+                endSegmentIndex >= 0 &&
+                endSegmentIndex < generator.segments.Count &&
+                generator.segments[endSegmentIndex] != null &&
+                generator.segments[endSegmentIndex].meshComponent != null;
+
+
+            string segmentLabel;
+
+            if (hasSegmentColor)
+            {
+                segmentLabel =
+                    GameLogManager.Instance
+                        .SegmentText(
+                            $"Segment {displaySegmentNumber}",
+                            generator.segments[endSegmentIndex]
+                                .meshComponent.color
+                        );
+            }
+            else
+            {
+                segmentLabel =
+                    GameLogManager.Instance
+                        .SegmentText(
+                            $"Segment {displaySegmentNumber}"
+                        );
+            }
+
+
+            GameLogManager.Instance
+                .AddGameplayLine(
+                    segmentLabel +
+                    " is blocked: stickers inside do not activate"
+                );
+        }
+
+
+        /*
          * 4. STICKERS
          *
          * Snapshot where every relevant sticker was when the physical
@@ -1860,12 +1932,22 @@ public class RouletteController : MonoBehaviour
         // 1. WINNING SEGMENT FIRST
         // -----------------------------------------------------
 
-        AddSegmentStickersToSnapshot(
-            endSegmentIndex,
-            StickerSpinLocation.WinningSegment,
-            snapshot,
-            alreadyAdded
-        );
+        bool winningSegmentBlocked =
+            generator != null &&
+            generator.IsSegmentBlocked(
+                endSegmentIndex
+            );
+
+
+        if (!winningSegmentBlocked)
+        {
+            AddSegmentStickersToSnapshot(
+                endSegmentIndex,
+                StickerSpinLocation.WinningSegment,
+                snapshot,
+                alreadyAdded
+            );
+        }
 
 
         // -----------------------------------------------------
