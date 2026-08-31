@@ -4281,6 +4281,68 @@ Material:
     - _Flip: {r: 1, g: 1, b: 1, a: 1}
     - _RendererColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
+--- !u!1001 &874204258
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1156078942}
+    m_Modifications:
+    - target: {fileID: 577474978131120927, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_Name
+      value: Sticker_Coffee
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -2.11
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+--- !u!4 &874204259 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 9022462484478120845, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
+  m_PrefabInstance: {fileID: 874204258}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &894410937
 GameObject:
   m_ObjectHideFlags: 0
@@ -5295,6 +5357,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 1f5d439b3f821eb42a7652ecdb2397e1, type: 3}
   - {fileID: 577474978131120927, guid: 8b21f5873f76fab48bbd3dadfdc01608, type: 3}
   - {fileID: 577474978131120927, guid: 899448c70451cbc4e8c28cb9cc7fc3fe, type: 3}
+  - {fileID: 577474978131120927, guid: 4e269c22691099d45975a6fef9496f17, type: 3}
   bloodPriceMultiplier: 2
   enableFirstPurchaseDiscount: 1
   firstPurchaseDiscountTarget: 0
@@ -5328,6 +5391,8 @@ MonoBehaviour:
   stickerColor: {r: 0, g: 1, b: 0, a: 1}
   bloodColor: {r: 1, g: 0, b: 0, a: 1}
   moneyColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  protectionColor: {r: 0.25, g: 0.72, b: 1, a: 1}
+  spinTotalColor: {r: 1, g: 0.35, b: 0.72, a: 1}
   debtColor: {r: 0.8867924, g: 0, b: 0.8162863, a: 1}
   enemyColor: {r: 1, g: 0.5, b: 0.2, a: 1}
   segmentColor: {r: 0, g: 1, b: 1, a: 1}
@@ -6505,6 +6570,7 @@ Transform:
   - {fileID: 1657208368}
   - {fileID: 1097622779}
   - {fileID: 1840691570}
+  - {fileID: 874204259}
   m_Father: {fileID: 1353839698}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1171386728
@@ -10369,6 +10435,14 @@ PrefabInstance:
     - target: {fileID: 577474978131120927, guid: 839e7802698982544bae9e044c732bd2, type: 3}
       propertyPath: m_Name
       value: Sticker_WashingMachine
+      objectReference: {fileID: 0}
+    - target: {fileID: 3998538530532240417, guid: 839e7802698982544bae9e044c732bd2, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.169
+      objectReference: {fileID: 0}
+    - target: {fileID: 3998538530532240417, guid: 839e7802698982544bae9e044c732bd2, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.198
       objectReference: {fileID: 0}
     - target: {fileID: 9022462484478120845, guid: 839e7802698982544bae9e044c732bd2, type: 3}
       propertyPath: m_LocalPosition.x

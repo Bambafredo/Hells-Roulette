@@ -1953,12 +1953,30 @@ public class RouletteController : MonoBehaviour
         public BaseSticker sticker;
         public StickerSpinLocation location;
 
+        /*
+         * Number of times this sticker resolves for the captured spin state.
+         * Normally 1. Generic StickerEffect resolution modifiers can change it
+         * while the immutable spin snapshot is being built.
+         */
+        public int activationCount;
+
+
         public StickerResolutionEntry(
             BaseSticker sticker,
-            StickerSpinLocation location)
+            StickerSpinLocation location,
+            int activationCount = 1)
         {
-            this.sticker = sticker;
-            this.location = location;
+            this.sticker =
+                sticker;
+
+            this.location =
+                location;
+
+            this.activationCount =
+                Mathf.Max(
+                    1,
+                    activationCount
+                );
         }
     }
 
@@ -1971,7 +1989,7 @@ public class RouletteController : MonoBehaviour
     /// 3. Album stickers.
     ///
     /// The complete list is captured BEFORE any sticker effect executes.
-    /// This is important because effects such as WheelShifter can rebuild
+    /// This is important because effects can rebuild
     /// the roulette hierarchy during resolution.
     /// </summary>
     private void ResolveStickerEffectsForSpin()
@@ -1985,9 +2003,8 @@ public class RouletteController : MonoBehaviour
          *
          * IMPORTANT:
          * We prepare the ENTIRE sticker snapshot before resolving any normal
-         * effect. That makes Shield order-independent: a losing-segment Shield
-         * can already protect against a winning Rat Poison even if Rat Poison
-         * appears earlier in the normal resolution order.
+         * effect. Reactive/preparation-based effects are therefore
+         * order-independent from ordinary resolution effects.
          */
         BloodManager.Instance?
             .BeginSpinDamageProtectionWindow();
@@ -2002,10 +2019,16 @@ public class RouletteController : MonoBehaviour
             if (entry.sticker == null)
                 continue;
 
-            entry.sticker
-                .PrepareSpinLocation(
-                    entry.location
-                );
+
+            for (int activation = 0;
+                 activation < entry.activationCount;
+                 activation++)
+            {
+                entry.sticker
+                    .PrepareSpinLocation(
+                        entry.location
+                    );
+            }
         }
 
 
@@ -2018,10 +2041,16 @@ public class RouletteController : MonoBehaviour
             if (entry.sticker == null)
                 continue;
 
-            entry.sticker
-                .ResolveSpinLocation(
-                    entry.location
-                );
+
+            for (int activation = 0;
+                 activation < entry.activationCount;
+                 activation++)
+            {
+                entry.sticker
+                    .ResolveSpinLocation(
+                        entry.location
+                    );
+            }
         }
     }
 
@@ -2112,9 +2141,9 @@ public class RouletteController : MonoBehaviour
 
 
         /*
-         * SegmentBlock suppresses the segment itself, not merely its
-         * winning-state effects. This matters now that stickers such as
-         * Rat Poison and Shield can also react from losing segments.
+         * Segment gameplay state is evaluated BEFORE any sticker-specific
+         * behaviour. A blocked segment simply contributes no sticker entries
+         * to this spin snapshot.
          */
         if (generator.IsSegmentBlocked(
                 segmentIndex))
@@ -2135,14 +2164,21 @@ public class RouletteController : MonoBehaviour
         }
 
 
-        BaseSticker[] stickers =
+        BaseSticker[] segmentStickers =
             segData.collider.transform
                 .GetComponentsInChildren<BaseSticker>(
                     true
                 );
 
 
-        foreach (BaseSticker sticker in stickers)
+        List<BaseSticker> orderedStickers =
+            BuildStableResolutionOrder(
+                segmentStickers
+            );
+
+
+        foreach (BaseSticker sticker in
+                 orderedStickers)
         {
             if (sticker == null ||
                 alreadyAdded.Contains(sticker))
@@ -2150,15 +2186,255 @@ public class RouletteController : MonoBehaviour
                 continue;
             }
 
-            alreadyAdded.Add(sticker);
+
+            alreadyAdded.Add(
+                sticker
+            );
+
+
+            int activationCount =
+                GetModifiedStickerActivationCountForSnapshot(
+                    segmentStickers,
+                    sticker,
+                    location
+                );
+
+
+            if (activationCount <= 0)
+                continue;
+
 
             snapshot.Add(
                 new StickerResolutionEntry(
                     sticker,
-                    location
+                    location,
+                    activationCount
                 )
             );
         }
+    }
+
+
+    /// <summary>
+    /// Stable generic ordering for sticker resolution.
+    ///
+    /// RouletteController understands only "priority", never specific sticker
+    /// classes. Equal-priority stickers preserve their hierarchy discovery
+    /// order.
+    /// </summary>
+    private List<BaseSticker> BuildStableResolutionOrder(
+        BaseSticker[] stickers)
+    {
+        List<BaseSticker> ordered =
+            new List<BaseSticker>();
+
+
+        if (stickers == null)
+            return ordered;
+
+
+        foreach (BaseSticker sticker in stickers)
+        {
+            if (sticker == null)
+                continue;
+
+
+            int priority =
+                sticker.effect != null
+                    ? sticker.effect
+                        .SpinResolutionPriority
+                    : 0;
+
+
+            int insertIndex =
+                ordered.Count;
+
+
+            for (int i = 0;
+                 i < ordered.Count;
+                 i++)
+            {
+                BaseSticker existing =
+                    ordered[i];
+
+
+                int existingPriority =
+                    existing != null &&
+                    existing.effect != null
+                        ? existing.effect
+                            .SpinResolutionPriority
+                        : 0;
+
+
+                if (priority <
+                    existingPriority)
+                {
+                    insertIndex =
+                        i;
+
+                    break;
+                }
+            }
+
+
+            ordered.Insert(
+                insertIndex,
+                sticker
+            );
+        }
+
+
+        return
+            ordered;
+    }
+
+
+    /// <summary>
+    /// Evaluates generic activation-count modifiers from every available
+    /// sticker in the same captured segment.
+    ///
+    /// No concrete sticker type is referenced here. Effects opt into modifier
+    /// behaviour by overriding StickerEffect.ModifyStickerActivationCount().
+    /// </summary>
+    private int GetModifiedStickerActivationCountForSnapshot(
+        BaseSticker[] modifierCandidates,
+        BaseSticker target,
+        StickerSpinLocation location)
+    {
+        if (target == null)
+            return 0;
+
+
+        int activationCount =
+            1;
+
+
+        bool receivesModifiers =
+            target.effect == null ||
+            target.effect
+                .ReceivesActivationCountModifiers;
+
+
+        if (receivesModifiers &&
+            modifierCandidates != null)
+        {
+            foreach (BaseSticker modifierOwner in
+                     modifierCandidates)
+            {
+                if (!IsStickerAvailableAsResolutionModifier(
+                        modifierOwner))
+                {
+                    continue;
+                }
+
+
+                activationCount =
+                    Mathf.Max(
+                        0,
+                        modifierOwner.effect
+                            .ModifyStickerActivationCount(
+                                modifierOwner,
+                                target,
+                                location,
+                                activationCount
+                            )
+                    );
+            }
+        }
+
+
+        return
+            CapActivationCountByAvailableUses(
+                target,
+                location,
+                activationCount
+            );
+    }
+
+
+    /// <summary>
+    /// Generic source-availability rule for resolution modifiers.
+    ///
+    /// A physically consumed / zero-use sticker cannot continue modifying
+    /// neighbouring stickers during Unity's deferred-Destroy window.
+    /// </summary>
+    private bool IsStickerAvailableAsResolutionModifier(
+        BaseSticker sticker)
+    {
+        if (sticker == null ||
+            sticker.effect == null)
+        {
+            return false;
+        }
+
+
+        if (!sticker.HasLimitedUses)
+            return true;
+
+
+        return
+            sticker.RemainingUses > 0;
+    }
+
+
+    /// <summary>
+    /// Caps repeated resolution by available uses only when this location is
+    /// configured to consume a use on activation.
+    ///
+    /// This is a generic resolution rule, not a special case for any sticker.
+    /// Unlimited-use effects may resolve the full requested count; limited-use
+    /// effects can never resolve more paid activations than they have uses.
+    /// </summary>
+    private int CapActivationCountByAvailableUses(
+        BaseSticker sticker,
+        StickerSpinLocation location,
+        int requestedCount)
+    {
+        if (sticker == null)
+            return 0;
+
+
+        int count =
+            Mathf.Max(
+                0,
+                requestedCount
+            );
+
+
+        if (count <= 0)
+            return 0;
+
+
+        if (!sticker.HasLimitedUses ||
+            sticker.effect == null)
+        {
+            return
+                count;
+        }
+
+
+        bool consumesAtThisLocation =
+            sticker.effect
+                .ShouldConsumeUseOnActivation(
+                    location
+                );
+
+
+        if (!consumesAtThisLocation)
+        {
+            return
+                count;
+        }
+
+
+        return
+            Mathf.Min(
+                count,
+                Mathf.Max(
+                    0,
+                    sticker.RemainingUses
+                )
+            );
     }
 
 

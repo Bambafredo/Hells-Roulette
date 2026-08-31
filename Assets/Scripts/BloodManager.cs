@@ -446,17 +446,18 @@ public class BloodManager : MonoBehaviour
         }
 
 
-        foreach (DamageBlockerRegistration existing in
-                 spinDamageBlockers)
-        {
-            if (existing != null &&
-                existing.source == source)
-            {
-                return false;
-            }
-        }
-
-
+        /*
+         * Multiple registrations from the SAME physical source are allowed.
+         *
+         * Normally a sticker prepares once, so nothing changes. Coffee can
+         * deliberately make a Shield activate twice, which should create two
+         * independent block pools and potentially consume two uses if both
+         * pools actually prevent damage.
+         *
+         * RouletteController caps Coffee repetitions by RemainingUses when the
+         * effect consumes uses at this location, so a 1-use Shield can never
+         * register a free second pool.
+         */
         spinDamageBlockers.Add(
             new DamageBlockerRegistration
             {

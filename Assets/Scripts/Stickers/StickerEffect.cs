@@ -111,6 +111,60 @@ public class StickerEffect : ScriptableObject
 
 
     // =========================================================
+    // GENERIC STICKER RESOLUTION MODIFIERS
+    // =========================================================
+
+    /// <summary>
+    /// Generic ordering hook for spin resolution.
+    ///
+    /// Lower values resolve earlier. Ordinary stickers remain at 0.
+    /// Effects that explain / establish a modifier before other effects can
+    /// use a negative priority without RouletteController knowing their type.
+    /// </summary>
+    public virtual int SpinResolutionPriority =>
+        0;
+
+
+    /// <summary>
+    /// Whether this sticker may have its activation count modified by other
+    /// sticker effects during snapshot construction.
+    ///
+    /// Ordinary stickers return true. A modifier that must never recursively
+    /// multiply itself can override this to false.
+    /// </summary>
+    public virtual bool ReceivesActivationCountModifiers =>
+        true;
+
+
+    /// <summary>
+    /// Generic hook for effects that modify how many times another sticker
+    /// resolves during the captured spin.
+    ///
+    /// RouletteController calls this on every available sticker effect while
+    /// building the immutable spin snapshot. Ordinary effects simply return
+    /// currentActivationCount unchanged.
+    ///
+    /// IMPORTANT:
+    /// - modifierOwner = physical sticker providing the modifier
+    /// - target = physical sticker whose activation count is being evaluated
+    /// - location = target's captured spin location
+    /// - currentActivationCount = result produced by earlier modifiers
+    ///
+    /// The returned value is later capped by the target's available uses when
+    /// that location consumes uses.
+    /// </summary>
+    public virtual int ModifyStickerActivationCount(
+        BaseSticker modifierOwner,
+        BaseSticker target,
+        StickerSpinLocation location,
+        int currentActivationCount)
+    {
+        return
+            currentActivationCount;
+    }
+
+
+    // =========================================================
     // SPIN LOCATION PREPARATION
     // =========================================================
 
