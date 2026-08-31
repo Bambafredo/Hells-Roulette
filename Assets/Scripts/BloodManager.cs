@@ -104,6 +104,38 @@ public class BloodManager : MonoBehaviour
         false;
 
 
+    // =========================================================
+    // SPIN BLOOD-LOSS TRACKING
+    // =========================================================
+
+    /*
+     * Gross Blood actually removed during the current physical spin.
+     *
+     * This intentionally counts ALL Blood loss / spending routed through
+     * ConsumeBlood():
+     * - manual brake
+     * - Power Spin costs
+     * - enemy damage that was NOT prevented
+     * - Rat Poison damage that was NOT prevented
+     * - future Blood costs / damage
+     *
+     * Healing or refunds do NOT subtract from this value. The log summary is
+     * "Total blood lost this spin", not the final net Blood delta.
+     */
+    public int BloodLostThisSpin
+    {
+        get;
+        private set;
+    } = 0;
+
+
+    public bool SpinBloodLossTrackingActive
+    {
+        get;
+        private set;
+    } = false;
+
+
     /*
      * Reactive protection gameplay resolves inside TakeDamage(), before the
      * caller has written its own damage-source line to the Game Log.
@@ -169,11 +201,31 @@ public class BloodManager : MonoBehaviour
         if (currentBlood <= 0)
             return false;
 
+        int bloodBefore =
+            currentBlood;
+
+
         currentBlood =
             Mathf.Max(
                 0,
                 currentBlood - amount
             );
+
+
+        int actualBloodLost =
+            Mathf.Max(
+                0,
+                bloodBefore - currentBlood
+            );
+
+
+        if (SpinBloodLossTrackingActive &&
+            actualBloodLost > 0)
+        {
+            BloodLostThisSpin +=
+                actualBloodLost;
+        }
+
 
         UpdateUI();
 
@@ -181,6 +233,39 @@ public class BloodManager : MonoBehaviour
             OnDeath();
 
         return true;
+    }
+
+
+    // =========================================================
+    // SPIN BLOOD-LOSS TRACKING
+    // =========================================================
+
+    public void BeginSpinBloodLossTracking()
+    {
+        BloodLostThisSpin =
+            0;
+
+        SpinBloodLossTrackingActive =
+            true;
+    }
+
+
+    /// <summary>
+    /// Stops tracking and returns gross Blood actually lost/spent during the
+    /// completed spin. The value remains inspectable until the next Begin.
+    /// </summary>
+    public int EndSpinBloodLossTracking()
+    {
+        int total =
+            BloodLostThisSpin;
+
+
+        SpinBloodLossTrackingActive =
+            false;
+
+
+        return
+            total;
     }
 
 

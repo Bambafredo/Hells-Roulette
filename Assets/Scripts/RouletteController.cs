@@ -1016,6 +1016,16 @@ public class RouletteController : MonoBehaviour
         brakeBloodSpentThisSpin =
             0;
 
+
+        /*
+         * Start gross Blood-loss tracking NOW, before NotifySpinStart returns
+         * control to callers. Power Spin pays its Blood cost only after this
+         * spin launch succeeds, so that cost is included in the final total.
+         */
+        BloodManager.Instance?
+            .BeginSpinBloodLossTracking();
+
+
         /*
          * Reset the Flag Pin earnings for this physical spin.
          *
@@ -1437,6 +1447,9 @@ public class RouletteController : MonoBehaviour
             BloodManager.Instance?
                 .EndSpinDamageProtectionWindow();
 
+            BloodManager.Instance?
+                .EndSpinBloodLossTracking();
+
 
             OnSpinEnd?
                 .Invoke();
@@ -1677,7 +1690,8 @@ public class RouletteController : MonoBehaviour
          * RoundManager resolves the end-of-round debt. This means the
          * bonus can legitimately help pay the debt from this spin.
          */
-        ResolveSpinMoneyAndLuckyShotBonus();
+        int totalMoneyEarnedThisSpin =
+            ResolveSpinMoneyAndLuckyShotBonus();
 
         /*
          * 7. FIN COMPLETO DE LA RESOLUCIÓN
@@ -1692,6 +1706,27 @@ public class RouletteController : MonoBehaviour
          */
         BloodManager.Instance?
             .EndSpinDamageProtectionWindow();
+
+
+        int totalBloodLostThisSpin =
+            BloodManager.Instance != null
+                ? BloodManager.Instance
+                    .EndSpinBloodLossTracking()
+                : 0;
+
+
+        /*
+         * 7.5. FINAL SPIN SUMMARY
+         *
+         * Round/debt resolution and any deferred Shield feedback have already
+         * been written. These two rows are therefore GUARANTEED to be the
+         * final gameplay entries in the block.
+         */
+        GameLogManager.Instance?
+            .LogSpinTotals(
+                totalMoneyEarnedThisSpin,
+                totalBloodLostThisSpin
+            );
 
 
         /*
@@ -1715,14 +1750,18 @@ public class RouletteController : MonoBehaviour
     // LUCKY SHOT REWARD
     // =========================================================
 
-    private void ResolveSpinMoneyAndLuckyShotBonus()
+    private int ResolveSpinMoneyAndLuckyShotBonus()
     {
         if (CurrencyManager.Instance == null)
-            return;
+            return 0;
 
         /*
-         * End tracking BEFORE paying the Lucky Shot bonus so the bonus
-         * never counts itself as part of the spin earnings.
+         * End tracking BEFORE paying the Lucky Shot bonus so the bonus never
+         * recursively counts itself when calculating its own percentage.
+         *
+         * For the END-OF-SPIN SUMMARY, however, the Lucky Shot bonus IS money
+         * earned during this spin, so we add it explicitly to the returned
+         * total below.
          */
         int moneyEarnedThisSpin =
             CurrencyManager.Instance
@@ -1731,7 +1770,8 @@ public class RouletteController : MonoBehaviour
         if (CurrentSpinMethod !=
             SpinMethod.LuckyShot)
         {
-            return;
+            return
+                moneyEarnedThisSpin;
         }
 
         float rewardPercent =
@@ -1793,6 +1833,11 @@ public class RouletteController : MonoBehaviour
             $"[LUCKY SHOT] Spin earned ${moneyEarnedThisSpin}. " +
             $"Bonus {rewardPercent:0.##}% = ${luckyBonus}."
         );
+
+
+        return
+            moneyEarnedThisSpin +
+            luckyBonus;
     }
 
 

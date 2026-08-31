@@ -102,6 +102,17 @@ public class GameLogManager : MonoBehaviour
             1f
         );
 
+    [Tooltip(
+        "Color used for the two end-of-spin TOTAL labels. " +
+        "Pink is intentionally reserved for quick summary scanning."
+    )]
+    public Color spinTotalColor =
+        new Color(
+            1f,
+            0.35f,
+            0.72f
+        );
+
     [Tooltip("Color used for end-of-round debt payments.")]
     public Color debtColor =
         new Color(
@@ -1619,6 +1630,57 @@ public class GameLogManager : MonoBehaviour
 
 
     // =========================================================
+    // END-OF-SPIN TOTALS
+    // =========================================================
+
+    /// <summary>
+    /// Always appends the two spin-summary rows at the very end of the open
+    /// valid-spin block.
+    ///
+    /// The labels use a dedicated pink summary color so they are easy to find,
+    /// while the values retain their semantic money / Blood colors.
+    /// </summary>
+    public void LogSpinTotals(
+        int totalMoneyEarned,
+        int totalBloodLost)
+    {
+        totalMoneyEarned =
+            Mathf.Max(
+                0,
+                totalMoneyEarned
+            );
+
+        totalBloodLost =
+            Mathf.Max(
+                0,
+                totalBloodLost
+            );
+
+
+        AddGameplayLine(
+            SpinTotalText(
+                "Total money earned this spin:"
+            ) +
+            " " +
+            MoneyText(
+                "$" + totalMoneyEarned
+            )
+        );
+
+
+        AddGameplayLine(
+            SpinTotalText(
+                "Total blood lost this spin:"
+            ) +
+            " " +
+            BloodText(
+                totalBloodLost + " Blood"
+            )
+        );
+    }
+
+
+    // =========================================================
     // GENERIC GAMEPLAY LINE
     // =========================================================
 
@@ -1848,6 +1910,16 @@ public class GameLogManager : MonoBehaviour
         return ColorText(
             text,
             protectionColor
+        );
+    }
+
+
+    public string SpinTotalText(
+        string text)
+    {
+        return ColorText(
+            text,
+            spinTotalColor
         );
     }
 
