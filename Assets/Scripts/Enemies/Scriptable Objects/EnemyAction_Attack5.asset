@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 750a2324e12e9064daf8442b6382e15c, type: 3}
-  m_Name: EnemyAction_Attack
+  m_Name: EnemyAction_Attack5
   m_EditorClassIdentifier: 
   actionName: Attack
   icon: {fileID: 21300000, guid: b3f90bae5b5ad684589fdb550c654018, type: 3}
-  tooltipDescription: Deals 2 damage
-  bloodDamage: 2
+  tooltipDescription: Deals 5 damage
+  bloodDamage: 5
