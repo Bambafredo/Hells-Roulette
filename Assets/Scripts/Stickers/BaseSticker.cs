@@ -1004,6 +1004,31 @@ public class BaseSticker : MonoBehaviour
     // ===========================================================
 
     /// <summary>
+    /// Optional preparation pass used before normal sticker resolution.
+    ///
+    /// The roulette calls this for the COMPLETE location snapshot before any
+    /// ResolveSpinLocation() call. Most stickers are a no-op here; passive
+    /// reactive effects such as Shield can register themselves safely.
+    /// </summary>
+    public virtual void PrepareSpinLocation(
+        StickerSpinLocation location)
+    {
+        if (effect == null ||
+            consumed)
+        {
+            return;
+        }
+
+        EnsureUseStateInitialized();
+
+        effect.PrepareSpinLocation(
+            this,
+            location
+        );
+    }
+
+
+    /// <summary>
     /// Generic entry point used when a valid spin finishes.
     ///
     /// The roulette snapshots every sticker's location BEFORE any

@@ -111,6 +111,27 @@ public class StickerEffect : ScriptableObject
 
 
     // =========================================================
+    // SPIN LOCATION PREPARATION
+    // =========================================================
+
+    /// <summary>
+    /// Optional pre-resolution phase called for EVERY sticker in the spin
+    /// snapshot before ANY normal sticker effect resolves.
+    ///
+    /// Most stickers do nothing here.
+    ///
+    /// Passive reaction effects such as Shield use this phase so their
+    /// protection is already active before another sticker (for example Rat
+    /// Poison) can deal damage during normal sticker resolution.
+    /// </summary>
+    public virtual void PrepareSpinLocation(
+        BaseSticker owner,
+        StickerSpinLocation location)
+    {
+    }
+
+
+    // =========================================================
     // SPIN LOCATION RESOLUTION
     // =========================================================
 
@@ -339,7 +360,7 @@ public class StickerEffect : ScriptableObject
     // USE CONSUMPTION QUERY
     // =========================================================
 
-    public bool ShouldConsumeUseOnActivation(
+    public virtual bool ShouldConsumeUseOnActivation(
         StickerSpinLocation location)
     {
         switch (location)

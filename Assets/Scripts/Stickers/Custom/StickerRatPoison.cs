@@ -129,18 +129,23 @@ public class StickerRatPoison : StickerEffect
         );
 
 
-        if (damage > 0)
-        {
-            BloodManager.Instance
-                .ConsumeBlood(
-                    damage
+        BloodManager.DamageResult damageResult =
+            damage > 0
+                ? BloodManager.Instance
+                    .TakeDamage(
+                        damage
+                    )
+                : new BloodManager.DamageResult(
+                    0,
+                    0,
+                    0
                 );
-        }
 
 
         Debug.Log(
-            $"[RAT POISON] Winning segment: player takes " +
-            $"{actualDamage} damage."
+            $"[RAT POISON] Winning segment: attempted {damage} damage. " +
+            $"Prevented = {damageResult.preventedDamage}, " +
+            $"Blood lost = {damageResult.bloodLost}."
         );
     }
 

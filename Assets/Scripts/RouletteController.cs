@@ -84,6 +84,9 @@ public class RouletteController : MonoBehaviour
          * leave sticker colliders disabled.
          */
         RestoreWheelStickerCollidersAfterSpin();
+
+        BloodManager.Instance?
+            .EndSpinDamageProtectionWindow();
     }
 
 
@@ -1431,6 +1434,10 @@ public class RouletteController : MonoBehaviour
             }
 
 
+            BloodManager.Instance?
+                .EndSpinDamageProtectionWindow();
+
+
             OnSpinEnd?
                 .Invoke();
 
@@ -1678,6 +1685,15 @@ public class RouletteController : MonoBehaviour
         RoundManager.Instance?
             .NotifySpinResolved();
 
+
+        /*
+         * Shield and any future spin-scoped mitigation end only after every
+         * gameplay consequence of this valid spin has resolved.
+         */
+        BloodManager.Instance?
+            .EndSpinDamageProtectionWindow();
+
+
         /*
          * 8. PUBLISH GAME LOG BLOCK
          *
@@ -1919,6 +1935,39 @@ public class RouletteController : MonoBehaviour
             BuildStickerResolutionSnapshot();
 
 
+        /*
+         * Start one clean mitigation window for this valid spin.
+         *
+         * IMPORTANT:
+         * We prepare the ENTIRE sticker snapshot before resolving any normal
+         * effect. That makes Shield order-independent: a losing-segment Shield
+         * can already protect against a winning Rat Poison even if Rat Poison
+         * appears earlier in the normal resolution order.
+         */
+        BloodManager.Instance?
+            .BeginSpinDamageProtectionWindow();
+
+
+        // -----------------------------------------------------
+        // PASS 1 - PASSIVE / REACTIVE PREPARATION
+        // -----------------------------------------------------
+
+        foreach (StickerResolutionEntry entry in snapshot)
+        {
+            if (entry.sticker == null)
+                continue;
+
+            entry.sticker
+                .PrepareSpinLocation(
+                    entry.location
+                );
+        }
+
+
+        // -----------------------------------------------------
+        // PASS 2 - NORMAL STICKER EFFECTS
+        // -----------------------------------------------------
+
         foreach (StickerResolutionEntry entry in snapshot)
         {
             if (entry.sticker == null)
@@ -2012,6 +2061,18 @@ public class RouletteController : MonoBehaviour
             generator.segments == null ||
             segmentIndex < 0 ||
             segmentIndex >= generator.segments.Count)
+        {
+            return;
+        }
+
+
+        /*
+         * SegmentBlock suppresses the segment itself, not merely its
+         * winning-state effects. This matters now that stickers such as
+         * Rat Poison and Shield can also react from losing segments.
+         */
+        if (generator.IsSegmentBlocked(
+                segmentIndex))
         {
             return;
         }

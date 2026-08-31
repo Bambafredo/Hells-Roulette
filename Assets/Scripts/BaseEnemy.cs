@@ -702,42 +702,29 @@ public class BaseEnemy : MonoBehaviour
         }
 
 
-        int bloodBefore =
-            BloodManager.Instance.currentBlood;
-
-
-        bool consumed =
+        BloodManager.DamageResult result =
             BloodManager.Instance
-                .ConsumeBlood(
+                .TakeDamage(
                     damage
                 );
 
 
-        int bloodAfter =
-            BloodManager.Instance.currentBlood;
-
-
-        int actualBloodLost =
-            Mathf.Max(
-                0,
-                bloodBefore -
-                bloodAfter
+        /*
+         * The attack still happened even when Shield prevented every point.
+         * LogEnemyAttack(0) deliberately renders as "Enemy attacks" without
+         * claiming Blood was lost.
+         */
+        GameLogManager.Instance?
+            .LogEnemyAttack(
+                enemyName,
+                result.bloodLost
             );
 
 
-        if (consumed)
-        {
-            GameLogManager.Instance?
-                .LogEnemyAttack(
-                    enemyName,
-                    actualBloodLost
-                );
-        }
-
-
         Debug.Log(
-            $"[ENEMY] {enemyName} attacks for " +
-            $"{actualBloodLost} Blood."
+            $"[ENEMY] {enemyName} attacks for {damage} damage. " +
+            $"Prevented = {result.preventedDamage}, " +
+            $"Blood lost = {result.bloodLost}."
         );
     }
 
