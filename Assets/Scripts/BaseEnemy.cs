@@ -721,6 +721,15 @@ public class BaseEnemy : MonoBehaviour
             );
 
 
+        /*
+         * Reactive mitigation gameplay happened inside TakeDamage(), but its
+         * feedback was deliberately deferred. Flush it AFTER the enemy attack
+         * so the log reads causally from top to bottom.
+         */
+        BloodManager.Instance
+            .FlushDeferredDamageFeedback();
+
+
         Debug.Log(
             $"[ENEMY] {enemyName} attacks for {damage} damage. " +
             $"Prevented = {result.preventedDamage}, " +

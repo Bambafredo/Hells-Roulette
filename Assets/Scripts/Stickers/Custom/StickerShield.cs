@@ -118,52 +118,134 @@ public class StickerShield : StickerEffect
         StickerSpinLocation location,
         BloodManager.DamageBlockEvent blockEvent)
     {
-        if (blockEvent.preventedDamage <= 0)
-            return;
-
-
-        string description =
-            BuildPreventionLogDescription(
-                blockEvent.preventedDamage,
-                blockEvent.remainingCapacity
-            );
-
-
-        if (blockEvent.firstPreventionForBlocker)
+        if (blockEvent.preventedDamage <= 0 ||
+            owner == null)
         {
-            /*
-             * First actual prevention = the Shield truly activates.
-             * RegisterActivation logs it and consumes exactly ONE use.
-             *
-             * Further damage during this same spin can keep spending the
-             * remaining capacity, but never consumes another use.
-             */
-            RegisterActivation(
-                owner,
-                location,
-                description,
-                0,
-                null
-            );
-
             return;
         }
 
 
         /*
-         * Same Shield, later damage event in the same spin.
-         * Report the additional prevention without consuming another use.
+         * IMPORTANT ORDERING:
+         *
+         * BloodManager has already prevented the damage at this point, but
+         * the damage source (enemy / Rat Poison / future source) has not yet
+         * written its own log line.
+         *
+         * Consume the use NOW so gameplay state is correct, but defer Shield's
+         * visual feedback. The damage source will flush it immediately after
+         * logging itself.
          */
-        if (GameLogManager.Instance != null)
+        bool shouldLogUsesRemaining =
+            false;
+
+        int usesRemainingAfterActivation =
+            owner.RemainingUses;
+
+
+        if (blockEvent.firstPreventionForBlocker)
+        {
+            bool shouldConsumeUse =
+                ShouldConsumeUseOnActivation(
+                    location
+                );
+
+
+            if (shouldConsumeUse &&
+                HasLimitedUses)
+            {
+                owner.ConsumeUseAfterActivation(
+                    false
+                );
+
+                shouldLogUsesRemaining =
+                    true;
+
+                usesRemainingAfterActivation =
+                    owner.RemainingUses;
+            }
+        }
+
+
+        string safeStickerName =
+            string.IsNullOrWhiteSpace(
+                stickerName
+            )
+                ? "Shield"
+                : stickerName;
+
+
+        int preventedDamage =
+            blockEvent.preventedDamage;
+
+        int remainingCapacity =
+            blockEvent.remainingCapacity;
+
+
+        BloodManager.Instance?
+            .QueueDeferredDamageFeedback(
+                () =>
+                {
+                    LogDeferredPrevention(
+                        safeStickerName,
+                        preventedDamage,
+                        remainingCapacity,
+                        shouldLogUsesRemaining,
+                        usesRemainingAfterActivation
+                    );
+                }
+            );
+    }
+
+
+    private void LogDeferredPrevention(
+        string safeStickerName,
+        int preventedDamage,
+        int remainingCapacity,
+        bool logUsesRemaining,
+        int usesRemaining)
+    {
+        if (GameLogManager.Instance == null)
+            return;
+
+
+        string preventedText =
+            GameLogManager.Instance
+                .ProtectionText(
+                    $"{preventedDamage} damage"
+                );
+
+
+        string remainingText =
+            GameLogManager.Instance
+                .ProtectionText(
+                    $"{remainingCapacity} block"
+                );
+
+
+        GameLogManager.Instance
+            .AddGameplayLine(
+                GameLogManager.Instance
+                    .StickerText(
+                        safeStickerName
+                    ) +
+                " blocks: " +
+                preventedText +
+                " (" +
+                remainingText +
+                " remaining this spin)"
+            );
+
+
+        if (logUsesRemaining)
         {
             GameLogManager.Instance
                 .AddGameplayLine(
                     GameLogManager.Instance
                         .StickerText(
-                            stickerName
+                            safeStickerName
                         ) +
-                    " blocks: " +
-                    description
+                    $" uses remaining: {usesRemaining}"
                 );
         }
     }
@@ -285,40 +367,5 @@ public class StickerShield : StickerEffect
                     )
                     .ToString()
                 );
-    }
-
-
-    // =========================================================
-    // GAME LOG
-    // =========================================================
-
-    private string BuildPreventionLogDescription(
-        int preventedDamage,
-        int remainingCapacity)
-    {
-        string prevented =
-            $"{preventedDamage} damage";
-
-
-        if (GameLogManager.Instance != null)
-        {
-            prevented =
-                GameLogManager.Instance
-                    .BloodText(
-                        prevented
-                    );
-        }
-
-
-        if (remainingCapacity > 0)
-        {
-            return
-                $"Prevent {prevented} " +
-                $"({remainingCapacity} block remaining this spin)";
-        }
-
-
-        return
-            $"Prevent {prevented}";
     }
 }

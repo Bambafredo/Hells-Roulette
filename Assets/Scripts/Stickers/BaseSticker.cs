@@ -1137,7 +1137,8 @@ public class BaseSticker : MonoBehaviour
     /// Limited stickers lose one use, report the new amount, and are
     /// destroyed when the counter reaches zero.
     /// </summary>
-    public void ConsumeUseAfterActivation()
+    public void ConsumeUseAfterActivation(
+        bool logRemainingUses = true)
     {
         EnsureUseStateInitialized();
 
@@ -1154,7 +1155,19 @@ public class BaseSticker : MonoBehaviour
                 remainingUses - 1
             );
 
-        LogRemainingUses();
+
+        /*
+         * Most stickers log their remaining uses immediately.
+         *
+         * Reactive effects such as Shield can pass false so their complete
+         * feedback can be deferred until AFTER the damage source itself has
+         * been written to the Game Log.
+         */
+        if (logRemainingUses)
+        {
+            LogRemainingUses();
+        }
+
 
         if (remainingUses <= 0)
         {

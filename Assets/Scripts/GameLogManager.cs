@@ -91,6 +91,17 @@ public class GameLogManager : MonoBehaviour
     [Tooltip("Color used for money gains.")]
     public Color moneyColor = Color.yellow;
 
+    [Tooltip(
+        "Color used for Shield / damage-protection quantities. " +
+        "Kept intentionally more blue than the fallback segment cyan."
+    )]
+    public Color protectionColor =
+        new Color(
+            0.25f,
+            0.72f,
+            1f
+        );
+
     [Tooltip("Color used for end-of-round debt payments.")]
     public Color debtColor =
         new Color(
@@ -1827,6 +1838,16 @@ public class GameLogManager : MonoBehaviour
         return ColorText(
             text,
             moneyColor
+        );
+    }
+
+
+    public string ProtectionText(
+        string text)
+    {
+        return ColorText(
+            text,
+            protectionColor
         );
     }
 

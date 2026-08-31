@@ -142,6 +142,14 @@ public class StickerRatPoison : StickerEffect
                 );
 
 
+        /*
+         * Rat Poison's activation line was written just before TakeDamage().
+         * Put any Shield response immediately underneath it.
+         */
+        BloodManager.Instance
+            .FlushDeferredDamageFeedback();
+
+
         Debug.Log(
             $"[RAT POISON] Winning segment: attempted {damage} damage. " +
             $"Prevented = {damageResult.preventedDamage}, " +
