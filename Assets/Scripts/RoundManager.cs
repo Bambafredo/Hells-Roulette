@@ -1068,18 +1068,12 @@ public class RoundManager : MonoBehaviour
     private void StartNextRound()
     {
         /*
-         * SegmentBlock lasts only until the end of the round.
+         * SegmentBlock is now duration-based, not round-based.
          *
-         * Clear it BEFORE the next round becomes playable. The generator
-         * revalidates sticker placement immediately after unblocking, which
-         * is important if WheelShifter resized a frozen segment.
+         * Blocks therefore survive a round transition if they still have
+         * remaining valid spins. Their countdown advances only when a future
+         * valid spin is actually resolved.
          */
-        if (controller != null &&
-            controller.generator != null)
-        {
-            controller.generator
-                .ClearAllSegmentBlocks();
-        }
 
 
         /*

@@ -1638,6 +1638,20 @@ public class RouletteController : MonoBehaviour
          */
         ResolveStickerEffectsForSpin();
 
+
+        /*
+         * 4.5. SEGMENT BLOCK DURATIONS
+         *
+         * Existing blocks lose one turn AFTER they have already had the
+         * chance to suppress sticker activation on this valid spin.
+         *
+         * This happens BEFORE enemies act so a SegmentBlock created by an
+         * enemy right now starts at its full authored duration.
+         */
+        generator?
+            .AdvanceSegmentBlockDurationsAfterValidSpin();
+
+
         /*
          * 5. ENEMIGOS
          */

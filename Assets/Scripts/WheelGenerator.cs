@@ -102,6 +102,14 @@ public class WheelGenerator : MonoBehaviour
     private int debugSegmentIndex =
         0;
 
+    [Tooltip(
+        "Number of future VALID spins used by DEBUG - Block Selected Segment."
+    )]
+    [Min(1)]
+    [SerializeField]
+    private int debugBlockDurationSpins =
+        2;
+
     [Header("Pins (ticks)")]
     public bool generatePins = true;
     public float pinRadiusOffset = -0.05f;
@@ -140,12 +148,15 @@ public class WheelGenerator : MonoBehaviour
     /*
      * Block state is stored by INDEX, never by Segment_X Transform.
      *
+     * Value = how many FUTURE VALID spins still have to be played while
+     * this segment remains blocked.
+     *
      * WheelShifter destroys and recreates every Segment_X GameObject.
-     * Keeping the state here means SegmentBlock survives that regeneration
-     * automatically and is simply re-applied to the new mesh.
+     * Keeping the state here means both the block AND its remaining duration
+     * survive wheel regeneration automatically.
      */
-    private readonly HashSet<int> blockedSegmentIndices =
-        new HashSet<int>();
+    private readonly Dictionary<int, int> blockedSegmentSpinsRemaining =
+        new Dictionary<int, int>();
 
 
     /*
@@ -341,8 +352,8 @@ public class WheelGenerator : MonoBehaviour
 
 
             sm.SetBlocked(
-                blockedSegmentIndices
-                    .Contains(i)
+                blockedSegmentSpinsRemaining
+                    .ContainsKey(i)
             );
 
 
@@ -682,12 +693,49 @@ public class WheelGenerator : MonoBehaviour
 
 
         return
-            blockedSegmentIndices
-                .Contains(index);
+            blockedSegmentSpinsRemaining
+                .ContainsKey(index);
     }
 
 
     public bool IsSegmentBlocked(
+        Transform segmentTransform)
+    {
+        int index =
+            GetSegmentIndex(
+                segmentTransform
+            );
+
+
+        return
+            IsSegmentBlocked(
+                index
+            );
+    }
+
+
+    /// <summary>
+    /// Returns the number of FUTURE VALID spins for which this segment will
+    /// remain blocked.
+    ///
+    /// 0 means the segment is currently not blocked.
+    /// </summary>
+    public int GetSegmentBlockRemainingSpins(
+        int index)
+    {
+        if (!IsSegmentBlocked(index))
+            return 0;
+
+
+        return
+            Mathf.Max(
+                0,
+                blockedSegmentSpinsRemaining[index]
+            );
+    }
+
+
+    public int GetSegmentIndex(
         Transform segmentTransform)
     {
         int index =
@@ -708,30 +756,42 @@ public class WheelGenerator : MonoBehaviour
 
 
         return
-            IsSegmentBlocked(
-                index
-            );
+            index;
     }
 
 
     /// <summary>
-    /// Blocks one segment until ClearAllSegmentBlocks() is called.
+    /// Blocks an UNBLOCKED segment for a fixed number of FUTURE VALID spins.
     ///
-    /// Returns true only when this call created a NEW block.
+    /// Returns false if:
+    /// - the index is invalid;
+    /// - duration is invalid;
+    /// - the segment is already blocked.
+    ///
+    /// Existing blocks are intentionally NEVER refreshed by another action.
+    /// This keeps Random mode and Winning fallback behaviour deterministic.
     /// </summary>
     public bool BlockSegment(
-        int index)
+        int index,
+        int durationSpins)
     {
         if (index < 0 ||
-            index >= segmentCount)
+            index >= segmentCount ||
+            durationSpins <= 0)
         {
             return false;
         }
 
 
-        bool added =
-            blockedSegmentIndices
-                .Add(index);
+        if (IsSegmentBlocked(index))
+            return false;
+
+
+        blockedSegmentSpinsRemaining[index] =
+            Mathf.Max(
+                1,
+                durationSpins
+            );
 
 
         ApplyBlockedVisualToSegment(
@@ -739,25 +799,203 @@ public class WheelGenerator : MonoBehaviour
         );
 
 
-        if (added)
+        Debug.Log(
+            $"[SEGMENT BLOCK] Segment {index + 1} blocked for " +
+            $"{durationSpins} future valid spin(s)."
+        );
+
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Adds FUTURE VALID spins to an ALREADY BLOCKED segment.
+    ///
+    /// The block is represented by one shared remaining-turn counter.
+    /// "Max stacks" therefore translates to a maximum remaining duration:
+    ///
+    ///     maxRemainingSpins = durationPerStack * maxStacks
+    ///
+    /// Example:
+    /// durationPerStack = 2
+    /// maxStacks = 3
+    /// maximum counter = 6 turns
+    ///
+    /// If the segment currently has 5 turns and another 2-turn stack lands,
+    /// only +1 turn is added so the counter stops at 6.
+    ///
+    /// Returns the number of turns ACTUALLY added.
+    /// 0 means nothing changed (invalid target, not blocked, or already capped).
+    /// </summary>
+    public int AddSegmentBlockSpins(
+        int index,
+        int additionalSpins,
+        int maxRemainingSpins)
+    {
+        if (index < 0 ||
+            index >= segmentCount ||
+            additionalSpins <= 0 ||
+            maxRemainingSpins <= 0)
         {
-            Debug.Log(
-                $"[SEGMENT BLOCK] Segment {index + 1} is now blocked."
-            );
+            return 0;
         }
 
 
-        return added;
+        if (!IsSegmentBlocked(index))
+            return 0;
+
+
+        int currentRemaining =
+            blockedSegmentSpinsRemaining[index];
+
+
+        if (currentRemaining >=
+            maxRemainingSpins)
+        {
+            return 0;
+        }
+
+
+        int targetRemaining =
+            Mathf.Min(
+                maxRemainingSpins,
+                currentRemaining +
+                    additionalSpins
+            );
+
+
+        int actuallyAdded =
+            targetRemaining -
+            currentRemaining;
+
+
+        if (actuallyAdded <= 0)
+            return 0;
+
+
+        blockedSegmentSpinsRemaining[index] =
+            targetRemaining;
+
+
+        Debug.Log(
+            $"[SEGMENT BLOCK] Segment {index + 1} stacked: " +
+            $"+{actuallyAdded} future valid spin(s), " +
+            $"{targetRemaining} remaining."
+        );
+
+
+        return
+            actuallyAdded;
+    }
+
+
+    /*
+     * Kept for the existing debug context-menu workflow.
+     */
+    public bool BlockSegment(
+        int index)
+    {
+        return
+            BlockSegment(
+                index,
+                debugBlockDurationSpins
+            );
+    }
+
+
+    /// <summary>
+    /// Called ONCE after sticker resolution of every VALID spin and BEFORE
+    /// enemy actions execute.
+    ///
+    /// This timing is deliberate:
+    ///
+    /// - A segment with 1 turn remaining still suppresses stickers on the
+    ///   current spin.
+    /// - It unlocks immediately AFTER those sticker effects were skipped.
+    /// - A SegmentBlock enemy action executed later in the same resolution
+    ///   creates a fresh block at its full authored duration and is NOT
+    ///   decremented immediately.
+    /// </summary>
+    public void AdvanceSegmentBlockDurationsAfterValidSpin()
+    {
+        if (blockedSegmentSpinsRemaining.Count == 0)
+            return;
+
+
+        List<int> indices =
+            new List<int>(
+                blockedSegmentSpinsRemaining.Keys
+            );
+
+
+        List<int> unlockedIndices =
+            new List<int>();
+
+
+        foreach (int index in indices)
+        {
+            int remaining =
+                blockedSegmentSpinsRemaining[index] - 1;
+
+
+            if (remaining <= 0)
+            {
+                blockedSegmentSpinsRemaining
+                    .Remove(index);
+
+                unlockedIndices.Add(
+                    index
+                );
+
+                ApplyBlockedVisualToSegment(
+                    index
+                );
+            }
+            else
+            {
+                blockedSegmentSpinsRemaining[index] =
+                    remaining;
+            }
+        }
+
+
+        if (unlockedIndices.Count == 0)
+            return;
+
+
+        /*
+         * A WheelShifter may have changed the geometry of a frozen segment.
+         * Once it becomes movable again, immediately restore normal placement
+         * validation.
+         */
+        Physics2D.SyncTransforms();
+
+        StickerPlacementValidator.Instance?
+            .ValidateAfterWheelRegeneration();
+
+
+        foreach (int index in unlockedIndices)
+        {
+            LogSegmentUnlocked(
+                index
+            );
+
+
+            Debug.Log(
+                $"[SEGMENT BLOCK] Segment {index + 1} unlocked."
+            );
+        }
     }
 
 
     public void ClearAllSegmentBlocks()
     {
-        if (blockedSegmentIndices.Count == 0)
+        if (blockedSegmentSpinsRemaining.Count == 0)
             return;
 
 
-        blockedSegmentIndices.Clear();
+        blockedSegmentSpinsRemaining.Clear();
 
 
         if (segments != null)
@@ -780,15 +1018,6 @@ public class WheelGenerator : MonoBehaviour
         }
 
 
-        /*
-         * A WheelShifter may have resized a blocked segment while its
-         * stickers were frozen. Placement validity is intentionally ignored
-         * while blocked (see StickerPlacementValidator).
-         *
-         * The moment the new round unblocks the segment, run the normal
-         * validator again. If something genuinely no longer fits, the player
-         * can now move it normally.
-         */
         Physics2D.SyncTransforms();
 
         StickerPlacementValidator.Instance?
@@ -832,7 +1061,7 @@ public class WheelGenerator : MonoBehaviour
 
     private void RemoveInvalidBlockedIndices()
     {
-        if (blockedSegmentIndices.Count == 0)
+        if (blockedSegmentSpinsRemaining.Count == 0)
             return;
 
 
@@ -841,7 +1070,7 @@ public class WheelGenerator : MonoBehaviour
 
 
         foreach (int index in
-                 blockedSegmentIndices)
+                 blockedSegmentSpinsRemaining.Keys)
         {
             if (index < 0 ||
                 index >= segmentCount)
@@ -856,9 +1085,48 @@ public class WheelGenerator : MonoBehaviour
         foreach (int index in
                  invalid)
         {
-            blockedSegmentIndices
+            blockedSegmentSpinsRemaining
                 .Remove(index);
         }
+    }
+
+
+    private void LogSegmentUnlocked(
+        int index)
+    {
+        if (GameLogManager.Instance == null)
+            return;
+
+
+        string segmentLabel =
+            GameLogManager.Instance
+                .SegmentText(
+                    $"Segment {index + 1}"
+                );
+
+
+        if (segments != null &&
+            index >= 0 &&
+            index < segments.Count &&
+            segments[index] != null &&
+            segments[index].meshComponent != null)
+        {
+            segmentLabel =
+                GameLogManager.Instance
+                    .SegmentText(
+                        $"Segment {index + 1}",
+                        segments[index]
+                            .meshComponent
+                            .color
+                    );
+        }
+
+
+        GameLogManager.Instance
+            .AddGameplayLine(
+                segmentLabel +
+                " unlocks"
+            );
     }
 
 

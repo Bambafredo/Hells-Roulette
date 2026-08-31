@@ -10,8 +10,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4b441fe91d9cd7c46890c83e227b3173, type: 3}
-  m_Name: EnemyAction_SegmentBlock
+  m_Name: EnemyAction_RandomSegmentBlock
   m_EditorClassIdentifier: 
   actionName: Segment Block
-  icon: {fileID: 21300000, guid: c2259399f2a5f6e419b1fc743e9aa4f0, type: 3}
-  tooltipDescription: 
+  icon: {fileID: 21300000, guid: bbaa1d2a0e6e57345adedd4cb51fb924, type: 3}
+  tooltipDescription: Blocks a random segment for 2 spins.
+  blockDurationSpins: 3
+  targetMode: 1
+  stackable: 1
+  maxStacks: 1
+  fallbackToRandomUnblockedIfWinningAlreadyBlocked: 0

@@ -28,5 +28,5 @@ MonoBehaviour:
   losingSegmentTooltip: 
   albumTooltip: 
   baseDamage: 2
-  damagePerOtherRat: 3
+  damagePerOtherRat: 1
   destroyWhenSharingSegmentWithRatPoison: 1
