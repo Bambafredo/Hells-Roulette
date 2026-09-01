@@ -85,6 +85,40 @@ public class EnemyPanelManager : MonoBehaviour
     }
 
 
+    public BaseEnemy GetRightmostAliveEnemy()
+    {
+        if (corridorController != null &&
+            corridorController.CurrentRow != null)
+        {
+            return GetRightmostAliveEnemyInRow(
+                corridorController.CurrentRow
+            );
+        }
+
+        if (enemySlots == null)
+            return null;
+
+        for (int i = enemySlots.Length - 1; i >= 0; i--)
+        {
+            Transform slot = enemySlots[i];
+            if (slot == null)
+                continue;
+
+            BaseEnemy enemy =
+                slot.GetComponentInChildren<BaseEnemy>(true);
+
+            if (enemy != null &&
+                enemy.gameObject.activeInHierarchy &&
+                !enemy.IsDead)
+            {
+                return enemy;
+            }
+        }
+
+        return null;
+    }
+
+
     // =========================================================
     // CORRIDOR TARGETING
     // =========================================================
@@ -128,5 +162,37 @@ public class EnemyPanelManager : MonoBehaviour
 
 
         return leftmost;
+    }
+
+
+    private BaseEnemy GetRightmostAliveEnemyInRow(
+        Transform row)
+    {
+        if (row == null)
+            return null;
+
+        BaseEnemy[] enemies =
+            row.GetComponentsInChildren<BaseEnemy>(true);
+
+        BaseEnemy rightmost = null;
+
+        foreach (BaseEnemy enemy in enemies)
+        {
+            if (enemy == null ||
+                enemy.IsDead ||
+                !enemy.CombatActive ||
+                !enemy.gameObject.activeInHierarchy)
+            {
+                continue;
+            }
+
+            if (rightmost == null ||
+                enemy.transform.position.x > rightmost.transform.position.x)
+            {
+                rightmost = enemy;
+            }
+        }
+
+        return rightmost;
     }
 }

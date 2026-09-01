@@ -88,6 +88,13 @@ public class BaseSticker : MonoBehaviour
     private bool consumed = false;
 
     /*
+     * Generic gameplay destruction state. Unity Destroy() is deferred until
+     * end of frame, so this immediate logical flag prevents a destroyed
+     * sticker from activating later from an already-captured spin snapshot.
+     */
+    private bool pendingGameplayDestruction = false;
+
+    /*
      * Generic per-instance runtime memory for stateful stickers.
      *
      * Example:
@@ -118,6 +125,12 @@ public class BaseSticker : MonoBehaviour
             return remainingUses;
         }
     }
+
+    public bool IsConsumed =>
+        consumed;
+
+    public bool IsPendingGameplayDestruction =>
+        pendingGameplayDestruction;
 
     private Camera cam;
     private bool isDragging = false;
@@ -1014,7 +1027,8 @@ public class BaseSticker : MonoBehaviour
         StickerSpinLocation location)
     {
         if (effect == null ||
-            consumed)
+            consumed ||
+            pendingGameplayDestruction)
         {
             return;
         }
@@ -1046,7 +1060,8 @@ public class BaseSticker : MonoBehaviour
         StickerSpinLocation location)
     {
         if (effect == null ||
-            consumed)
+            consumed ||
+            pendingGameplayDestruction)
         {
             return;
         }
@@ -1070,6 +1085,65 @@ public class BaseSticker : MonoBehaviour
         ResolveSpinLocation(
             StickerSpinLocation.WinningSegment
         );
+    }
+
+
+    // ===========================================================
+    // GENERIC GAMEPLAY DESTRUCTION
+    // ===========================================================
+
+    /// <summary>
+    /// Immediately removes this physical sticker from gameplay and schedules
+    /// its GameObject for Unity destruction at the end of the frame.
+    ///
+    /// Sticker effects that destroy stickers should use this instead of
+    /// Destroy(gameObject) directly so the spin snapshot knows the target must
+    /// not activate later in the same resolution.
+    /// </summary>
+    public bool DestroyFromGameplay(
+        string reason = null)
+    {
+        if (pendingGameplayDestruction ||
+            consumed)
+        {
+            return false;
+        }
+
+        pendingGameplayDestruction = true;
+
+        string displayName =
+            effect != null &&
+            !string.IsNullOrWhiteSpace(effect.stickerName)
+                ? effect.stickerName
+                : gameObject.name;
+
+        // Remove it logically immediately.
+        isPlaced = false;
+        currentSegment = null;
+        currentAlbumZone = null;
+        currentBagZone = null;
+        currentGameplayZone = null;
+
+        Collider2D col = StickerCollider;
+        if (col != null)
+            col.enabled = false;
+
+        GameObject objectToDestroy =
+            stickerRoot != null
+                ? stickerRoot.gameObject
+                : gameObject;
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            Debug.Log($"[STICKER] '{displayName}' was destroyed by gameplay.");
+        }
+        else
+        {
+            Debug.Log($"[STICKER] '{displayName}' was destroyed: {reason}.");
+        }
+
+        Destroy(objectToDestroy);
+        return true;
     }
 
 
@@ -1263,6 +1337,8 @@ public class BaseSticker : MonoBehaviour
 
     private void DestroyStickerInstance()
     {
+        pendingGameplayDestruction = true;
+
         GameObject objectToDestroy =
             stickerRoot != null
                 ? stickerRoot.gameObject
