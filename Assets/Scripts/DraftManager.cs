@@ -106,21 +106,24 @@ public class DraftManager : MonoBehaviour
     }
 
 
-    private IEnumerator Start()
+    private void Start()
     {
         /*
-         * RewardManager.Start() performs its normal initial UI reset.
-         * Waiting one frame guarantees DraftManager opens AFTER that reset,
-         * regardless of Unity's Start ordering.
+         * DraftManager has DefaultExecutionOrder(100), while RewardManager
+         * uses Unity's normal default order (0).
+         *
+         * That means RewardManager.Start() performs its initial UI reset first,
+         * then DraftManager.Start() opens the draft in the SAME frame, before
+         * Unity renders the first gameplay frame.
+         *
+         * We deliberately do NOT wait a frame here: doing so caused the enemy
+         * screen to flash briefly before the draft appeared.
          *
          * IMPORTANT:
          * This component must live on an ACTIVE GameObject.
          * DraftPanel itself starts inactive, so do not put DraftManager on the
          * inactive DraftPanel if you want the draft to open automatically.
          */
-        yield return null;
-
-
         if (enableStartingDraft)
         {
             BeginStartingDraft();
