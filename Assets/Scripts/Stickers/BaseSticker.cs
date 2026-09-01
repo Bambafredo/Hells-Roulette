@@ -71,6 +71,31 @@ public class BaseSticker : MonoBehaviour
     [Tooltip("GO raíz del sticker (prefab). Si no se asigna, se detecta en Awake una vez.")]
     public Transform stickerRoot;
 
+
+    // ===========================================================
+    // DRAG RENDERING
+    // ===========================================================
+
+    [Header("Drag Rendering")]
+
+    [Tooltip(
+        "When enabled, every SpriteRenderer belonging to this sticker is " +
+        "temporarily rendered above every other sticker while it is dragged. " +
+        "Its exact original sorting layer/order is restored on drop."
+    )]
+    public bool bringToFrontWhileDragging =
+        true;
+
+
+    [Tooltip(
+        "Extra sorting-order spacing above the current frontmost sticker. " +
+        "This is evaluated only when the drag begins."
+    )]
+    [Min(1)]
+    public int dragSortingPadding =
+        10;
+
+
     // ===========================================================
     // LIMITED USES - RUNTIME STATE
     // ===========================================================
@@ -149,6 +174,38 @@ public class BaseSticker : MonoBehaviour
 
 
     // ===========================================================
+    // DRAG RENDERING - RUNTIME STATE
+    // ===========================================================
+
+    private struct DragSpriteRenderState
+    {
+        public SpriteRenderer renderer;
+        public int sortingLayerID;
+        public int sortingOrder;
+
+
+        public DragSpriteRenderState(
+            SpriteRenderer renderer,
+            int sortingLayerID,
+            int sortingOrder)
+        {
+            this.renderer = renderer;
+            this.sortingLayerID = sortingLayerID;
+            this.sortingOrder = sortingOrder;
+        }
+    }
+
+
+    private readonly List<DragSpriteRenderState>
+        dragSpriteRenderStates =
+            new List<DragSpriteRenderState>();
+
+
+    private bool dragRenderingOverridden =
+        false;
+
+
+    // ===========================================================
     // SPIN COLLIDER OPTIMIZATION
     // ===========================================================
 
@@ -210,6 +267,15 @@ public class BaseSticker : MonoBehaviour
         EnsureAlbumStateFromHierarchy();
         EnsureUseStateInitialized();
     }
+
+    protected virtual void OnDisable()
+    {
+        EndDragRenderingOverride();
+
+        isDragging =
+            false;
+    }
+
 
     protected virtual void Update()
     {
@@ -439,6 +505,15 @@ public class BaseSticker : MonoBehaviour
                     stickerRoot.position -
                     (Vector3)mouseWorld;
 
+
+                /*
+                 * Visual-only drag state. This is applied after temporary
+                 * re-parenting so hierarchy/segment differences cannot make
+                 * the dragged sticker render behind another sticker.
+                 */
+                BeginDragRenderingOverride();
+
+
                 SetAlpha(0.6f);
 
                 controller?.SetInputBlocked(true);
@@ -466,6 +541,14 @@ public class BaseSticker : MonoBehaviour
                 isDragging = false;
 
                 controller?.SetInputBlocked(false);
+
+
+                /*
+                 * Restore the exact prefab sorting state after placement,
+                 * regardless of the sticker's new parent/location.
+                 */
+                EndDragRenderingOverride();
+
 
                 SetAlpha(1f);
 
@@ -984,6 +1067,257 @@ public class BaseSticker : MonoBehaviour
         currentAlbumZone =
             originalAlbumZone;
     }
+
+    // ===========================================================
+    // DRAG RENDERING
+    // ===========================================================
+
+    /// <summary>
+    /// Temporarily renders this sticker above every other physical sticker.
+    ///
+    /// We do not rely on hierarchy order. Instead we:
+    /// 1) find the frontmost sorting layer currently used by stickers;
+    /// 2) find the highest sorting order used on that layer;
+    /// 3) move this sticker's SpriteRenderers just above it;
+    /// 4) preserve the sticker's own internal renderer order.
+    ///
+    /// Every original layer/order is restored exactly on drop.
+    /// </summary>
+    private void BeginDragRenderingOverride()
+    {
+        if (!bringToFrontWhileDragging ||
+            stickerRoot == null ||
+            dragRenderingOverridden)
+        {
+            return;
+        }
+
+
+        SpriteRenderer[] draggedRenderers =
+            stickerRoot
+                .GetComponentsInChildren<SpriteRenderer>(
+                    true
+                );
+
+
+        if (draggedRenderers == null ||
+            draggedRenderers.Length <= 0)
+        {
+            return;
+        }
+
+
+        dragSpriteRenderStates.Clear();
+
+
+        int draggedMinOrder =
+            int.MaxValue;
+
+        int draggedMaxOrder =
+            int.MinValue;
+
+
+        foreach (SpriteRenderer renderer in
+                 draggedRenderers)
+        {
+            if (renderer == null)
+                continue;
+
+
+            dragSpriteRenderStates.Add(
+                new DragSpriteRenderState(
+                    renderer,
+                    renderer.sortingLayerID,
+                    renderer.sortingOrder
+                )
+            );
+
+
+            draggedMinOrder =
+                Mathf.Min(
+                    draggedMinOrder,
+                    renderer.sortingOrder
+                );
+
+            draggedMaxOrder =
+                Mathf.Max(
+                    draggedMaxOrder,
+                    renderer.sortingOrder
+                );
+        }
+
+
+        if (dragSpriteRenderStates.Count <= 0)
+            return;
+
+
+        int frontSortingLayerID =
+            dragSpriteRenderStates[0]
+                .sortingLayerID;
+
+        int frontSortingLayerValue =
+            SortingLayer
+                .GetLayerValueFromID(
+                    frontSortingLayerID
+                );
+
+
+        int highestOrderOnFrontLayer =
+            int.MinValue;
+
+
+        BaseSticker[] allStickers =
+            FindObjectsOfType<BaseSticker>(
+                true
+            );
+
+
+        foreach (BaseSticker sticker in
+                 allStickers)
+        {
+            if (sticker == null ||
+                sticker.stickerRoot == null)
+            {
+                continue;
+            }
+
+
+            SpriteRenderer[] renderers =
+                sticker.stickerRoot
+                    .GetComponentsInChildren<SpriteRenderer>(
+                        true
+                    );
+
+
+            foreach (SpriteRenderer renderer in
+                     renderers)
+            {
+                if (renderer == null)
+                    continue;
+
+
+                int layerValue =
+                    SortingLayer
+                        .GetLayerValueFromID(
+                            renderer.sortingLayerID
+                        );
+
+
+                if (layerValue >
+                    frontSortingLayerValue)
+                {
+                    frontSortingLayerValue =
+                        layerValue;
+
+                    frontSortingLayerID =
+                        renderer.sortingLayerID;
+
+                    highestOrderOnFrontLayer =
+                        renderer.sortingOrder;
+                }
+                else if (
+                    layerValue ==
+                    frontSortingLayerValue)
+                {
+                    highestOrderOnFrontLayer =
+                        Mathf.Max(
+                            highestOrderOnFrontLayer,
+                            renderer.sortingOrder
+                        );
+                }
+            }
+        }
+
+
+        if (highestOrderOnFrontLayer ==
+            int.MinValue)
+        {
+            highestOrderOnFrontLayer =
+                0;
+        }
+
+
+        int internalOrderRange =
+            Mathf.Max(
+                0,
+                draggedMaxOrder -
+                draggedMinOrder
+            );
+
+
+        const int maxSafeSortingOrder =
+            32760;
+
+
+        int desiredBaseOrder =
+            highestOrderOnFrontLayer +
+            Mathf.Max(
+                1,
+                dragSortingPadding
+            );
+
+
+        desiredBaseOrder =
+            Mathf.Min(
+                desiredBaseOrder,
+                maxSafeSortingOrder -
+                internalOrderRange
+            );
+
+
+        foreach (DragSpriteRenderState state in
+                 dragSpriteRenderStates)
+        {
+            if (state.renderer == null)
+                continue;
+
+
+            int relativeOrder =
+                state.sortingOrder -
+                draggedMinOrder;
+
+
+            state.renderer.sortingLayerID =
+                frontSortingLayerID;
+
+            state.renderer.sortingOrder =
+                desiredBaseOrder +
+                relativeOrder;
+        }
+
+
+        dragRenderingOverridden =
+            true;
+    }
+
+
+    private void EndDragRenderingOverride()
+    {
+        if (!dragRenderingOverridden)
+            return;
+
+
+        foreach (DragSpriteRenderState state in
+                 dragSpriteRenderStates)
+        {
+            if (state.renderer == null)
+                continue;
+
+
+            state.renderer.sortingLayerID =
+                state.sortingLayerID;
+
+            state.renderer.sortingOrder =
+                state.sortingOrder;
+        }
+
+
+        dragSpriteRenderStates.Clear();
+
+        dragRenderingOverridden =
+            false;
+    }
+
 
     // ===========================================================
     // VISUAL
