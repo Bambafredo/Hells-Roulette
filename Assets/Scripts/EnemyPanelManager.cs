@@ -85,6 +85,78 @@ public class EnemyPanelManager : MonoBehaviour
     }
 
 
+    public BaseEnemy[] GetAllAliveEnemies()
+    {
+        /*
+         * Corridor mode: return every living, combat-active enemy in
+         * CurrentRow. This is generic targeting infrastructure for any effect
+         * that needs to hit the whole active enemy row.
+         */
+        if (corridorController != null &&
+            corridorController.CurrentRow != null)
+        {
+            BaseEnemy[] rowEnemies =
+                corridorController.CurrentRow
+                    .GetComponentsInChildren<BaseEnemy>(
+                        true
+                    );
+
+            List<BaseEnemy> alive =
+                new List<BaseEnemy>();
+
+            foreach (BaseEnemy enemy in rowEnemies)
+            {
+                if (enemy == null ||
+                    enemy.IsDead ||
+                    !enemy.CombatActive ||
+                    !enemy.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                alive.Add(enemy);
+            }
+
+            return alive.ToArray();
+        }
+
+
+        /*
+         * Legacy fallback: inspect authored enemy slots.
+         */
+        if (enemySlots == null)
+            return new BaseEnemy[0];
+
+
+        List<BaseEnemy> fallbackAlive =
+            new List<BaseEnemy>();
+
+
+        foreach (Transform slot in enemySlots)
+        {
+            if (slot == null)
+                continue;
+
+
+            BaseEnemy enemy =
+                slot.GetComponentInChildren<BaseEnemy>(
+                    true
+                );
+
+
+            if (enemy != null &&
+                enemy.gameObject.activeInHierarchy &&
+                !enemy.IsDead)
+            {
+                fallbackAlive.Add(enemy);
+            }
+        }
+
+
+        return fallbackAlive.ToArray();
+    }
+
+
     public BaseEnemy GetRightmostAliveEnemy()
     {
         if (corridorController != null &&

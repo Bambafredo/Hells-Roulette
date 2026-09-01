@@ -21,9 +21,13 @@ MonoBehaviour:
   consumeUseOnAlbumActivation: 0
   dollarReward: 0
   logDescription: 
-  winningSegmentTooltip: Destroys a random sticker in this segment and deals {damage}
-    damage to the first enemy from the right.
+  winningSegmentTooltip: Destroy a random sticker in the Roulette and deal {damage}
+    damage to the all enemies.
   losingSegmentTooltip: 
   albumTooltip: 
-  damageAmount: 6
+  damageAmount: 3
+  damageTargetMode: 1
+  destroyChancePercent: 100
+  destroyScope: 1
   canDestroySelf: 0
+  destructionRequiredToDealDamage: 1
