@@ -259,6 +259,22 @@ public class RoundManager : MonoBehaviour
     private int hitsThisSpin = 0;
     private bool spinActive = false;
 
+
+    /*
+     * Generic lock for modal/run-setup flows that are neither a spin nor the
+     * normal end-of-round Reward Phase.
+     *
+     * A starting setup flow can use this without RoundManager depending on a
+     * concrete manager type.
+     */
+    private bool externalSpinBlockActive =
+        false;
+
+
+    public bool ExternalSpinBlockActive =>
+        externalSpinBlockActive;
+
+
     private bool lastSpinWasValid = false;
 
     private float spinStartTime = 0f;
@@ -352,6 +368,9 @@ public class RoundManager : MonoBehaviour
                 return false;
 
             if (waitingForRewardCompletion)
+                return false;
+
+            if (externalSpinBlockActive)
                 return false;
 
             if (enemyCorridorController != null &&
@@ -449,6 +468,9 @@ public class RoundManager : MonoBehaviour
 
         waitingForRewardCompletion = false;
 
+        externalSpinBlockActive =
+            false;
+
         spinActive = false;
 
         lastSpinWasValid = false;
@@ -476,6 +498,23 @@ public class RoundManager : MonoBehaviour
         if (Instance == this)
             Instance = null;
     }
+
+    // =========================================================
+    // EXTERNAL FLOW SPIN BLOCK
+    // =========================================================
+
+    /// <summary>
+    /// Generic gameplay-flow lock used by modal setup screens.
+    ///
+    /// RoundManager intentionally does not know who owns the modal.
+    /// </summary>
+    public void SetExternalSpinBlock(
+        bool blocked)
+    {
+        externalSpinBlockActive =
+            blocked;
+    }
+
 
     // =========================================================
     // SPIN HOOKS
