@@ -132,13 +132,14 @@ public class RoundManager : MonoBehaviour
     // ENEMY ROUND OUTCOME
     // =========================================================
 
-    private void ResolveEnemyEncounterOutcome()
+    private bool ResolveEnemyEncounterOutcome()
     {
         /*
-         * Scenes without the new corridor keep the old debt behaviour.
+         * Scenes without the enemy corridor keep the old debt behaviour and
+         * cannot qualify for Clean Row Bonus.
          */
         if (enemyCorridorController == null)
-            return;
+            return false;
 
 
         bool encounterCleared =
@@ -206,6 +207,10 @@ public class RoundManager : MonoBehaviour
             .Invoke(
                 enemyDebtPenaltyPercent
             );
+
+
+        return
+            encounterCleared;
     }
 
 
@@ -789,7 +794,8 @@ public class RoundManager : MonoBehaviour
              * Ese resultado NO cambia la deuda que acabamos de pagar:
              * modifica únicamente la deuda BASE de la SIGUIENTE ronda.
              */
-            ResolveEnemyEncounterOutcome();
+            bool cleanRowCleared =
+                ResolveEnemyEncounterOutcome();
 
 
             /*
@@ -800,7 +806,9 @@ public class RoundManager : MonoBehaviour
              */
             debtPending = false;
 
-            BeginRewardPhaseOrNextRound();
+            BeginRewardPhaseOrNextRound(
+                cleanRowCleared
+            );
 
             return;
         }
@@ -821,7 +829,8 @@ public class RoundManager : MonoBehaviour
     // REWARD PHASE
     // =========================================================
 
-    private void BeginRewardPhaseOrNextRound()
+    private void BeginRewardPhaseOrNextRound(
+        bool cleanRowCleared)
     {
         /*
          * Si esta escena NO utiliza RewardManager
@@ -847,7 +856,9 @@ public class RoundManager : MonoBehaviour
         waitingForRewardCompletion =
             true;
 
-        rewardManager.BeginRewardPhase();
+        rewardManager.BeginRewardSequence(
+            cleanRowCleared
+        );
 
         /*
          * Protección por si RewardManager no ha podido

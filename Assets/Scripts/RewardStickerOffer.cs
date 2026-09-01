@@ -5,6 +5,13 @@ using UnityEngine;
 [DefaultExecutionOrder(100)]
 public class RewardStickerOffer : MonoBehaviour
 {
+    public enum OfferMode
+    {
+        StandardPurchase,
+        FreeClaim
+    }
+
+
     // =========================================================
     // RUNTIME REFERENCES
     // =========================================================
@@ -16,6 +23,9 @@ public class RewardStickerOffer : MonoBehaviour
     private Transform rewardSlot;
 
     private bool purchased = false;
+
+    private OfferMode offerMode =
+        OfferMode.StandardPurchase;
 
 
     // =========================================================
@@ -43,6 +53,13 @@ public class RewardStickerOffer : MonoBehaviour
                 return 0;
             }
 
+            if (offerMode ==
+                OfferMode.FreeClaim)
+            {
+                return 0;
+            }
+
+
             return
                 manager.GetCurrentPurchasePrice(
                     sticker
@@ -58,7 +75,9 @@ public class RewardStickerOffer : MonoBehaviour
     public void Initialize(
         RewardManager rewardManager,
         GameObject spawnedOfferObject,
-        Transform originSlot)
+        Transform originSlot,
+        OfferMode initialOfferMode =
+            OfferMode.StandardPurchase)
     {
         manager =
             rewardManager;
@@ -68,6 +87,9 @@ public class RewardStickerOffer : MonoBehaviour
 
         rewardSlot =
             originSlot;
+
+        offerMode =
+            initialOfferMode;
 
 
         if (offerObject != null)
@@ -175,39 +197,55 @@ public class RewardStickerOffer : MonoBehaviour
 
 
         int price =
-            manager.GetCurrentPurchasePrice(
-                sticker
-            );
+            CurrentPrice;
 
 
         // -----------------------------------------------------
-        // TRY PAY
+        // RESOLVE OFFER
         // -----------------------------------------------------
 
-        bool purchaseSuccessful =
-            manager.TryPurchaseOffer(
-                offerObject,
-                sticker
-            );
+        bool offerResolved =
+            offerMode ==
+                OfferMode.FreeClaim
+                ? manager
+                    .TryClaimFreeOffer(
+                        offerObject,
+                        sticker
+                    )
+                : manager
+                    .TryPurchaseOffer(
+                        offerObject,
+                        sticker
+                    );
 
 
-        if (purchaseSuccessful)
+        if (offerResolved)
         {
-            purchased = true;
+            purchased =
+                true;
 
 
-            Debug.Log(
-                $"[REWARD OFFER] " +
-                $"'{GetStickerName()}' purchased " +
-                $"successfully for ${price}."
-            );
+            if (offerMode ==
+                OfferMode.FreeClaim)
+            {
+                Debug.Log(
+                    $"[REWARD OFFER] " +
+                    $"'{GetStickerName()}' claimed for FREE."
+                );
+            }
+            else
+            {
+                Debug.Log(
+                    $"[REWARD OFFER] " +
+                    $"'{GetStickerName()}' purchased " +
+                    $"successfully for ${price}."
+                );
+            }
 
 
             /*
-             * A partir de aquí este sticker es simplemente
-             * un BaseSticker normal propiedad del jugador.
-             *
-             * Ya no necesita lógica de tienda.
+             * From here on the physical sticker is normal player property.
+             * It no longer needs RewardStickerOffer behaviour.
              */
             Destroy(this);
 
@@ -216,14 +254,26 @@ public class RewardStickerOffer : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // CANNOT AFFORD
+        // OFFER REJECTED
         // -----------------------------------------------------
 
-        Debug.Log(
-            $"[REWARD OFFER] Cannot afford " +
-            $"'{GetStickerName()}' (${price}). " +
-            $"Returning to reward slot."
-        );
+        if (offerMode ==
+            OfferMode.FreeClaim)
+        {
+            Debug.Log(
+                $"[REWARD OFFER] Free claim for " +
+                $"'{GetStickerName()}' was rejected. " +
+                $"Returning to bonus slot."
+            );
+        }
+        else
+        {
+            Debug.Log(
+                $"[REWARD OFFER] Cannot afford " +
+                $"'{GetStickerName()}' (${price}). " +
+                $"Returning to reward slot."
+            );
+        }
 
 
         ReturnToRewardSlot();

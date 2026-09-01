@@ -28,6 +28,14 @@ public class RewardManager : MonoBehaviour
     }
 
 
+    public enum RewardStage
+    {
+        None,
+        CleanRowBonus,
+        StandardRewards
+    }
+
+
     // =========================================================
     // REFERENCES
     // =========================================================
@@ -37,6 +45,34 @@ public class RewardManager : MonoBehaviour
 
     public Transform rewardSlotA;
     public Transform rewardSlotB;
+
+
+    // =========================================================
+    // CLEAN ROW BONUS
+    // =========================================================
+
+    [Header("Clean Row Bonus")]
+
+    [Tooltip(
+        "Master switch for the Clean Row Bonus. " +
+        "Enabled by default so it can be disabled instantly for playtesting."
+    )]
+    public bool enableCleanRowBonus =
+        true;
+
+
+    [Tooltip(
+        "Reward_Panel/RewardBonus. This acts as both the visual root and " +
+        "the spawn/return slot for the single free sticker."
+    )]
+    public Transform rewardBonusSlot;
+
+
+    [Tooltip(
+        "Reward_Panel/Background. Shared by BOTH Clean Row Bonus and the normal " +
+        "Reward Phase. If left empty, a direct child named 'Background' is used."
+    )]
+    public GameObject regularRewardBackground;
 
 
     // =========================================================
@@ -92,6 +128,26 @@ public class RewardManager : MonoBehaviour
     )]
     public PurchaseCurrency defaultPurchaseCurrency =
         PurchaseCurrency.Coin;
+
+
+    // =========================================================
+    // CLEAR BONUS OFFER
+    // =========================================================
+
+    private void ClearBonusOffer()
+    {
+        if (currentBonusOffer == null)
+            return;
+
+
+        Destroy(
+            currentBonusOffer
+        );
+
+
+        currentBonusOffer =
+            null;
+    }
 
 
     // =========================================================
@@ -197,6 +253,26 @@ public class RewardManager : MonoBehaviour
     }
 
 
+    public RewardStage CurrentRewardStage
+    {
+        get;
+        private set;
+    } =
+        RewardStage.None;
+
+
+    public bool CleanRowBonusActive =>
+        RewardPhaseActive &&
+        CurrentRewardStage ==
+            RewardStage.CleanRowBonus;
+
+
+    public bool StandardRewardStageActive =>
+        RewardPhaseActive &&
+        CurrentRewardStage ==
+            RewardStage.StandardRewards;
+
+
     /*
      * Número TOTAL de stickers adquiridos durante
      * esta Reward Phase.
@@ -284,6 +360,8 @@ public class RewardManager : MonoBehaviour
     private GameObject currentOfferA;
     private GameObject currentOfferB;
 
+    private GameObject currentBonusOffer;
+
     private Camera cam;
 
     /*
@@ -328,6 +406,9 @@ public class RewardManager : MonoBehaviour
 
     private void Start()
     {
+        ResolveCleanRowBonusReferences();
+
+
         if (rewardPanel != null)
         {
             rewardPanel.SetActive(false);
@@ -335,6 +416,9 @@ public class RewardManager : MonoBehaviour
 
 
         RewardPhaseActive = false;
+
+        CurrentRewardStage =
+            RewardStage.None;
 
         PurchasesThisPhase = 0;
 
@@ -382,26 +466,33 @@ public class RewardManager : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // CHANGE CURRENCY
+        // STANDARD-REWARD CONTROLS
         // -----------------------------------------------------
 
-        if (changeCurrencyButtonCollider != null &&
-            changeCurrencyButtonCollider.OverlapPoint(mouseWorld))
+        if (StandardRewardStageActive)
         {
-            TogglePurchaseCurrency();
-            return;
-        }
+            // -------------------------------------------------
+            // CHANGE CURRENCY
+            // -------------------------------------------------
+
+            if (changeCurrencyButtonCollider != null &&
+                changeCurrencyButtonCollider.OverlapPoint(mouseWorld))
+            {
+                TogglePurchaseCurrency();
+                return;
+            }
 
 
-        // -----------------------------------------------------
-        // REROLL
-        // -----------------------------------------------------
+            // -------------------------------------------------
+            // REROLL
+            // -------------------------------------------------
 
-        if (rerollButtonCollider != null &&
-            rerollButtonCollider.OverlapPoint(mouseWorld))
-        {
-            TryReroll();
-            return;
+            if (rerollButtonCollider != null &&
+                rerollButtonCollider.OverlapPoint(mouseWorld))
+            {
+                TryReroll();
+                return;
+            }
         }
 
 
@@ -433,6 +524,35 @@ public class RewardManager : MonoBehaviour
 
     public void BeginRewardPhase()
     {
+        /*
+         * Preserve the old public/debug API:
+         * BeginRewardPhase() opens the normal shop directly.
+         *
+         * RoundManager uses BeginRewardSequence(cleanRowCleared) so a Clean
+         * Row Bonus can be inserted before the normal shop.
+         */
+        BeginRewardSequence(
+            false
+        );
+    }
+
+
+    /// <summary>
+    /// Complete post-round reward flow.
+    ///
+    /// Clean Row:
+    ///   Free sticker stage -> normal Reward Phase -> next round.
+    ///
+    /// No Clean Row:
+    ///   Normal Reward Phase -> next round.
+    ///
+    /// EnemyCamera remains disabled for the COMPLETE reward sequence, exactly
+    /// like the pre-existing modal Reward Phase. No overlay camera/layer is
+    /// required.
+    /// </summary>
+    public void BeginRewardSequence(
+        bool cleanRowCleared)
+    {
         if (RewardPhaseActive)
             return;
 
@@ -447,19 +567,17 @@ public class RewardManager : MonoBehaviour
         }
 
 
+        ResolveCleanRowBonusReferences();
+
+
         // -----------------------------------------------------
-        // MODAL REWARD LAYERING
+        // MODAL ENEMY VIEW
         // -----------------------------------------------------
 
         /*
-         * EnemyCamera renders directly into the left third of the screen
-         * with a higher camera priority than the Main Camera.
-         *
-         * RewardPanel is world-space and belongs to the Main Camera, so the
-         * enemy camera would otherwise paint over it.
-         *
-         * Reward is a modal phase anyway, so the cleanest low-risk solution
-         * is simply to stop rendering the corridor while the shop is open.
+         * This is the EXISTING project solution:
+         * Reward_Panel is rendered by Main Camera while EnemyCamera is
+         * temporarily disabled for the whole modal reward sequence.
          */
         if (enemyCamera != null)
         {
@@ -471,18 +589,25 @@ public class RewardManager : MonoBehaviour
         }
 
 
-        RewardPhaseActive = true;
+        RewardPhaseActive =
+            true;
+
+        CurrentRewardStage =
+            RewardStage.None;
 
 
         // -----------------------------------------------------
-        // RESET PHASE STATE
+        // RESET NORMAL SHOP STATE ONCE PER REWARD SEQUENCE
         // -----------------------------------------------------
 
-        PurchasesThisPhase = 0;
+        PurchasesThisPhase =
+            0;
 
-        MultiplierPurchasesThisPhase = 0;
+        MultiplierPurchasesThisPhase =
+            0;
 
-        RerollsThisPhase = 0;
+        RerollsThisPhase =
+            0;
 
 
         CurrentPurchaseCurrency =
@@ -493,10 +618,187 @@ public class RewardManager : MonoBehaviour
 
 
         OnPurchaseCountChanged?
-            .Invoke(PurchasesThisPhase);
+            .Invoke(
+                PurchasesThisPhase
+            );
 
 
-        rewardPanel.SetActive(true);
+        rewardPanel.SetActive(
+            true
+        );
+
+
+        // -----------------------------------------------------
+        // OPTIONAL CLEAN ROW BONUS FIRST
+        // -----------------------------------------------------
+
+        if (CanStartCleanRowBonus(
+                cleanRowCleared))
+        {
+            BeginCleanRowBonusStage();
+            return;
+        }
+
+
+        BeginStandardRewardStage();
+    }
+
+
+    // =========================================================
+    // CLEAN ROW BONUS STAGE
+    // =========================================================
+
+    private bool CanStartCleanRowBonus(
+        bool cleanRowCleared)
+    {
+        if (!enableCleanRowBonus ||
+            !cleanRowCleared)
+        {
+            return false;
+        }
+
+
+        if (rewardBonusSlot == null)
+        {
+            Debug.LogWarning(
+                "[CLEAN ROW BONUS] Reward Bonus Slot is missing. " +
+                "Opening the normal Reward Phase instead."
+            );
+
+            return false;
+        }
+
+
+        if (stickerPrefabs == null ||
+            stickerPrefabs.Length <= 0)
+        {
+            Debug.LogWarning(
+                "[CLEAN ROW BONUS] Sticker reward pool is empty. " +
+                "Opening the normal Reward Phase instead."
+            );
+
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    private void BeginCleanRowBonusStage()
+    {
+        ClearRemainingOffers();
+        ClearBonusOffer();
+
+
+        CurrentRewardStage =
+            RewardStage.CleanRowBonus;
+
+
+        ShowCleanRowBonusView();
+
+
+        int randomIndex =
+            UnityEngine.Random.Range(
+                0,
+                stickerPrefabs.Length
+            );
+
+
+        currentBonusOffer =
+            SpawnOffer(
+                stickerPrefabs[randomIndex],
+                rewardBonusSlot,
+                RewardStickerOffer.OfferMode.FreeClaim
+            );
+
+
+        if (currentBonusOffer == null)
+        {
+            Debug.LogWarning(
+                "[CLEAN ROW BONUS] Could not spawn the free sticker. " +
+                "Opening the normal Reward Phase instead."
+            );
+
+
+            BeginStandardRewardStage();
+            return;
+        }
+
+
+        Debug.Log(
+            "[CLEAN ROW BONUS] CurrentRow cleared. " +
+            $"Free sticker = {GetOfferName(currentBonusOffer)}."
+        );
+    }
+
+
+    /// <summary>
+    /// Claims the single free offer.
+    ///
+    /// RewardStickerOffer has already verified that BaseSticker successfully
+    /// ended in Album or Roulette before this method is called.
+    ///
+    /// This does NOT:
+    /// - spend Blood or Coins;
+    /// - increment PurchasesThisPhase;
+    /// - advance purchase multiplier;
+    /// - consume the First Purchase Discount.
+    /// </summary>
+    public bool TryClaimFreeOffer(
+        GameObject offerObject,
+        BaseSticker sticker)
+    {
+        if (!CleanRowBonusActive ||
+            offerObject == null ||
+            sticker == null ||
+            currentBonusOffer !=
+                offerObject)
+        {
+            return false;
+        }
+
+
+        string stickerName =
+            GetStickerName(
+                sticker
+            );
+
+
+        /*
+         * Detach the claimed object from bonus ownership BEFORE switching
+         * views. BeginStandardRewardStage() clears any UNCLAIMED bonus offer.
+         */
+        currentBonusOffer =
+            null;
+
+
+        Debug.Log(
+            $"[CLEAN ROW BONUS] Claimed '{stickerName}' for FREE."
+        );
+
+
+        BeginStandardRewardStage();
+
+
+        return true;
+    }
+
+
+    // =========================================================
+    // STANDARD REWARD STAGE
+    // =========================================================
+
+    private void BeginStandardRewardStage()
+    {
+        ClearBonusOffer();
+
+
+        CurrentRewardStage =
+            RewardStage.StandardRewards;
+
+
+        ShowStandardRewardView();
 
 
         GenerateOffers();
@@ -506,12 +808,235 @@ public class RewardManager : MonoBehaviour
 
 
         Debug.Log(
-            "[REWARD] Reward phase started. " +
+            "[REWARD] Standard Reward Phase started. " +
             $"Multiplier = x{CurrentPurchaseMultiplier}. " +
             $"Currency = {CurrentPurchaseCurrency}. " +
             $"Discount available = " +
             $"{firstPurchaseDiscountAvailable}."
         );
+    }
+
+
+    // =========================================================
+    // REWARD VIEW MODES
+    // =========================================================
+
+    private void ResolveCleanRowBonusReferences()
+    {
+        if (regularRewardBackground == null &&
+            rewardPanel != null)
+        {
+            Transform background =
+                rewardPanel.transform
+                    .Find(
+                        "Background"
+                    );
+
+
+            if (background != null)
+            {
+                regularRewardBackground =
+                    background.gameObject;
+            }
+        }
+    }
+
+
+    private void ShowCleanRowBonusView()
+    {
+        /*
+         * Desired Clean Row presentation:
+         *
+         * Shared Reward background             = ON
+         * RewardBonus + Bonus_Text (its child) = ON
+         * SkipButton                           = ON
+         *
+         * Everything specific to the normal store = OFF.
+         */
+        SetActive(
+            regularRewardBackground,
+            true
+        );
+
+
+        SetTransformActive(
+            rewardSlotA,
+            false
+        );
+
+        SetTransformActive(
+            rewardSlotB,
+            false
+        );
+
+
+        SetTextActive(
+            rewardSlotAPriceText,
+            false
+        );
+
+        SetTextActive(
+            rewardSlotBPriceText,
+            false
+        );
+
+
+        SetTransformActive(
+            rewardBonusSlot,
+            true
+        );
+
+
+        SetColliderObjectActive(
+            rerollButtonCollider,
+            false
+        );
+
+        SetTextActive(
+            rerollCostText,
+            false
+        );
+
+
+        SetColliderObjectActive(
+            changeCurrencyButtonCollider,
+            false
+        );
+
+        SetTextActive(
+            changeCurrencyButtonText,
+            false
+        );
+
+
+        SetColliderObjectActive(
+            skipButtonCollider,
+            true
+        );
+    }
+
+
+    private void ShowStandardRewardView()
+    {
+        SetActive(
+            regularRewardBackground,
+            true
+        );
+
+
+        SetTransformActive(
+            rewardSlotA,
+            true
+        );
+
+        SetTransformActive(
+            rewardSlotB,
+            true
+        );
+
+
+        SetTextActive(
+            rewardSlotAPriceText,
+            true
+        );
+
+        SetTextActive(
+            rewardSlotBPriceText,
+            true
+        );
+
+
+        SetTransformActive(
+            rewardBonusSlot,
+            false
+        );
+
+
+        SetColliderObjectActive(
+            rerollButtonCollider,
+            true
+        );
+
+        SetTextActive(
+            rerollCostText,
+            true
+        );
+
+
+        SetColliderObjectActive(
+            changeCurrencyButtonCollider,
+            true
+        );
+
+        SetTextActive(
+            changeCurrencyButtonText,
+            true
+        );
+
+
+        SetColliderObjectActive(
+            skipButtonCollider,
+            true
+        );
+    }
+
+
+    private void SetActive(
+        GameObject target,
+        bool active)
+    {
+        if (target == null)
+            return;
+
+
+        target.SetActive(
+            active
+        );
+    }
+
+
+    private void SetTransformActive(
+        Transform target,
+        bool active)
+    {
+        if (target == null)
+            return;
+
+
+        target.gameObject
+            .SetActive(
+                active
+            );
+    }
+
+
+    private void SetColliderObjectActive(
+        Collider2D target,
+        bool active)
+    {
+        if (target == null)
+            return;
+
+
+        target.gameObject
+            .SetActive(
+                active
+            );
+    }
+
+
+    private void SetTextActive(
+        TMP_Text target,
+        bool active)
+    {
+        if (target == null)
+            return;
+
+
+        target.gameObject
+            .SetActive(
+                active
+            );
     }
 
 
@@ -533,7 +1058,7 @@ public class RewardManager : MonoBehaviour
 
     private void TogglePurchaseCurrency()
     {
-        if (!RewardPhaseActive)
+        if (!StandardRewardStageActive)
             return;
 
 
@@ -758,7 +1283,7 @@ public class RewardManager : MonoBehaviour
         GameObject offerObject,
         BaseSticker sticker)
     {
-        if (!RewardPhaseActive)
+        if (!StandardRewardStageActive)
             return false;
 
 
@@ -1142,7 +1667,9 @@ public class RewardManager : MonoBehaviour
 
     private GameObject SpawnOffer(
         GameObject prefab,
-        Transform slot)
+        Transform slot,
+        RewardStickerOffer.OfferMode offerMode =
+            RewardStickerOffer.OfferMode.StandardPurchase)
     {
         if (prefab == null ||
             slot == null)
@@ -1173,7 +1700,8 @@ public class RewardManager : MonoBehaviour
         offer.Initialize(
             this,
             instance,
-            slot
+            slot,
+            offerMode
         );
 
 
@@ -1292,7 +1820,7 @@ public class RewardManager : MonoBehaviour
 
     public bool TryReroll()
     {
-        if (!RewardPhaseActive)
+        if (!StandardRewardStageActive)
             return false;
 
 
@@ -1409,6 +1937,33 @@ public class RewardManager : MonoBehaviour
             return;
 
 
+        // -----------------------------------------------------
+        // CLEAN ROW BONUS
+        // -----------------------------------------------------
+
+        if (CleanRowBonusActive)
+        {
+            Debug.Log(
+                "[CLEAN ROW BONUS] Free sticker skipped. " +
+                "Opening the normal Reward Phase."
+            );
+
+
+            ClearBonusOffer();
+
+            BeginStandardRewardStage();
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // STANDARD REWARD PHASE
+        // -----------------------------------------------------
+
+        if (!StandardRewardStageActive)
+            return;
+
+
         Debug.Log(
             $"[REWARD] Reward phase skipped. " +
             $"Total purchases = " +
@@ -1429,12 +1984,16 @@ public class RewardManager : MonoBehaviour
     private void CompleteRewardPhase()
     {
         ClearRemainingOffers();
+        ClearBonusOffer();
 
 
         UpdateRewardTexts();
 
 
         RewardPhaseActive = false;
+
+        CurrentRewardStage =
+            RewardStage.None;
 
 
         if (rewardPanel != null)
@@ -1654,6 +2213,15 @@ public class RewardManager : MonoBehaviour
     private void DebugBeginRewardPhase()
     {
         BeginRewardPhase();
+    }
+
+
+    [ContextMenu("DEBUG - Begin Clean Row Bonus Sequence")]
+    private void DebugBeginCleanRowBonusSequence()
+    {
+        BeginRewardSequence(
+            true
+        );
     }
 
 
