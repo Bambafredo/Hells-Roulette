@@ -110,6 +110,15 @@ public class StickerEffect : ScriptableObject
     public string albumTooltip = "";
 
 
+    [Tooltip(
+        "English text shown independently of location when this sticker has " +
+        "an effect that triggers if the physical sticker is destroyed by gameplay. " +
+        "Leave empty to hide this line."
+    )]
+    [TextArea(2, 5)]
+    public string destroyedTooltip = "";
+
+
     // =========================================================
     // GENERIC STICKER RESOLUTION MODIFIERS
     // =========================================================
@@ -235,6 +244,24 @@ public class StickerEffect : ScriptableObject
         ApplyDefaultEffect(
             owner
         );
+    }
+
+
+    // =========================================================
+    // GAMEPLAY DESTRUCTION
+    // =========================================================
+
+    /// <summary>
+    /// Generic hook invoked exactly once when this PHYSICAL sticker is
+    /// intentionally destroyed by gameplay.
+    ///
+    /// This is deliberately not Unity OnDestroy: scene unloads, reward cleanup
+    /// and editor object destruction must not trigger gameplay consequences.
+    /// </summary>
+    public virtual void OnDestroyedFromGameplay(
+        BaseSticker owner,
+        string reason)
+    {
     }
 
 
@@ -396,6 +423,59 @@ public class StickerEffect : ScriptableObject
     {
         if (string.IsNullOrEmpty(template))
             return "";
+
+        return
+            template
+                .Replace(
+                    "{stickerName}",
+                    stickerName ?? ""
+                )
+                .Replace(
+                    "{dollarReward}",
+                    dollarReward.ToString()
+                );
+    }
+
+
+    // =========================================================
+    // DESTROYED TOOLTIP API
+    // =========================================================
+
+    public virtual bool HasDestroyedTooltipEffect(
+        BaseSticker owner)
+    {
+        return
+            !string.IsNullOrWhiteSpace(
+                destroyedTooltip
+            );
+    }
+
+
+    public virtual string GetDestroyedTooltipDescription(
+        BaseSticker owner)
+    {
+        if (!HasDestroyedTooltipEffect(
+            owner))
+        {
+            return "";
+        }
+
+
+        return
+            ResolveDestroyedTooltipTokens(
+                owner,
+                destroyedTooltip
+            );
+    }
+
+
+    protected virtual string ResolveDestroyedTooltipTokens(
+        BaseSticker owner,
+        string template)
+    {
+        if (string.IsNullOrEmpty(template))
+            return "";
+
 
         return
             template

@@ -102,6 +102,14 @@ public class StickerTooltipManager : MonoBehaviour
         );
 
 
+    public Color destroyedColor =
+        new Color(
+            1f,
+            0.35f,
+            0.35f
+        );
+
+
     // =========================================================
     // INTERNAL
     // =========================================================
@@ -523,6 +531,11 @@ public class StickerTooltipManager : MonoBehaviour
         );
 
 
+        AppendDestroyedIfRelevant(
+            sticker
+        );
+
+
         return
             builder.ToString();
     }
@@ -601,6 +614,59 @@ public class StickerTooltipManager : MonoBehaviour
             ColorText(
                 header,
                 labelColor
+            )
+        );
+
+
+        builder.Append(
+            ": "
+        );
+
+
+        builder.Append(
+            description
+        );
+    }
+
+
+    private void AppendDestroyedIfRelevant(
+        BaseSticker sticker)
+    {
+        StickerEffect effect =
+            sticker.effect;
+
+
+        if (effect == null ||
+            !effect.HasDestroyedTooltipEffect(
+                sticker
+            ))
+        {
+            return;
+        }
+
+
+        string description =
+            effect.GetDestroyedTooltipDescription(
+                sticker
+            );
+
+
+        if (string.IsNullOrWhiteSpace(
+            description))
+        {
+            return;
+        }
+
+
+        builder.Append(
+            '\n'
+        );
+
+
+        builder.Append(
+            ColorText(
+                "Destroyed",
+                destroyedColor
             )
         );
 

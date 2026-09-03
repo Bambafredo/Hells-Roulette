@@ -427,11 +427,11 @@ MonoBehaviour:
   enemyName: Infested
   maxHP: 3
   rowPlacementPriority: 2
-  actionSequenceOrderMode: 1
+  actionSequenceOrderMode: 0
   actionSequence:
-  - {fileID: 11400000, guid: 59d377a5ea1277549a01e996c2ef0adb, type: 2}
   - {fileID: 11400000, guid: 1b0d369592f3f0141a911c6e159b11aa, type: 2}
   - {fileID: 11400000, guid: 9d3baaae28a5d0948aef9ee00543b26d, type: 2}
+  - {fileID: 11400000, guid: 59d377a5ea1277549a01e996c2ef0adb, type: 2}
   curse: {fileID: 0}
   curseValue: 0
   hpText: {fileID: 4695612484063555935}

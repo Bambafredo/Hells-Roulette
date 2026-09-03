@@ -22,6 +22,15 @@ public class StickerLeech : StickerEffect
         2;
 
 
+    [Tooltip(
+        "Blood lost if this physical Leech is destroyed by gameplay. " +
+        "This direct Blood loss cannot be blocked by Shield."
+    )]
+    [Min(0)]
+    public int destroyedBloodLoss =
+        2;
+
+
     // =========================================================
     // EFFECT
     // =========================================================
@@ -120,6 +129,61 @@ public class StickerLeech : StickerEffect
 
 
     // =========================================================
+    // DESTROYED EFFECT
+    // =========================================================
+
+    public override void OnDestroyedFromGameplay(
+        BaseSticker owner,
+        string reason)
+    {
+        if (BloodManager.Instance == null)
+        {
+            Debug.LogWarning(
+                "StickerLeech: BloodManager.Instance is missing for " +
+                "destroyed effect."
+            );
+
+            return;
+        }
+
+
+        int configuredLoss =
+            Mathf.Max(
+                0,
+                destroyedBloodLoss
+            );
+
+
+        if (configuredLoss <= 0 ||
+            BloodManager.Instance.currentBlood <= 0)
+        {
+            return;
+        }
+
+
+        int actualLoss =
+            Mathf.Min(
+                configuredLoss,
+                BloodManager.Instance.currentBlood
+            );
+
+
+        LogDestroyedBloodLoss(
+            actualLoss
+        );
+
+
+        /*
+         * ConsumeBlood is direct Blood loss, so Shield cannot intercept it.
+         */
+        BloodManager.Instance
+            .ConsumeBlood(
+                configuredLoss
+            );
+    }
+
+
+    // =========================================================
     // LOG
     // =========================================================
 
@@ -143,6 +207,32 @@ public class StickerLeech : StickerEffect
         return
             "Lose " +
             bloodText;
+    }
+
+
+    private void LogDestroyedBloodLoss(
+        int actualLoss)
+    {
+        if (GameLogManager.Instance == null)
+            return;
+
+
+        string bloodText =
+            GameLogManager.Instance
+                .BloodText(
+                    $"{actualLoss} Blood"
+                );
+
+
+        GameLogManager.Instance
+            .AddGameplayLine(
+                GameLogManager.Instance
+                    .StickerText(
+                        stickerName
+                    ) +
+                " destroyed: Lose " +
+                bloodText
+            );
     }
 
 
@@ -179,6 +269,30 @@ public class StickerLeech : StickerEffect
                     Mathf.Max(
                         0,
                         bloodLoss
+                    )
+                    .ToString()
+                );
+    }
+
+
+    protected override string ResolveDestroyedTooltipTokens(
+        BaseSticker owner,
+        string template)
+    {
+        string resolved =
+            base.ResolveDestroyedTooltipTokens(
+                owner,
+                template
+            );
+
+
+        return
+            resolved
+                .Replace(
+                    "{destroyedBloodLoss}",
+                    Mathf.Max(
+                        0,
+                        destroyedBloodLoss
                     )
                     .ToString()
                 );

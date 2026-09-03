@@ -120,6 +120,12 @@ public class BaseSticker : MonoBehaviour
     private bool pendingGameplayDestruction = false;
 
     /*
+     * Guarantees the StickerEffect destruction hook resolves exactly once.
+     */
+    private bool gameplayDestructionEffectResolved =
+        false;
+
+    /*
      * Generic per-instance runtime memory for stateful stickers.
      *
      * Example:
@@ -1445,6 +1451,12 @@ public class BaseSticker : MonoBehaviour
 
         pendingGameplayDestruction = true;
 
+
+        NotifyGameplayDestructionEffect(
+            reason
+        );
+
+
         string displayName =
             effect != null &&
             !string.IsNullOrWhiteSpace(effect.stickerName)
@@ -1478,6 +1490,28 @@ public class BaseSticker : MonoBehaviour
 
         Destroy(objectToDestroy);
         return true;
+    }
+
+
+    private void NotifyGameplayDestructionEffect(
+        string reason)
+    {
+        if (gameplayDestructionEffectResolved)
+            return;
+
+
+        gameplayDestructionEffectResolved =
+            true;
+
+
+        if (effect == null)
+            return;
+
+
+        effect.OnDestroyedFromGameplay(
+            this,
+            reason
+        );
     }
 
 
@@ -1672,6 +1706,12 @@ public class BaseSticker : MonoBehaviour
     private void DestroyStickerInstance()
     {
         pendingGameplayDestruction = true;
+
+
+        NotifyGameplayDestructionEffect(
+            "ran out of uses"
+        );
+
 
         GameObject objectToDestroy =
             stickerRoot != null

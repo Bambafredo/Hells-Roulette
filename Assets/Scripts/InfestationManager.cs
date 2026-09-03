@@ -118,6 +118,15 @@ public class InfestationManager : MonoBehaviour
         false;
 
 
+    /*
+     * Prevents the same mouse click that closes Infestation from also being
+     * consumed by RewardManager if closing Infestation immediately opens the
+     * end-of-round Reward Phase.
+     */
+    private bool completionPending =
+        false;
+
+
     private Camera inputCamera;
 
 
@@ -170,8 +179,11 @@ public class InfestationManager : MonoBehaviour
 
 #if UNITY_EDITOR || UNITY_STANDALONE
 
-        if (!InfestationActive)
+        if (!InfestationActive ||
+            completionPending)
+        {
             return;
+        }
 
 
         if (ClaimsCompleted <
@@ -435,6 +447,10 @@ public class InfestationManager : MonoBehaviour
     private void BeginInfestationBatch(
         int leechCount)
     {
+        completionPending =
+            false;
+
+
         ClearCurrentOffers();
 
 
@@ -661,12 +677,56 @@ public class InfestationManager : MonoBehaviour
         }
 
 
+        ScheduleInfestationCompletion();
+    }
+
+
+    private void ScheduleInfestationCompletion()
+    {
+        if (completionPending)
+            return;
+
+
+        completionPending =
+            true;
+
+
+        /*
+         * IMPORTANT INPUT HANDOFF:
+         *
+         * The Infestation Skip button and Reward Skip button are the SAME
+         * collider. If we close Infestation and synchronously resume the final
+         * round here, RewardManager can open Rewards later in this exact frame
+         * and consume the very same GetMouseButtonDown(0), instantly skipping
+         * Rewards too.
+         *
+         * Waiting until the next frame means the closing click has been fully
+         * consumed before RewardManager is allowed to become active.
+         *
+         * We intentionally keep the Infestation UI visible during this tiny
+         * handoff, so there is no enemy-screen flash.
+         */
+        StartCoroutine(
+            CompleteInfestationNextFrame()
+        );
+    }
+
+
+    private IEnumerator CompleteInfestationNextFrame()
+    {
+        yield return null;
+
+
         CompleteInfestation();
     }
 
 
     private void CompleteInfestation()
     {
+        completionPending =
+            false;
+
+
         ClearCurrentOffers();
 
 

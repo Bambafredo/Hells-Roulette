@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: StickerLeech
   m_EditorClassIdentifier: 
   stickerName: Leech
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: c3900a16526b83f4c954ab53c1be04ad, type: 3}
   basePurchaseCost: 0
   maxUses: 0
   consumeUseOnWinningActivation: 1
@@ -24,4 +24,6 @@ MonoBehaviour:
   winningSegmentTooltip: 
   losingSegmentTooltip: 
   albumTooltip: Lose {bloodLoss} Blood.
+  destroyedTooltip: Lose {destroyedBloodLoss} Blood.
   bloodLoss: 1
+  destroyedBloodLoss: 6
