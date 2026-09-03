@@ -24,4 +24,4 @@ MonoBehaviour:
   winningSegmentTooltip: 
   losingSegmentTooltip: 
   albumTooltip: Lose {bloodLoss} Blood.
-  bloodLoss: 2
+  bloodLoss: 1

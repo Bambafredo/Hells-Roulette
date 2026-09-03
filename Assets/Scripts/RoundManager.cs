@@ -275,6 +275,18 @@ public class RoundManager : MonoBehaviour
         externalSpinBlockActive;
 
 
+    /*
+     * If an external modal opens DURING spin resolution (for example from an
+     * enemy action on the final token), debt / Reward Phase must wait until
+     * that modal has been completed.
+     *
+     * This is generic flow infrastructure: RoundManager does not know what
+     * opened the modal.
+     */
+    private bool externalFlowDeferredDebtResolution =
+        false;
+
+
     private bool lastSpinWasValid = false;
 
     private float spinStartTime = 0f;
@@ -298,6 +310,16 @@ public class RoundManager : MonoBehaviour
     public event Action<int> OnDebtPaid;
     public event Action<int> OnEnemyDebtPenaltyChanged;
     public event Action<bool> OnSpinValidated;
+
+    /*
+     * Fired after stickers + enemy actions have completely resolved, but
+     * BEFORE end-of-round Debt / Reward flow is allowed to begin.
+     *
+     * Generic modal systems can use this to collect requests produced during
+     * gameplay resolution and open one modal atomically at the correct time.
+     */
+    public event Action OnGameplaySpinResolutionCompleted;
+
     public event Action OnGameOver;
 
     // =========================================================
@@ -471,6 +493,9 @@ public class RoundManager : MonoBehaviour
         externalSpinBlockActive =
             false;
 
+        externalFlowDeferredDebtResolution =
+            false;
+
         spinActive = false;
 
         lastSpinWasValid = false;
@@ -511,8 +536,41 @@ public class RoundManager : MonoBehaviour
     public void SetExternalSpinBlock(
         bool blocked)
     {
+        bool wasBlocked =
+            externalSpinBlockActive;
+
+
         externalSpinBlockActive =
             blocked;
+
+
+        /*
+         * When a modal that interrupted final-spin resolution closes, resume
+         * the exact debt/reward flow that was deferred.
+         *
+         * Draft-at-run-start also uses this API, but has no pending debt, so
+         * this branch naturally does nothing there.
+         */
+        if (wasBlocked &&
+            !blocked &&
+            externalFlowDeferredDebtResolution)
+        {
+            externalFlowDeferredDebtResolution =
+                false;
+
+
+            if (debtPending &&
+                !waitingForSpinResolution)
+            {
+                Debug.Log(
+                    "[ROUND] External modal completed. " +
+                    "Resuming deferred debt resolution."
+                );
+
+
+                ResolveDebt();
+            }
+        }
     }
 
 
@@ -559,6 +617,22 @@ public class RoundManager : MonoBehaviour
         waitingForSpinResolution =
             false;
 
+
+        /*
+         * IMPORTANT ORDER:
+         *
+         * Enemy actions have all already executed at this point.
+         * Give generic post-gameplay modal systems one atomic opportunity to
+         * react BEFORE Debt / Clean Row Bonus / Reward Phase can start.
+         *
+         * For example, several enemies can independently request a modal
+         * consequence during OnSpinEnd; the receiving system can aggregate
+         * them here and then set ExternalSpinBlock in time to defer Rewards.
+         */
+        OnGameplaySpinResolutionCompleted?
+            .Invoke();
+
+
         /*
          * Un sticker/enemigo podría haber añadido fichas
          * durante la resolución.
@@ -568,6 +642,27 @@ public class RoundManager : MonoBehaviour
 
         if (debtPending)
         {
+            /*
+             * An enemy action may have opened a modal during the enemy
+             * resolution pass. Do not let Debt / Reward Phase replace that
+             * modal before the player has completed it.
+             */
+            if (externalSpinBlockActive)
+            {
+                externalFlowDeferredDebtResolution =
+                    true;
+
+
+                Debug.Log(
+                    "[ROUND] Debt resolution deferred until the active " +
+                    "external modal is completed."
+                );
+
+
+                return;
+            }
+
+
             ResolveDebt();
         }
     }
@@ -1165,6 +1260,9 @@ public class RoundManager : MonoBehaviour
             false;
 
         waitingForSpinResolution =
+            false;
+
+        externalFlowDeferredDebtResolution =
             false;
 
         lastSpinWasValid =
