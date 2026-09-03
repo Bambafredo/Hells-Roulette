@@ -22,9 +22,10 @@ MonoBehaviour:
   dollarReward: 1
   logDescription: 
   winningSegmentTooltip: Earn ${currentValue}.
-  losingSegmentTooltip: '{doubleChance}% chance to double current value. {resetChance}%
-    chance to reset to ${originalValue}. Current value: ${currentValue}.'
+  losingSegmentTooltip: '{growthChance}% chance to {growthAction}. {resetChance}%
+    chance to {resetAction}. Current value: ${currentValue}.'
   albumTooltip: 
   destroyedTooltip: 
+  growthMode: 1
   doubleChancePercent: 70
   resetChancePercent: 30

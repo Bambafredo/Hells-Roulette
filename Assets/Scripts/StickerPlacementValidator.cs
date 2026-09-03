@@ -116,6 +116,36 @@ public class StickerPlacementValidator : MonoBehaviour
         if (sticker == null)
             return true;
 
+
+        /*
+         * A sticker destroyed through BaseSticker.DestroyFromGameplay() is
+         * removed LOGICALLY immediately, but Unity destroys its GameObject only
+         * at the end of the frame.
+         *
+         * During that tiny window:
+         *
+         * - isPlaced is already false
+         * - currentSegment is already null
+         * - its root can still physically be parented to Segment_X
+         *
+         * SegmentBlock unlock / block changes can trigger placement validation
+         * inside that same frame. Without this guard the validator sees:
+         *
+         *     isPlaced == false
+         *     parent == Segment_X
+         *
+         * and incorrectly hard-locks the roulette until some later action
+         * causes another validation pass.
+         *
+         * Pending gameplay destruction is therefore completely irrelevant to
+         * placement validation and must be ignored.
+         */
+        if (sticker.IsPendingGameplayDestruction)
+        {
+            return true;
+        }
+
+
         /*
          * Destroy() is deferred until end-of-frame.
          *
