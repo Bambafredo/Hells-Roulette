@@ -2,6 +2,22 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum DraftRerollMode
+{
+    /*
+     * Already claimed stickers stay in Album.
+     * Only offers still sitting in DraftSlots are replaced.
+     */
+    UnclaimedOnly,
+
+    /*
+     * Reroll always replaces the complete draft.
+     * The moment the player claims the first sticker, reroll is disabled.
+     */
+    AllOffersUntilFirstClaim
+}
+
+
 [DefaultExecutionOrder(100)]
 public class DraftManager : MonoBehaviour
 {
@@ -48,6 +64,41 @@ public class DraftManager : MonoBehaviour
 
 
     // =========================================================
+    // DRAFT REROLL
+    // =========================================================
+
+    [Header("Draft Reroll")]
+
+    [Tooltip(
+        "Collider of the reroll button used only by the starting draft."
+    )]
+    public Collider2D rerollButtonCollider;
+
+
+    [Tooltip(
+        "TMP child of the draft reroll button. Displays rerolls remaining."
+    )]
+    public TMPro.TMP_Text rerollsRemainingText;
+
+
+    [Tooltip(
+        "Number of free rerolls available at the beginning of the draft."
+    )]
+    [Min(0)]
+    public int startingRerolls =
+        1;
+
+
+    [Tooltip(
+        "Unclaimed Only: reroll replaces only offers not yet claimed. " +
+        "All Offers Until First Claim: reroll replaces the complete draft, " +
+        "but becomes unavailable as soon as one sticker is claimed."
+    )]
+    public DraftRerollMode rerollMode =
+        DraftRerollMode.UnclaimedOnly;
+
+
+    // =========================================================
     // RUNTIME STATE
     // =========================================================
 
@@ -77,6 +128,23 @@ public class DraftManager : MonoBehaviour
 
     private GameObject[] currentOffers =
         new GameObject[0];
+
+
+    /*
+     * Parallel slot array for the current draft.
+     * This lets reroll replace only UNCLAIMED offers while preserving already
+     * claimed stickers exactly like the normal shop reroll preserves purchases.
+     */
+    private Transform[] currentOfferSlots =
+        new Transform[0];
+
+
+    public int RerollsRemaining
+    {
+        get;
+        private set;
+    } =
+        0;
 
 
     private bool enemyCameraWasEnabled =
@@ -139,20 +207,6 @@ public class DraftManager : MonoBehaviour
             return;
 
 
-        if (ClaimsCompleted <
-            ClaimsRequired)
-        {
-            return;
-        }
-
-
-        if (rewardManager == null ||
-            rewardManager.skipButtonCollider == null)
-        {
-            return;
-        }
-
-
         if (!Input.GetMouseButtonDown(0))
             return;
 
@@ -174,7 +228,47 @@ public class DraftManager : MonoBehaviour
             );
 
 
+        // -----------------------------------------------------
+        // DRAFT REROLL
+        // -----------------------------------------------------
+
+        if (rerollButtonCollider != null &&
+            rerollButtonCollider
+                .gameObject
+                .activeInHierarchy &&
+            rerollButtonCollider
+                .OverlapPoint(
+                    mouseWorld
+                ))
+        {
+            TryReroll();
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // CONTINUE / SKIP
+        // -----------------------------------------------------
+
+        if (ClaimsCompleted <
+            ClaimsRequired)
+        {
+            return;
+        }
+
+
+        if (rewardManager == null ||
+            rewardManager.skipButtonCollider == null)
+        {
+            return;
+        }
+
+
         if (rewardManager
+                .skipButtonCollider
+                .gameObject
+                .activeInHierarchy &&
+            rewardManager
                 .skipButtonCollider
                 .OverlapPoint(
                     mouseWorld
@@ -232,6 +326,13 @@ public class DraftManager : MonoBehaviour
 
         ClaimsCompleted =
             0;
+
+
+        RerollsRemaining =
+            Mathf.Max(
+                0,
+                startingRerolls
+            );
 
 
         // -----------------------------------------------------
@@ -302,6 +403,12 @@ public class DraftManager : MonoBehaviour
             ];
 
 
+        currentOfferSlots =
+            new Transform[
+                offerCount
+            ];
+
+
         ClaimsRequired =
             0;
 
@@ -320,6 +427,9 @@ public class DraftManager : MonoBehaviour
             currentOffers[i] =
                 offer;
 
+            currentOfferSlots[i] =
+                slots[i];
+
 
             if (offer != null)
             {
@@ -328,12 +438,13 @@ public class DraftManager : MonoBehaviour
         }
 
 
-        UpdateSkipVisibility();
+        UpdateDraftControls();
 
 
         Debug.Log(
             $"[DRAFT] Starting draft opened. " +
-            $"Offers = {ClaimsRequired}."
+            $"Offers = {ClaimsRequired}. " +
+            $"Rerolls = {RerollsRemaining}."
         );
     }
 
@@ -442,7 +553,7 @@ public class DraftManager : MonoBehaviour
         );
 
 
-        UpdateSkipVisibility();
+        UpdateDraftControls();
 
 
         return true;
@@ -471,6 +582,18 @@ public class DraftManager : MonoBehaviour
 
         DraftActive =
             false;
+
+
+        RerollsRemaining =
+            0;
+
+        UpdateRerollText();
+
+
+        SetColliderObjectActive(
+            rerollButtonCollider,
+            false
+        );
 
 
         SetTransformActive(
@@ -586,6 +709,13 @@ public class DraftManager : MonoBehaviour
         );
 
 
+        /*
+         * Dedicated DRAFT reroll remains visible while there are unclaimed
+         * offers. Its TMP shows how many free rerolls remain.
+         */
+        UpdateDraftControls();
+
+
         SetColliderObjectActive(
             rewardManager
                 .changeCurrencyButtonCollider,
@@ -599,7 +729,15 @@ public class DraftManager : MonoBehaviour
         );
 
 
+        UpdateDraftControls();
+    }
+
+
+    private void UpdateDraftControls()
+    {
         UpdateSkipVisibility();
+        UpdateRerollVisibility();
+        UpdateRerollText();
     }
 
 
@@ -620,6 +758,302 @@ public class DraftManager : MonoBehaviour
                 .skipButtonCollider,
             showSkip
         );
+    }
+
+
+    private void UpdateRerollVisibility()
+    {
+        /*
+         * The button stays visible at 0 rerolls so the TMP communicates the
+         * exhausted resource clearly.
+         *
+         * Mode-specific availability:
+         *
+         * UnclaimedOnly
+         * -> available while at least one draft offer is still unclaimed.
+         *
+         * AllOffersUntilFirstClaim
+         * -> available only BEFORE the first sticker is claimed.
+         *    Claiming 1 sticker immediately hides/disables reroll.
+         */
+        bool choicePhaseActive =
+            DraftActive &&
+            ClaimsCompleted <
+                ClaimsRequired;
+
+
+        bool modeAllowsReroll =
+            false;
+
+
+        switch (rerollMode)
+        {
+            case DraftRerollMode.AllOffersUntilFirstClaim:
+
+                modeAllowsReroll =
+                    ClaimsCompleted ==
+                    0;
+
+                break;
+
+
+            case DraftRerollMode.UnclaimedOnly:
+            default:
+
+                modeAllowsReroll =
+                    true;
+
+                break;
+        }
+
+
+        bool showReroll =
+            choicePhaseActive &&
+            modeAllowsReroll;
+
+
+        SetColliderObjectActive(
+            rerollButtonCollider,
+            showReroll
+        );
+    }
+
+
+    private void UpdateRerollText()
+    {
+        if (rerollsRemainingText == null)
+            return;
+
+
+        rerollsRemainingText.text =
+            Mathf.Max(
+                0,
+                RerollsRemaining
+            )
+            .ToString();
+    }
+
+
+    // =========================================================
+    // REROLL
+    // =========================================================
+
+    public bool TryReroll()
+    {
+        if (!DraftActive)
+            return false;
+
+
+        if (ClaimsCompleted >=
+            ClaimsRequired)
+        {
+            return false;
+        }
+
+
+        /*
+         * In full-draft mode, claiming the first sticker locks the current
+         * draft composition permanently. No partial reroll is allowed.
+         */
+        if (rerollMode ==
+                DraftRerollMode.AllOffersUntilFirstClaim &&
+            ClaimsCompleted > 0)
+        {
+            Debug.Log(
+                "[DRAFT] Reroll is locked after the first claim in " +
+                "All Offers mode."
+            );
+
+            UpdateDraftControls();
+
+            return false;
+        }
+
+
+        if (RerollsRemaining <= 0)
+        {
+            Debug.Log(
+                "[DRAFT] No rerolls remaining."
+            );
+
+            UpdateDraftControls();
+
+            return false;
+        }
+
+
+        List<GameObject> pool =
+            BuildValidPool();
+
+
+        if (pool.Count <= 0)
+        {
+            Debug.LogWarning(
+                "[DRAFT] Cannot reroll: Draft Pool is empty."
+            );
+
+            return false;
+        }
+
+
+        List<int> offerIndicesToReroll =
+            new List<int>();
+
+
+        switch (rerollMode)
+        {
+            // -------------------------------------------------
+            // REROLL THE COMPLETE DRAFT
+            // -------------------------------------------------
+
+            case DraftRerollMode.AllOffersUntilFirstClaim:
+
+                /*
+                 * The guard above guarantees ClaimsCompleted == 0.
+                 * Every currently available offer is replaced together.
+                 */
+                for (int i = 0;
+                     i < currentOffers.Length;
+                     i++)
+                {
+                    if (currentOffers[i] != null)
+                    {
+                        offerIndicesToReroll.Add(
+                            i
+                        );
+                    }
+                }
+
+                break;
+
+
+            // -------------------------------------------------
+            // REROLL ONLY UNCLAIMED OFFERS
+            // -------------------------------------------------
+
+            case DraftRerollMode.UnclaimedOnly:
+            default:
+
+                /*
+                 * Claimed stickers are already detached from currentOffers
+                 * (their entry is null), so they remain untouched in Album.
+                 */
+                for (int i = 0;
+                     i < currentOffers.Length;
+                     i++)
+                {
+                    if (currentOffers[i] != null)
+                    {
+                        offerIndicesToReroll.Add(
+                            i
+                        );
+                    }
+                }
+
+                break;
+        }
+
+
+        if (offerIndicesToReroll.Count <= 0)
+            return false;
+
+
+        /*
+         * Only spend the reroll once we know there is something to replace.
+         */
+        RerollsRemaining--;
+
+
+        foreach (int index in
+                 offerIndicesToReroll)
+        {
+            if (currentOffers[index] != null)
+            {
+                Destroy(
+                    currentOffers[index]
+                );
+
+                currentOffers[index] =
+                    null;
+            }
+        }
+
+
+        /*
+         * Unique offers within THIS reroll result.
+         * As in the shop, an offer seen on an earlier roll may appear again.
+         */
+        Shuffle(
+            pool
+        );
+
+
+        int spawnCount =
+            Mathf.Min(
+                offerIndicesToReroll.Count,
+                pool.Count
+            );
+
+
+        for (int i = 0;
+             i < spawnCount;
+             i++)
+        {
+            int offerIndex =
+                offerIndicesToReroll[i];
+
+
+            Transform slot =
+                offerIndex >= 0 &&
+                offerIndex <
+                    currentOfferSlots.Length
+                    ? currentOfferSlots[
+                        offerIndex
+                    ]
+                    : null;
+
+
+            currentOffers[offerIndex] =
+                SpawnDraftOffer(
+                    pool[i],
+                    slot
+                );
+        }
+
+
+        /*
+         * Defensive fallback for an unexpectedly smaller runtime pool:
+         * reduce the required claim count rather than soft-locking the draft.
+         * In normal setup this path is never reached because the initial draft
+         * already proved the pool could fill all active slots.
+         */
+        int missingOffers =
+            offerIndicesToReroll.Count -
+            spawnCount;
+
+
+        if (missingOffers > 0)
+        {
+            ClaimsRequired =
+                Mathf.Max(
+                    ClaimsCompleted,
+                    ClaimsRequired -
+                    missingOffers
+                );
+        }
+
+
+        UpdateDraftControls();
+
+
+        Debug.Log(
+            $"[DRAFT] Rerolled {spawnCount} offer(s) " +
+            $"using mode {rerollMode}. " +
+            $"Rerolls remaining = {RerollsRemaining}."
+        );
+
+
+        return true;
     }
 
 
@@ -783,6 +1217,9 @@ public class DraftManager : MonoBehaviour
 
         currentOffers =
             new GameObject[0];
+
+        currentOfferSlots =
+            new Transform[0];
     }
 
 
