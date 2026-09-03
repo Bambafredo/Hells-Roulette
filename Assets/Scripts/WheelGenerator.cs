@@ -799,6 +799,22 @@ public class WheelGenerator : MonoBehaviour
         );
 
 
+        /*
+         * Becoming blocked changes placement-validity semantics:
+         * stickers already inside this segment are now frozen and are allowed
+         * to cross the resized boundary until the block expires.
+         *
+         * A WheelShifter can regenerate/validate the wheel earlier in the same
+         * spin, before enemy actions apply this NEW block. Without revalidating
+         * here, WrongStickerPanel can remain in a stale locked state until the
+         * player happens to move any sticker.
+         */
+        Physics2D.SyncTransforms();
+
+        StickerPlacementValidator.Instance?
+            .ValidateAfterWheelRegeneration();
+
+
         Debug.Log(
             $"[SEGMENT BLOCK] Segment {index + 1} blocked for " +
             $"{durationSpins} future valid spin(s)."
