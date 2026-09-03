@@ -9,21 +9,19 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d5d913aa07d59a84ba3959b4653741b3, type: 3}
-  m_Name: StickerHealthInsurance
+  m_Script: {fileID: 11500000, guid: 2852d281dffd9ee4d8b0c8098bc21f0a, type: 3}
+  m_Name: StickerLeech
   m_EditorClassIdentifier: 
-  stickerName: Health Insurance
-  icon: {fileID: 21300000, guid: d4648dc99f16cfc46b3e14c1adee2c45, type: 3}
-  basePurchaseCost: 8
+  stickerName: Leech
+  icon: {fileID: 0}
+  basePurchaseCost: 0
   maxUses: 0
   consumeUseOnWinningActivation: 1
   consumeUseOnNonWinningActivation: 0
   consumeUseOnAlbumActivation: 0
   dollarReward: 0
   logDescription: 
-  winningSegmentTooltip: 'Restore {bloodRestore} Blood and pay ${currentTariff},
-    then double the tariff. (next tariff: ${nextTariff})'
+  winningSegmentTooltip: 
   losingSegmentTooltip: 
-  albumTooltip: 
-  bloodRestoreAmount: 10
-  startingTariff: 1
+  albumTooltip: Lose {bloodLoss} Blood.
+  bloodLoss: 2
