@@ -55,9 +55,10 @@ public class RouletteController : MonoBehaviour
 
     [Tooltip(
         "If enabled, colliders belonging to stickers currently placed on " +
-        "the wheel are temporarily disabled during the physical spin and " +
-        "restored before spin resolution. This reduces Physics2D work while " +
-        "the wheel is moving without affecting placement validation."
+        "the wheel are temporarily disabled while the wheel is manually " +
+        "dragged and during the physical spin. They are restored before any " +
+        "placement validation or spin resolution. This reduces Physics2D " +
+        "work without changing the sticker placement system."
     )]
     public bool disableWheelStickerCollidersDuringSpin =
         true;
@@ -490,12 +491,49 @@ public class RouletteController : MonoBehaviour
                 return;
             }
 
+
+            /*
+             * IMPORTANT INPUT ARBITRATION:
+             *
+             * Keep the existing BaseSticker drag system completely intact.
+             *
+             * RouletteController and BaseSticker both read mouse-down in
+             * Update(), so their execution order is not guaranteed. Before
+             * suspending any wheel-sticker colliders, RouletteController checks
+             * the SAME precise PolygonCollider2D geometry that BaseSticker uses.
+             *
+             * If the click belongs to a draggable sticker, RouletteController
+             * does absolutely nothing. BaseSticker then receives the click
+             * normally, regardless of which Update() happened first.
+             *
+             * This check runs only once on pointer-down, so it does not
+             * reintroduce the per-frame Physics2D cost we are avoiding.
+             */
+            if (IsPointerOverDraggableWheelSticker(
+                    world))
+            {
+                return;
+            }
+
+
             if (Vector2.Distance(
                     pos,
                     (Vector2)wheel.position)
                 >= minDragRadius)
             {
                 dragging = true;
+
+
+                /*
+                 * From this moment the player is moving the WHEEL, not a
+                 * sticker. Every placed sticker moves with the wheel hierarchy,
+                 * but its precise PolygonCollider2D is unnecessary during this
+                 * gesture and expensive to transform through Physics2D.
+                 *
+                 * Reuse the already-stable physical-spin suspension system.
+                 */
+                DisableWheelStickerCollidersForSpin();
+
 
                 lastAngleDeg =
                     WorldAngleFromCenter(pos);
@@ -615,6 +653,13 @@ public class RouletteController : MonoBehaviour
                 DisplayPower01 =
                     0f;
 
+
+                /*
+                 * Anti-fake drag: no physical spin follows, so the wheel's
+                 * sticker colliders must become available again immediately.
+                 */
+                RestoreWheelStickerCollidersAfterSpin();
+
                 return;
             }
 
@@ -659,6 +704,12 @@ public class RouletteController : MonoBehaviour
 
                     DisplayPower01 =
                         0f;
+
+
+                    /*
+                     * Spin startup was rejected after a manual drag.
+                     */
+                    RestoreWheelStickerCollidersAfterSpin();
                 }
             }
             else
@@ -671,6 +722,12 @@ public class RouletteController : MonoBehaviour
 
                 DisplayPower01 =
                     0f;
+
+
+                /*
+                 * Release was too slow to become a real spin.
+                 */
+                RestoreWheelStickerCollidersAfterSpin();
             }
 
             recentSpeeds.Clear();
@@ -1163,6 +1220,70 @@ public class RouletteController : MonoBehaviour
             ) *
             Mathf.Rad2Deg;
     }
+
+    // =========================================================
+    // MANUAL WHEEL DRAG - STICKER PRIORITY
+    // =========================================================
+
+    private bool IsPointerOverDraggableWheelSticker(
+        Vector2 worldPoint)
+    {
+        BaseSticker[] stickers =
+            FindObjectsOfType<BaseSticker>(
+                true
+            );
+
+
+        foreach (BaseSticker sticker in
+                 stickers)
+        {
+            if (sticker == null ||
+                !sticker.gameObject.activeInHierarchy ||
+                sticker.IsPendingGameplayDestruction ||
+                !sticker.isPlaced ||
+                sticker.currentSegment == null)
+            {
+                continue;
+            }
+
+
+            /*
+             * Match BaseSticker's existing SegmentBlock rule:
+             * a sticker frozen inside a blocked segment cannot begin a drag,
+             * so it should not reserve the pointer from manual wheel input.
+             */
+            if (sticker.generator != null &&
+                sticker.generator.IsSegmentBlocked(
+                    sticker.currentSegment
+                ))
+            {
+                continue;
+            }
+
+
+            Collider2D collider =
+                sticker.StickerCollider;
+
+
+            if (collider == null ||
+                !collider.enabled ||
+                !collider.gameObject.activeInHierarchy)
+            {
+                continue;
+            }
+
+
+            if (collider.OverlapPoint(
+                    worldPoint))
+            {
+                return true;
+            }
+        }
+
+
+        return false;
+    }
+
 
     // =========================================================
     // SPIN PHYSICS

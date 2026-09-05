@@ -44,7 +44,7 @@ Rigidbody2D:
   m_GameObject: {fileID: 577474978131120927}
   m_BodyType: 1
   m_Simulated: 1
-  m_UseFullKinematicContacts: 1
+  m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
   m_Mass: 1
   m_LinearDrag: 0
@@ -59,7 +59,7 @@ Rigidbody2D:
     m_Bits: 0
   m_Interpolate: 0
   m_SleepingMode: 1
-  m_CollisionDetection: 1
+  m_CollisionDetection: 0
   m_Constraints: 0
 --- !u!1 &1035680966825719525
 GameObject:
@@ -177,10 +177,12 @@ MonoBehaviour:
   wheelCenter: {fileID: 0}
   generator: {fileID: 0}
   controller: {fileID: 0}
+  stickerCollider: {fileID: 876645446912820229}
   isPlaced: 0
   currentSegment: {fileID: 0}
   currentBagZone: {fileID: 0}
   currentGameplayZone: {fileID: 0}
+  currentAlbumZone: {fileID: 0}
   segmentMask:
     serializedVersion: 2
     m_Bits: 128
@@ -190,6 +192,9 @@ MonoBehaviour:
   tolerance: 0.01
   coverageThreshold: 0.75
   stickerRoot: {fileID: 0}
+  bringToFrontWhileDragging: 1
+  dragSortingPadding: 10
+  remainingUses: -1
 --- !u!1 &6470820344446946707
 GameObject:
   m_ObjectHideFlags: 0
