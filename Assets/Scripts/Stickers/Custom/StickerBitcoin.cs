@@ -2,13 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum BitcoinGrowthMode
-{
-    Double,
-    Fibonacci
-}
-
-
 [CreateAssetMenu(
     fileName = "StickerBitcoin",
     menuName = "Stickers/Sticker Bitcoin"
@@ -22,55 +15,44 @@ public class StickerBitcoin : StickerEffect
     [Header("Bitcoin")]
 
     [Tooltip(
-        "How a successful growth result changes this Bitcoin's value. " +
-        "Double: current value x2. Fibonacci: original value multiplied by " +
-        "1, 2, 3, 5, 8, 13, 21, 34..."
+        "Chance that a losing-segment activation advances this physical " +
+        "Bitcoin to the next configured progression value. " +
+        "The remaining chance resets it to its original Dollar Reward value."
     )]
-    public BitcoinGrowthMode growthMode =
-        BitcoinGrowthMode.Double;
+    [Range(0f, 100f)]
+    public float growthChancePercent =
+        70f;
 
 
     [Tooltip(
-        "Chance that a losing-segment activation applies the selected " +
-        "Bitcoin growth mode."
+        "Absolute dollar values used as Bitcoin's progression, in order. " +
+        "Example with Dollar Reward = 1 and entries 2, 3, 5, 8: " +
+        "$1 -> $2 -> $3 -> $5 -> $8. " +
+        "Once the final entry is reached, further successful growth keeps " +
+        "Bitcoin at that final value."
     )]
-    [InspectorName("Growth Chance Percent")]
-    [Range(0f, 100f)]
-    public float doubleChancePercent =
-        80f;
-
-
-    [Tooltip(
-        "Chance that a losing-segment activation resets this physical " +
-        "Bitcoin to its original value. Double + Reset cannot exceed 100%. " +
-        "Any remaining percentage means the value does not change."
-    )]
-    [Range(0f, 100f)]
-    public float resetChancePercent =
-        20f;
+    public int[] progressionValues =
+        new int[0];
 
 
     /*
      * dollarReward inherited from StickerEffect is Bitcoin's ORIGINAL value.
      *
-     * The changing CURRENT value must live on BaseSticker because each
-     * physical Bitcoin can have a different price history.
+     * Current value and progression index live on BaseSticker so every
+     * physical Bitcoin can evolve independently.
      */
     private const string CurrentValueKey =
         "Bitcoin.CurrentValue";
 
 
     /*
-     * Fibonacci index is per physical Bitcoin.
-     *
-     * Index 0 -> x1
-     * Index 1 -> x2
-     * Index 2 -> x3
-     * Index 3 -> x5
-     * ...
+     * -1 = original Dollar Reward value.
+     *  0 = progressionValues[0].
+     *  1 = progressionValues[1].
+     * etc.
      */
-    private const string FibonacciIndexKey =
-        "Bitcoin.FibonacciIndex";
+    private const string ProgressionIndexKey =
+        "Bitcoin.ProgressionIndex";
 
 
     // =========================================================
@@ -79,21 +61,32 @@ public class StickerBitcoin : StickerEffect
 
     private void OnValidate()
     {
-        doubleChancePercent =
+        growthChancePercent =
             Mathf.Clamp(
-                doubleChancePercent,
+                growthChancePercent,
                 0f,
                 100f
             );
 
 
-        resetChancePercent =
-            Mathf.Clamp(
-                resetChancePercent,
-                0f,
-                100f -
-                doubleChancePercent
-            );
+        if (progressionValues == null)
+            return;
+
+
+        /*
+         * Do not reorder or auto-correct the progression.
+         * Inspector order is deliberately the source of truth.
+         */
+        for (int i = 0;
+             i < progressionValues.Length;
+             i++)
+        {
+            progressionValues[i] =
+                Mathf.Max(
+                    0,
+                    progressionValues[i]
+                );
+        }
     }
 
 
@@ -159,8 +152,10 @@ public class StickerBitcoin : StickerEffect
 
 
         /*
-         * Winning pays the CURRENT value but does NOT reset it.
-         * The value only changes through losing-segment volatility.
+         * Winning pays the CURRENT value but does not alter progression.
+         *
+         * Use consumption is handled by the normal StickerEffect
+         * "Consume Use On Winning" toggle.
          */
         RegisterActivation(
             owner,
@@ -195,10 +190,6 @@ public class StickerBitcoin : StickerEffect
     private void ResolveNonWinningSegment(
         BaseSticker owner)
     {
-        int originalValue =
-            GetOriginalValue();
-
-
         int previousValue =
             GetCurrentValue(
                 owner
@@ -206,45 +197,26 @@ public class StickerBitcoin : StickerEffect
 
 
         float growthChance =
-            GetEffectiveDoubleChance();
-
-
-        float resetChance =
-            GetEffectiveResetChance();
-
-
-        float roll =
-            Random.Range(
-                0f,
-                100f
-            );
+            GetGrowthChance();
 
 
         bool grew =
-            roll <
+            Random.Range(
+                0f,
+                100f
+            ) <
             growthChance;
 
 
-        bool reset =
-            !grew &&
-            roll <
-                growthChance +
-                resetChance;
-
-
-        int newValue =
-            previousValue;
-
-
+        int newValue;
         string description;
 
 
         if (grew)
         {
             newValue =
-                GetNextGrowthValue(
-                    owner,
-                    previousValue
+                AdvanceProgression(
+                    owner
                 );
 
 
@@ -254,20 +226,15 @@ public class StickerBitcoin : StickerEffect
                     newValue
                 );
         }
-        else if (reset)
+        else
         {
             newValue =
-                originalValue;
+                GetOriginalValue();
 
 
-            /*
-             * Resetting value also resets Fibonacci progression back to x1.
-             * In Double mode this state is harmless but keeping it in sync
-             * makes mode changes during development deterministic.
-             */
             owner.SetRuntimeInt(
-                FibonacciIndexKey,
-                0
+                ProgressionIndexKey,
+                -1
             );
 
 
@@ -275,13 +242,6 @@ public class StickerBitcoin : StickerEffect
                 BuildResetDescription(
                     previousValue,
                     newValue
-                );
-        }
-        else
-        {
-            description =
-                BuildNoChangeDescription(
-                    previousValue
                 );
         }
 
@@ -293,270 +253,143 @@ public class StickerBitcoin : StickerEffect
 
 
         /*
-         * Normal StickerEffect consumption rules still apply.
+         * Losing NEVER consumes a use.
          *
-         * - Growth / No Change:
-         *   use the normal "Consume Use On Non Winning" setting.
-         *
-         * - Reset:
-         *   force one use to be consumed even if that normal toggle is OFF.
-         *
-         * Because RegisterActivation receives one final decision, a reset
-         * consumes ONE use total, never two.
+         * Bitcoin's limited-use behavior is therefore exclusively controlled
+         * by "Consume Use On Winning" in StickerEffect.
          */
         RegisterActivation(
             owner,
             StickerSpinLocation.NonWinningSegment,
             description,
             0,
-            reset
-                ? true
-                : (bool?)null
+            false
         );
 
 
-        if (grew)
-        {
-            Debug.Log(
-                growthMode ==
-                    BitcoinGrowthMode.Fibonacci
-                    ? $"[BITCOIN] Fibonacci growth: " +
-                      $"${previousValue} -> ${newValue}."
-                    : $"[BITCOIN] Value doubled: " +
-                      $"${previousValue} -> ${newValue}."
-            );
-        }
-        else if (reset)
-        {
-            Debug.Log(
-                $"[BITCOIN] Value reset: " +
-                $"${previousValue} -> ${newValue}. " +
-                "Consumed 1 use."
-            );
-        }
-        else
-        {
-            Debug.Log(
-                $"[BITCOIN] Value unchanged at ${newValue}."
-            );
-        }
+        Debug.Log(
+            grew
+                ? $"[BITCOIN] Progression: " +
+                  $"${previousValue} -> ${newValue}."
+                : $"[BITCOIN] Reset: " +
+                  $"${previousValue} -> ${newValue}."
+        );
     }
 
 
     // =========================================================
-    // GROWTH
+    // CUSTOM PROGRESSION
     // =========================================================
 
-    private int GetNextGrowthValue(
-        BaseSticker owner,
-        int currentValue)
-    {
-        switch (growthMode)
-        {
-            case BitcoinGrowthMode.Fibonacci:
-                return
-                    GetNextFibonacciValue(
-                        owner
-                    );
-
-
-            case BitcoinGrowthMode.Double:
-            default:
-                return
-                    SafeDouble(
-                        currentValue
-                    );
-        }
-    }
-
-
-    private int SafeDouble(
-        int value)
-    {
-        long doubled =
-            (long)Mathf.Max(
-                0,
-                value
-            ) *
-            2L;
-
-
-        return
-            doubled >
-            int.MaxValue
-                ? int.MaxValue
-                : (int)doubled;
-    }
-
-
-    private int GetNextFibonacciValue(
+    private int AdvanceProgression(
         BaseSticker owner)
     {
+        if (progressionValues == null ||
+            progressionValues.Length <= 0)
+        {
+            /*
+             * No authored progression = successful growth has nowhere to go.
+             * Keep current value rather than inventing a fallback formula.
+             */
+            return
+                GetCurrentValue(
+                    owner
+                );
+        }
+
+
         int currentIndex =
-            Mathf.Max(
-                0,
-                owner.GetRuntimeInt(
-                    FibonacciIndexKey,
-                    0
-                )
+            owner.GetRuntimeInt(
+                ProgressionIndexKey,
+                -1
             );
 
 
         int nextIndex =
-            currentIndex ==
-            int.MaxValue
-                ? int.MaxValue
-                : currentIndex + 1;
+            Mathf.Clamp(
+                currentIndex + 1,
+                0,
+                progressionValues.Length - 1
+            );
 
 
         owner.SetRuntimeInt(
-            FibonacciIndexKey,
+            ProgressionIndexKey,
             nextIndex
         );
 
 
         return
-            GetFibonacciValueForIndex(
-                nextIndex
+            Mathf.Max(
+                0,
+                progressionValues[
+                    nextIndex
+                ]
             );
     }
 
 
-    private int GetFibonacciValueForIndex(
-        int index)
-    {
-        int originalValue =
-            GetOriginalValue();
-
-
-        if (originalValue <= 0)
-            return 0;
-
-
-        long multiplier =
-            GetFibonacciMultiplier(
-                index
-            );
-
-
-        long value =
-            multiplier *
-            (long)originalValue;
-
-
-        return
-            value >
-            int.MaxValue
-                ? int.MaxValue
-                : (int)value;
-    }
-
-
-    /*
-     * User-facing Bitcoin sequence:
-     *
-     * index 0 = 1
-     * index 1 = 2
-     * index 2 = 3
-     * index 3 = 5
-     * index 4 = 8
-     * ...
-     */
-    private long GetFibonacciMultiplier(
-        int index)
-    {
-        if (index <= 0)
-            return 1L;
-
-
-        if (index == 1)
-            return 2L;
-
-
-        long previous =
-            1L;
-
-        long current =
-            2L;
-
-
-        for (int i = 2;
-             i <= index;
-             i++)
-        {
-            /*
-             * Saturate before long overflow. Bitcoin value itself later
-             * saturates to int.MaxValue.
-             */
-            if (long.MaxValue -
-                current <
-                previous)
-            {
-                return
-                    long.MaxValue;
-            }
-
-
-            long next =
-                previous +
-                current;
-
-
-            previous =
-                current;
-
-            current =
-                next;
-        }
-
-
-        return
-            current;
-    }
-
-
-    private int GetNextPreviewValue(
+    private int GetNextProgressionValue(
         BaseSticker owner)
     {
-        int currentValue =
-            GetCurrentValue(
-                owner
-            );
-
-
-        if (growthMode ==
-            BitcoinGrowthMode.Double)
+        if (progressionValues == null ||
+            progressionValues.Length <= 0)
         {
             return
-                SafeDouble(
-                    currentValue
+                GetCurrentValue(
+                    owner
                 );
         }
 
 
         int currentIndex =
             owner != null
-                ? Mathf.Max(
-                    0,
-                    owner.GetRuntimeInt(
-                        FibonacciIndexKey,
-                        0
-                    )
+                ? owner.GetRuntimeInt(
+                    ProgressionIndexKey,
+                    -1
                 )
-                : 0;
+                : -1;
 
 
         int nextIndex =
-            currentIndex ==
-            int.MaxValue
-                ? int.MaxValue
-                : currentIndex + 1;
+            Mathf.Clamp(
+                currentIndex + 1,
+                0,
+                progressionValues.Length - 1
+            );
 
 
         return
-            GetFibonacciValueForIndex(
-                nextIndex
+            Mathf.Max(
+                0,
+                progressionValues[
+                    nextIndex
+                ]
             );
+    }
+
+
+    private bool IsAtFinalProgressionValue(
+        BaseSticker owner)
+    {
+        if (progressionValues == null ||
+            progressionValues.Length <= 0 ||
+            owner == null)
+        {
+            return true;
+        }
+
+
+        int currentIndex =
+            owner.GetRuntimeInt(
+                ProgressionIndexKey,
+                -1
+            );
+
+
+        return
+            currentIndex >=
+            progressionValues.Length - 1;
     }
 
 
@@ -564,38 +397,22 @@ public class StickerBitcoin : StickerEffect
     // PROBABILITIES
     // =========================================================
 
-    private float GetEffectiveDoubleChance()
+    private float GetGrowthChance()
     {
         return
             Mathf.Clamp(
-                doubleChancePercent,
+                growthChancePercent,
                 0f,
                 100f
             );
     }
 
 
-    private float GetEffectiveResetChance()
+    private float GetResetChance()
     {
         return
-            Mathf.Clamp(
-                resetChancePercent,
-                0f,
-                100f -
-                GetEffectiveDoubleChance()
-            );
-    }
-
-
-    private float GetNoChangeChance()
-    {
-        return
-            Mathf.Max(
-                0f,
-                100f -
-                GetEffectiveDoubleChance() -
-                GetEffectiveResetChance()
-            );
+            100f -
+            GetGrowthChance();
     }
 
 
@@ -627,11 +444,6 @@ public class StickerBitcoin : StickerEffect
         }
 
 
-        /*
-         * A fresh physical Bitcoin starts at its authored dollarReward.
-         * We do not need a separate initialization pass because GetRuntimeInt
-         * can supply that original value as the default.
-         */
         return
             Mathf.Max(
                 0,
@@ -651,18 +463,10 @@ public class StickerBitcoin : StickerEffect
         int previousValue,
         int newValue)
     {
-        string verb =
-            growthMode ==
-                BitcoinGrowthMode.Fibonacci
-                ? "Fibonacci growth"
-                : "Value doubles";
-
-
         if (GameLogManager.Instance != null)
         {
             return
-                verb +
-                ": " +
+                "Value increases: " +
                 GameLogManager.Instance
                     .MoneyText(
                         $"${previousValue}"
@@ -676,7 +480,7 @@ public class StickerBitcoin : StickerEffect
 
 
         return
-            $"{verb}: ${previousValue} → ${newValue}";
+            $"Value increases: ${previousValue} → ${newValue}";
     }
 
 
@@ -705,25 +509,6 @@ public class StickerBitcoin : StickerEffect
     }
 
 
-    private string BuildNoChangeDescription(
-        int currentValue)
-    {
-        if (GameLogManager.Instance != null)
-        {
-            return
-                "Value remains " +
-                GameLogManager.Instance
-                    .MoneyText(
-                        $"${currentValue}"
-                    );
-        }
-
-
-        return
-            $"Value remains ${currentValue}";
-    }
-
-
     // =========================================================
     // TOOLTIP
     // =========================================================
@@ -740,28 +525,24 @@ public class StickerBitcoin : StickerEffect
 
 
     /*
-     * Available custom tooltip tokens:
+     * Custom tokens:
      *
      * {currentValue}
      * {originalValue}
-     * {doubleChance}
      * {growthChance}
      * {resetChance}
-     * {noChangeChance}
-     * {growthAction}
-     * {resetAction}
      * {nextValue}
+     * {growthAction}
      *
-     * Suggested authoring:
+     * Recommended:
      *
-     * Winning Segment Tooltip:
+     * Winning:
      * Earn ${currentValue}.
      *
-     * Losing Segment Tooltip:
+     * Losing:
      * {growthChance}% chance to {growthAction}.
-     * {resetChance}% chance to {resetAction}.
-     * {noChangeChance}% chance to stay unchanged.
-     * Current value: ${currentValue}. Next growth value: ${nextValue}.
+     * {resetChance}% chance to reset to ${originalValue}.
+     * Current value: ${currentValue}.
      */
     protected override string ResolveTooltipTokens(
         BaseSticker owner,
@@ -774,18 +555,6 @@ public class StickerBitcoin : StickerEffect
                 location,
                 template
             );
-
-
-        float doubleChance =
-            GetEffectiveDoubleChance();
-
-
-        float resetChance =
-            GetEffectiveResetChance();
-
-
-        float noChangeChance =
-            GetNoChangeChance();
 
 
         return
@@ -803,44 +572,28 @@ public class StickerBitcoin : StickerEffect
                         .ToString()
                 )
                 .Replace(
-                    "{doubleChance}",
-                    FormatPercent(
-                        doubleChance
-                    )
-                )
-                .Replace(
                     "{growthChance}",
                     FormatPercent(
-                        doubleChance
+                        GetGrowthChance()
                     )
                 )
                 .Replace(
-                    "{growthAction}",
-                    GetGrowthActionText(
-                        owner
+                    "{resetChance}",
+                    FormatPercent(
+                        GetResetChance()
                     )
-                )
-                .Replace(
-                    "{resetAction}",
-                    $"reset to ${GetOriginalValue()} and lose 1 use"
                 )
                 .Replace(
                     "{nextValue}",
-                    GetNextPreviewValue(
+                    GetNextProgressionValue(
                         owner
                     )
                     .ToString()
                 )
                 .Replace(
-                    "{resetChance}",
-                    FormatPercent(
-                        resetChance
-                    )
-                )
-                .Replace(
-                    "{noChangeChance}",
-                    FormatPercent(
-                        noChangeChance
+                    "{growthAction}",
+                    GetGrowthActionText(
+                        owner
                     )
                 );
     }
@@ -850,16 +603,29 @@ public class StickerBitcoin : StickerEffect
         BaseSticker owner)
     {
         int nextValue =
-            GetNextPreviewValue(
+            GetNextProgressionValue(
                 owner
             );
 
 
+        if (progressionValues == null ||
+            progressionValues.Length <= 0)
+        {
+            return
+                $"keep value at ${nextValue}";
+        }
+
+
+        if (IsAtFinalProgressionValue(
+            owner))
+        {
+            return
+                $"keep value at ${nextValue}";
+        }
+
+
         return
-            growthMode ==
-                BitcoinGrowthMode.Fibonacci
-                ? $"increase value to ${nextValue}"
-                : $"double current value to ${nextValue}";
+            $"increase value to ${nextValue}";
     }
 
 

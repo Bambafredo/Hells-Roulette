@@ -15,7 +15,7 @@ MonoBehaviour:
   stickerName: Bitcoin
   icon: {fileID: 21300000, guid: 1951d7b4a8b625b44a1c554067280e87, type: 3}
   basePurchaseCost: 6
-  maxUses: 3
+  maxUses: 2
   consumeUseOnWinningActivation: 1
   consumeUseOnNonWinningActivation: 0
   consumeUseOnAlbumActivation: 0
@@ -23,9 +23,8 @@ MonoBehaviour:
   logDescription: 
   winningSegmentTooltip: Earn ${currentValue}.
   losingSegmentTooltip: '{growthChance}% chance to {growthAction}. {resetChance}%
-    chance to {resetAction}. Current value: ${currentValue}.'
+    chance to reset to ${originalValue}. Current value: ${currentValue}.'
   albumTooltip: 
   destroyedTooltip: 
-  growthMode: 1
-  doubleChancePercent: 70
-  resetChancePercent: 30
+  growthChancePercent: 70
+  progressionValues: 01000000020000000300000005000000080000000d00000015000000
