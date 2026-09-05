@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 839148afe9087f74a94c5d6525b69719, type: 3}
+  m_Name: StickerDealersShotgun
+  m_EditorClassIdentifier: 
+  stickerName: "Dealer\xB4s Shotgun"
+  icon: {fileID: 21300000, guid: be8f33e3ec74a59428ac29976f74ea64, type: 3}
+  basePurchaseCost: 8
+  maxUses: 0
+  consumeUseOnWinningActivation: 1
+  consumeUseOnNonWinningActivation: 0
+  consumeUseOnAlbumActivation: 0
+  dollarReward: 0
+  logDescription: 
+  winningSegmentTooltip: '{enemyChance}%: deal {enemyDamage} damage to the leftmost
+    enemy. {selfChance}%: take {playerDamage} damage. Lucky Shot: always hit the
+    enemy.'
+  losingSegmentTooltip: 
+  albumTooltip: 
+  destroyedTooltip: 
+  enemyHitChancePercent: 50
+  enemyDamageAmount: 10
+  playerDamageAmount: 6
