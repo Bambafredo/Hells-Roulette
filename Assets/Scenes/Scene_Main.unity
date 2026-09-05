@@ -6112,6 +6112,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: ff03fbf22a311ba4dbf4d13a24504a7d, type: 3}
   - {fileID: 577474978131120927, guid: 7b479c09d32d32c4f8414cdf21ad47fc, type: 3}
   - {fileID: 577474978131120927, guid: a5b6de4c89a0e51418a69ff2b5a74879, type: 3}
+  - {fileID: 577474978131120927, guid: cd5f4fe6b33fe9545abfb5ec4bf961f4, type: 3}
   bloodPriceMultiplier: 2
   enableFirstPurchaseDiscount: 1
   firstPurchaseDiscountTarget: 0
@@ -6266,6 +6267,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 839e7802698982544bae9e044c732bd2, type: 3}
   - {fileID: 577474978131120927, guid: 7b479c09d32d32c4f8414cdf21ad47fc, type: 3}
   - {fileID: 577474978131120927, guid: a5b6de4c89a0e51418a69ff2b5a74879, type: 3}
+  - {fileID: 577474978131120927, guid: cd5f4fe6b33fe9545abfb5ec4bf961f4, type: 3}
   rerollButtonCollider: {fileID: 23581347}
   rerollsRemainingText: {fileID: 701791785}
   startingRerolls: 3
