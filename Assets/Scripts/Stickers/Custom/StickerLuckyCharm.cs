@@ -73,11 +73,51 @@ public class StickerLuckyCharm : StickerEffect
          * RegisterActivation keeps the normal StickerEffect use-consumption
          * rules and logs the dynamic payout actually earned this activation.
          */
+        string activationDescription =
+            null;
+
+        int activationLogReward =
+            payout;
+
+
+        if (!luckyShotUsed)
+        {
+            string moneyLabel =
+                payout > 0
+                    ? $"+${payout}"
+                    : "$0";
+
+
+            if (GameLogManager.Instance != null)
+            {
+                moneyLabel =
+                    GameLogManager.Instance
+                        .MoneyText(
+                            moneyLabel
+                        );
+            }
+
+
+            activationDescription =
+                "Spin was not a Lucky Shot. Earned " +
+                moneyLabel +
+                ".";
+
+            /*
+             * The exact amount is already included in the custom description
+             * above so that $0 is shown too. Passing 0 here prevents the shared
+             * logger from appending a second money value when normalReward > 0.
+             */
+            activationLogReward =
+                0;
+        }
+
+
         RegisterActivation(
             owner,
             StickerSpinLocation.WinningSegment,
-            null,
-            payout,
+            activationDescription,
+            activationLogReward,
             null
         );
 
