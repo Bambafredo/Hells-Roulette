@@ -7024,6 +7024,7 @@ MonoBehaviour:
   disableWheelStickerCollidersDuringSpin: 1
   powerSpinMaxSpeed: 2000
   powerSpinClockwise: 1
+  enableManualWheelDrag: 0
   blockInputMask:
     serializedVersion: 2
     m_Bits: 0

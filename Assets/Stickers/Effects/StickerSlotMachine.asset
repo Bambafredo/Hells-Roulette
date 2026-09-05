@@ -26,9 +26,9 @@ MonoBehaviour:
   losingSegmentTooltip: 
   albumTooltip: 
   destroyedTooltip: 
-  maxWinAmount: 12
-  minimumIncreasePerQuarter: 4
-  useLuckyShotMaxOverride: 1
+  maxWinAmount: 10
+  minimumIncreasePerQuarter: 5
+  useLuckyShotMaxOverride: 0
   luckyShotMaxWinAmount: 20
   quarterStickerEffect: {fileID: 11400000, guid: 457fac4890a7da04a9555f1558274d16, type: 2}
   quarterStickerName: Quarter

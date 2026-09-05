@@ -94,6 +94,10 @@ public class RouletteController : MonoBehaviour
     // INPUT
     // =========================================================
 
+    [Header("Manual Wheel Drag")]
+    [Tooltip("Editor/debug only. Allows manually dragging the roulette wheel.")]
+    public bool enableManualWheelDrag = false;
+
     [Header("Pin Interaction")]
     public LayerMask blockInputMask;
     public bool inputBlocked = false;
@@ -490,7 +494,8 @@ public class RouletteController : MonoBehaviour
                 return;
             }
 
-            if (Vector2.Distance(
+            if (enableManualWheelDrag &&
+                Vector2.Distance(
                     pos,
                     (Vector2)wheel.position)
                 >= minDragRadius)
