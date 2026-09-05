@@ -23,8 +23,8 @@ MonoBehaviour:
   logDescription: 
   winningSegmentTooltip: Earn ${currentValue}.
   losingSegmentTooltip: '{growthChance}% chance to {growthAction}. {resetChance}%
-    chance to reset to ${originalValue}. Current value: ${currentValue}.'
+    chance to reset to ${originalValue}.'
   albumTooltip: 
   destroyedTooltip: 
   growthChancePercent: 70
-  progressionValues: 01000000020000000300000005000000080000000d00000015000000
+  progressionValues: 020000000300000005000000080000000d00000015000000
