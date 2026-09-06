@@ -426,10 +426,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enemyName: Limbo
-  maxHP: 20
+  maxHP: 50
   rowPlacementPriority: 0
   actionSequenceOrderMode: 0
   actionSequence:
+  - {fileID: 11400000, guid: 321debf27cc99024b92ecdc691d8f448, type: 2}
+  - {fileID: 11400000, guid: 321debf27cc99024b92ecdc691d8f448, type: 2}
+  - {fileID: 11400000, guid: 321debf27cc99024b92ecdc691d8f448, type: 2}
   - {fileID: 11400000, guid: 321debf27cc99024b92ecdc691d8f448, type: 2}
   - {fileID: 11400000, guid: 321debf27cc99024b92ecdc691d8f448, type: 2}
   - {fileID: 11400000, guid: 6bd23f1c15dd03d41a386f76307ca112, type: 2}
@@ -452,27 +455,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   advanceCorridorOnDefeat: 1
-  playerDamage: 5
-  moneyDivisor: 2
-  bossDamage: 5
-  damagePlayerPattern:
-    texture: {fileID: 2800000, guid: 410fc6972ed1fea4c859e8da818553b6, type: 3}
-    color: {r: 0, g: 0, b: 0, a: 1}
-    opacity: 0.8
-    scale: 4
-    rotation: 0
-  divideMoneyPattern:
-    texture: {fileID: 2800000, guid: 48077bc1c975d9c439f0102cac78dd8f, type: 3}
-    color: {r: 0, g: 0, b: 0, a: 1}
-    opacity: 0.8
-    scale: 4
-    rotation: 0
-  damageBossPattern:
-    texture: {fileID: 2800000, guid: e78d55126c1ec964ca15d34798ed91bb, type: 3}
-    color: {r: 0, g: 0, b: 0, a: 1}
-    opacity: 0.8
-    scale: 4
-    rotation: 0
+  damagePlayerPattern: 2
+  divideMoneyPattern: 1
+  damageBossPattern: 3
 --- !u!1 &9009554841982820289
 GameObject:
   m_ObjectHideFlags: 0

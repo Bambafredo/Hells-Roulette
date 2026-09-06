@@ -270,6 +270,7 @@ public class SegmentBlockTooltipManager : MonoBehaviour
 
         string tooltip =
             BuildTooltip(
+                segmentIndex,
                 remaining
             );
 
@@ -543,8 +544,18 @@ public class SegmentBlockTooltipManager : MonoBehaviour
     // =========================================================
 
     private string BuildTooltip(
+        int segmentIndex,
         int turnsRemaining)
     {
+        if (SegmentBlockTooltipOverrideRegistry.TryGetOverride(
+                segmentIndex,
+                out SegmentBlockTooltipOverrideData overrideData))
+        {
+            return
+                BuildTooltipFromOverride(
+                    overrideData
+                );
+        }
         string titleHex =
             ColorUtility.ToHtmlStringRGB(
                 blockedTitleColor
@@ -568,6 +579,65 @@ public class SegmentBlockTooltipManager : MonoBehaviour
             blockedDescription +
             "\n" +
             $"<color=#{unlockHex}>Unlocks in {turnsRemaining} {turnWord}</color>";
+    }
+
+
+    private string BuildTooltipFromOverride(
+        SegmentBlockTooltipOverrideData data)
+    {
+        string titleHex =
+            ColorUtility.ToHtmlStringRGB(
+                blockedTitleColor
+            );
+
+
+        string statusHex =
+            ColorUtility.ToHtmlStringRGB(
+                unlockCountdownColor
+            );
+
+
+        string title =
+            string.IsNullOrWhiteSpace(
+                data.title
+            )
+                ? blockedTitle
+                : data.title;
+
+
+        string description =
+            data.description ??
+            "";
+
+
+        string status =
+            data.status ??
+            "";
+
+
+        string result =
+            $"<color=#{titleHex}>{title}</color>";
+
+
+        if (!string.IsNullOrWhiteSpace(
+                description))
+        {
+            result +=
+                "\n" +
+                description;
+        }
+
+
+        if (!string.IsNullOrWhiteSpace(
+                status))
+        {
+            result +=
+                "\n" +
+                $"<color=#{statusHex}>{status}</color>";
+        }
+
+
+        return result;
     }
 
 

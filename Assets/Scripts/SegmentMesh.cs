@@ -8,6 +8,18 @@ using UnityEngine;
 )]
 public class SegmentMesh : MonoBehaviour
 {
+    // =========================================================
+    // BLOCKED PATTERN TYPE
+    // =========================================================
+
+    public enum BlockedPatternType
+    {
+        Diagonal = 0,
+        Crosshatch = 1,
+        Horizontal = 2,
+        Dots = 3
+    }
+
     [Min(3)]
     public int resolution = 16;
 
@@ -70,6 +82,9 @@ public class SegmentMesh : MonoBehaviour
 
     private float blockedStripeWidth =
         0.12f;
+
+    private BlockedPatternType blockedPatternType =
+        BlockedPatternType.Diagonal;
 
 
     private MaterialPropertyBlock propertyBlock;
@@ -159,6 +174,11 @@ public class SegmentMesh : MonoBehaviour
     private static readonly int BlockedStripeWidthId =
         Shader.PropertyToID(
             "_BlockedStripeWidth"
+        );
+
+    private static readonly int BlockedPatternTypeId =
+        Shader.PropertyToID(
+            "_BlockedPatternType"
         );
 
 
@@ -273,6 +293,22 @@ public class SegmentMesh : MonoBehaviour
                 0.01f,
                 0.45f
             );
+
+        ApplyVisualState();
+    }
+
+
+    /// <summary>
+    /// Selects the procedural pattern used while this segment is blocked.
+    ///
+    /// This changes presentation only. Gameplay block state, duration and
+    /// placement semantics remain owned by WheelGenerator.
+    /// </summary>
+    public void ConfigureBlockedPattern(
+        BlockedPatternType patternType)
+    {
+        blockedPatternType =
+            patternType;
 
         ApplyVisualState();
     }
@@ -585,6 +621,11 @@ public class SegmentMesh : MonoBehaviour
         propertyBlock.SetFloat(
             BlockedStripeWidthId,
             blockedStripeWidth
+        );
+
+        propertyBlock.SetFloat(
+            BlockedPatternTypeId,
+            (float)blockedPatternType
         );
 
 

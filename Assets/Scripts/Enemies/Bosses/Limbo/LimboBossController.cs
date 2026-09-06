@@ -9,10 +9,19 @@ using UnityEngine;
 /// authored EnemyAction sequence. This controller owns only:
 /// - unlimited valid spins / no debt trigger while Limbo is active;
 /// - Limbo's permanent special Segment Blocks;
+/// - stable pre-planning of the next random target segment for EA preview;
 /// - the special effect captured when a spin lands on one of those blocks;
+/// - tooltip presentation for Limbo's special Segment Blocks;
 /// - cleanup when Limbo leaves the encounter.
+///
+/// IMPORTANT:
+/// The NUMBER and TYPES of blocks before Collect + Unlock are authored in
+/// BaseEnemy.actionSequence through EnemyActionLimboPermanentBlock assets.
+/// LimboBossController does not impose a 2/2/2 distribution or six-block cycle.
 /// </summary>
-public class LimboBossController : BossEncounterController
+public class LimboBossController :
+    BossEncounterController,
+    ISegmentBlockTooltipOverrideProvider
 {
     // =========================================================
     // SPECIAL BLOCK TYPES
@@ -26,82 +35,67 @@ public class LimboBossController : BossEncounterController
     }
 
 
-    [Serializable]
-    public class LimboPatternStyle
+    private struct LimboBlockData
     {
-        public Texture texture;
+        public LimboBlockEffectType type;
+        public int value;
 
-        public Color color =
-            Color.black;
+        public LimboBlockData(
+            LimboBlockEffectType type,
+            int value)
+        {
+            this.type =
+                type;
 
-        [Range(0f, 1f)]
-        public float opacity =
-            0.8f;
-
-        [Min(0.01f)]
-        public float scale =
-            4f;
-
-        public float rotation =
-            0f;
+            this.value =
+                value;
+        }
     }
 
 
     // =========================================================
-    // BLOCK EFFECT VALUES
+    // PROCEDURAL BLOCK PATTERNS
     // =========================================================
 
-    [Header("Limbo - Special Block Effects")]
+    [Header("Limbo - Procedural Block Patterns")]
 
     [Tooltip(
-        "Blood damage requested when the player lands on a Damage Player block. " +
-        "Uses BloodManager.TakeDamage(), so Shield and future mitigation work."
+        "Procedural blocked pattern used by Damage Player blocks."
     )]
-    [Min(0)]
-    public int playerDamage =
-        5;
-
+    public SegmentMesh.BlockedPatternType damagePlayerPattern =
+        SegmentMesh.BlockedPatternType.Crosshatch;
 
     [Tooltip(
-        "Current dollars are divided by this integer, rounded down. " +
-        "Example: $17 / 2 = $8."
+        "Procedural blocked pattern used by Divide Money blocks."
     )]
-    [Min(1)]
-    public int moneyDivisor =
-        2;
-
+    public SegmentMesh.BlockedPatternType divideMoneyPattern =
+        SegmentMesh.BlockedPatternType.Horizontal;
 
     [Tooltip(
-        "Damage Limbo takes when the player lands on a Damage Boss block."
+        "Procedural blocked pattern used by Damage Boss blocks."
     )]
-    [Min(0)]
-    public int bossDamage =
-        5;
-
-
-    // =========================================================
-    // PATTERNS
-    // =========================================================
-
-    [Header("Limbo - Block Patterns")]
-
-    public LimboPatternStyle damagePlayerPattern =
-        new LimboPatternStyle();
-
-    public LimboPatternStyle divideMoneyPattern =
-        new LimboPatternStyle();
-
-    public LimboPatternStyle damageBossPattern =
-        new LimboPatternStyle();
+    public SegmentMesh.BlockedPatternType damageBossPattern =
+        SegmentMesh.BlockedPatternType.Dots;
 
 
     // =========================================================
     // RUNTIME STATE
     // =========================================================
 
-    private readonly Dictionary<int, LimboBlockEffectType>
+    private readonly Dictionary<int, LimboBlockData>
         specialBlocks =
-            new Dictionary<int, LimboBlockEffectType>();
+            new Dictionary<int, LimboBlockData>();
+
+
+    /*
+     * The next Permanent Block target is chosen before execution so its EA
+     * tooltip can truthfully preview "Target: Segment X".
+     *
+     * It remains stable until that Permanent Block executes, unless the target
+     * becomes blocked by another effect first, in which case we safely reroll.
+     */
+    private int plannedTargetSegmentIndex =
+        -1;
 
 
     private bool pendingBlockEffect =
@@ -110,7 +104,7 @@ public class LimboBossController : BossEncounterController
     private int pendingBlockSegmentIndex =
         -1;
 
-    private LimboBlockEffectType pendingBlockType;
+    private LimboBlockData pendingBlockData;
 
 
     private RouletteController roulette;
@@ -118,15 +112,36 @@ public class LimboBossController : BossEncounterController
 
 
     // =========================================================
-    // PUBLIC DEBUG STATE
+    // PUBLIC STATE
     // =========================================================
 
     public int ActiveSpecialBlockCount =>
         specialBlocks.Count;
 
-
     public bool HasPendingBlockEffect =>
         pendingBlockEffect;
+
+
+    // =========================================================
+    // UNITY / TOOLTIP REGISTRY
+    // =========================================================
+
+    private void OnEnable()
+    {
+        SegmentBlockTooltipOverrideRegistry
+            .Register(
+                this
+            );
+    }
+
+
+    private void OnDisable()
+    {
+        SegmentBlockTooltipOverrideRegistry
+            .Unregister(
+                this
+            );
+    }
 
 
     // =========================================================
@@ -154,19 +169,38 @@ public class LimboBossController : BossEncounterController
     protected override void OnBossEncounterActivated()
     {
         /*
-         * Normal round transitions already enter with tokens available.
-         * This is only a defensive escape hatch for debug/manual corridor
-         * transitions that happen to enter Limbo with zero tokens/debt pending.
+         * Limbo starts from a clean Segment Block puzzle state.
+         *
+         * This prevents a normal block inherited from the previous encounter
+         * from stealing one of Limbo's available targets.
+         */
+        if (generator != null)
+        {
+            generator.ClearAllSegmentBlocks();
+        }
+
+
+        specialBlocks.Clear();
+
+        plannedTargetSegmentIndex =
+            -1;
+
+        pendingBlockEffect =
+            false;
+
+        pendingBlockSegmentIndex =
+            -1;
+
+
+        /*
+         * Defensive escape hatch for debug/manual corridor transitions that
+         * enter Limbo with no token available.
          */
         if (RoundManagerRef != null &&
             RoundManagerRef.TokensRemaining <= 0)
         {
             RoundManagerRef.AddTokens(1);
         }
-
-
-        ReconcileSpecialBlocksWithWheel();
-        ReapplyAllSpecialPatterns();
 
 
         Debug.Log(
@@ -205,9 +239,8 @@ public class LimboBossController : BossEncounterController
     protected override void OnBossValidSpinValidated()
     {
         /*
-         * RoundManager invokes OnSpinValidated BEFORE its private SpendToken().
-         * Adding one token here and letting RoundManager spend normally leaves
-         * the count unchanged, without adding boss branches to RoundManager.
+         * RoundManager invokes OnSpinValidated BEFORE its normal SpendToken().
+         * +1 here and -1 there = no net token consumption during Limbo.
          */
         if (RoundManagerRef != null)
         {
@@ -215,19 +248,13 @@ public class LimboBossController : BossEncounterController
         }
 
 
-        /*
-         * Snapshot the special block under the physical winner BEFORE sticker
-         * effects can regenerate the wheel. Resolution happens later, at the
-         * beginning of Limbo's Enemy Action.
-         */
         CapturePendingWinningBlockEffect();
 
 
         /*
-         * Limbo blocks are created with 1 remaining future valid spin.
-         * Refreshing each existing block from 1 -> 2 here, before the normal
-         * WheelGenerator countdown, makes it return to 1 after the current
-         * valid spin. It therefore remains permanent while Limbo is active.
+         * Each Limbo block lives at 1 future valid spin remaining.
+         * Refresh 1 -> 2 here; WheelGenerator's normal countdown later returns
+         * it to 1. The block therefore remains permanent until Collect/cleanup.
          */
         RefreshPermanentBlocks();
     }
@@ -252,7 +279,7 @@ public class LimboBossController : BossEncounterController
 
         if (!specialBlocks.TryGetValue(
                 winningIndex,
-                out LimboBlockEffectType type))
+                out LimboBlockData data))
         {
             return;
         }
@@ -264,8 +291,100 @@ public class LimboBossController : BossEncounterController
         pendingBlockSegmentIndex =
             winningIndex;
 
-        pendingBlockType =
-            type;
+        pendingBlockData =
+            data;
+    }
+
+
+    // =========================================================
+    // NEXT PERMANENT BLOCK TARGET
+    // =========================================================
+
+    /// <summary>
+    /// Returns the stable random segment targeted by the NEXT Permanent Block.
+    ///
+    /// EnemyActionLimboPermanentBlock uses this for its tooltip and execution,
+    /// so the player sees the same target that will actually be blocked.
+    /// </summary>
+    public bool TryGetNextPermanentBlockTarget(
+        out int segmentIndex)
+    {
+        segmentIndex =
+            -1;
+
+
+        if (!EncounterActive ||
+            Enemy == null ||
+            Enemy.IsDead ||
+            generator == null)
+        {
+            return false;
+        }
+
+
+        ReconcileSpecialBlocksWithWheel();
+
+
+        if (IsValidAvailableTarget(
+                plannedTargetSegmentIndex))
+        {
+            segmentIndex =
+                plannedTargetSegmentIndex;
+
+            return true;
+        }
+
+
+        plannedTargetSegmentIndex =
+            -1;
+
+
+        List<int> candidates =
+            new List<int>();
+
+
+        for (int i = 0;
+             i < generator.segmentCount;
+             i++)
+        {
+            if (!generator.IsSegmentBlocked(i))
+            {
+                candidates.Add(i);
+            }
+        }
+
+
+        if (candidates.Count == 0)
+            return false;
+
+
+        plannedTargetSegmentIndex =
+            candidates[
+                UnityEngine.Random.Range(
+                    0,
+                    candidates.Count
+                )
+            ];
+
+
+        segmentIndex =
+            plannedTargetSegmentIndex;
+
+
+        return true;
+    }
+
+
+    private bool IsValidAvailableTarget(
+        int segmentIndex)
+    {
+        return
+            generator != null &&
+            segmentIndex >= 0 &&
+            segmentIndex < generator.segmentCount &&
+            !generator.IsSegmentBlocked(
+                segmentIndex
+            );
     }
 
 
@@ -322,7 +441,7 @@ public class LimboBossController : BossEncounterController
             new List<int>();
 
 
-        foreach (KeyValuePair<int, LimboBlockEffectType> entry in
+        foreach (KeyValuePair<int, LimboBlockData> entry in
                  specialBlocks)
         {
             int index =
@@ -344,7 +463,8 @@ public class LimboBossController : BossEncounterController
 
         foreach (int index in staleIndices)
         {
-            RestoreFoundationPattern(index);
+            RestoreDefaultBlockedPattern(index);
+
             specialBlocks.Remove(index);
         }
     }
@@ -354,7 +474,15 @@ public class LimboBossController : BossEncounterController
     // EA API - PERMANENT BLOCK
     // =========================================================
 
-    public void ExecutePermanentBlock()
+    /// <summary>
+    /// Creates the next authored Limbo block.
+    ///
+    /// The EnemyAction asset decides WHAT the block does and its numeric value.
+    /// This controller decides WHERE it goes and owns its runtime state.
+    /// </summary>
+    public void ExecutePermanentBlock(
+        LimboBlockEffectType type,
+        int effectValue)
     {
         if (Enemy == null ||
             Enemy.IsDead ||
@@ -367,43 +495,12 @@ public class LimboBossController : BossEncounterController
         ReconcileSpecialBlocksWithWheel();
 
 
-        List<int> candidates =
-            new List<int>();
-
-
-        for (int i = 0;
-             i < generator.segmentCount;
-             i++)
-        {
-            if (!generator.IsSegmentBlocked(i))
-            {
-                candidates.Add(i);
-            }
-        }
-
-
-        if (candidates.Count == 0)
+        if (!TryGetNextPermanentBlockTarget(
+                out int targetIndex))
         {
             LogNoAvailableSegment();
             return;
         }
-
-
-        int targetIndex =
-            candidates[
-                UnityEngine.Random.Range(
-                    0,
-                    candidates.Count
-                )
-            ];
-
-
-        LimboBlockEffectType type =
-            (LimboBlockEffectType)
-            UnityEngine.Random.Range(
-                0,
-                3
-            );
 
 
         bool blocked =
@@ -415,24 +512,72 @@ public class LimboBossController : BossEncounterController
 
         if (!blocked)
         {
+            /*
+             * Defensive retry if some other effect changed the target between
+             * tooltip preview and execution.
+             */
+            plannedTargetSegmentIndex =
+                -1;
+
+
+            if (!TryGetNextPermanentBlockTarget(
+                    out targetIndex))
+            {
+                LogNoAvailableSegment();
+                return;
+            }
+
+
+            blocked =
+                generator.BlockSegment(
+                    targetIndex,
+                    1
+                );
+        }
+
+
+        if (!blocked)
+        {
             LogNoAvailableSegment();
             return;
         }
 
 
+        int safeValue =
+            NormalizeEffectValue(
+                type,
+                effectValue
+            );
+
+
+        LimboBlockData data =
+            new LimboBlockData(
+                type,
+                safeValue
+            );
+
+
         specialBlocks[targetIndex] =
-            type;
+            data;
 
 
         ApplySpecialPattern(
             targetIndex,
-            type
+            data
         );
+
+
+        /*
+         * The current plan has now been consumed. A future Permanent Block EA
+         * will choose/cache a new unblocked target when previewed.
+         */
+        plannedTargetSegmentIndex =
+            -1;
 
 
         LogPermanentBlockCreated(
             targetIndex,
-            type
+            data
         );
     }
 
@@ -498,11 +643,10 @@ public class LimboBossController : BossEncounterController
     // =========================================================
 
     /// <summary>
-    /// Called by Limbo's authored EnemyAction BEFORE that action resolves.
+    /// Called by Limbo's current EnemyAction BEFORE that action resolves.
     ///
-    /// Returning true means a special block effect was actually resolved.
-    /// If the Damage Boss block kills Limbo, the EnemyAction checks IsDead and
-    /// stops, so the boss cannot perform its normal EA after dying.
+    /// If a Damage Boss block kills Limbo, the EnemyAction sees IsDead and
+    /// stops, so Limbo cannot perform its normal EA after dying.
     /// </summary>
     public bool ResolvePendingBlockEffect()
     {
@@ -513,8 +657,8 @@ public class LimboBossController : BossEncounterController
         int segmentIndex =
             pendingBlockSegmentIndex;
 
-        LimboBlockEffectType type =
-            pendingBlockType;
+        LimboBlockData data =
+            pendingBlockData;
 
 
         pendingBlockEffect =
@@ -526,32 +670,34 @@ public class LimboBossController : BossEncounterController
 
         /*
          * A WheelShifter may have regenerated SegmentMesh objects during the
-         * sticker pass. Reapply surviving Limbo patterns now, after stickers
-         * and before the boss EA.
+         * sticker pass. Reapply surviving patterns before resolving the boss EA.
          */
         ReconcileSpecialBlocksWithWheel();
         ReapplyAllSpecialPatterns();
 
 
-        switch (type)
+        switch (data.type)
         {
             case LimboBlockEffectType.DamagePlayer:
                 ResolvePlayerDamageBlock(
-                    segmentIndex
+                    segmentIndex,
+                    data.value
                 );
                 break;
 
 
             case LimboBlockEffectType.DivideMoney:
                 ResolveDivideMoneyBlock(
-                    segmentIndex
+                    segmentIndex,
+                    data.value
                 );
                 break;
 
 
             case LimboBlockEffectType.DamageBoss:
                 ResolveBossDamageBlock(
-                    segmentIndex
+                    segmentIndex,
+                    data.value
                 );
                 break;
         }
@@ -562,18 +708,19 @@ public class LimboBossController : BossEncounterController
 
 
     private void ResolvePlayerDamageBlock(
-        int segmentIndex)
+        int segmentIndex,
+        int requestedDamage)
     {
-        int requestedDamage =
+        int safeDamage =
             Mathf.Max(
                 0,
-                playerDamage
+                requestedDamage
             );
 
 
         BloodManager.DamageResult result =
             new BloodManager.DamageResult(
-                requestedDamage,
+                safeDamage,
                 0,
                 0
             );
@@ -584,7 +731,7 @@ public class LimboBossController : BossEncounterController
             result =
                 BloodManager.Instance
                     .TakeDamage(
-                        requestedDamage
+                        safeDamage
                     );
         }
 
@@ -617,19 +764,20 @@ public class LimboBossController : BossEncounterController
 
 
         Debug.Log(
-            $"[LIMBO] Damage Player block requested {requestedDamage}. " +
+            $"[LIMBO] Damage Player block requested {safeDamage}. " +
             $"Prevented = {result.preventedDamage}, Blood lost = {result.bloodLost}."
         );
     }
 
 
     private void ResolveDivideMoneyBlock(
-        int segmentIndex)
+        int segmentIndex,
+        int requestedDivisor)
     {
         int divisor =
             Mathf.Max(
                 1,
-                moneyDivisor
+                requestedDivisor
             );
 
 
@@ -682,19 +830,16 @@ public class LimboBossController : BossEncounterController
 
 
     private void ResolveBossDamageBlock(
-        int segmentIndex)
+        int segmentIndex,
+        int requestedDamage)
     {
         int damage =
             Mathf.Max(
                 0,
-                bossDamage
+                requestedDamage
             );
 
 
-        /*
-         * Log the damage BEFORE TakeDamage(). If this kills Limbo,
-         * BaseEnemy.Die() then appends the normal "Limbo dies" line after it.
-         */
         if (GameLogManager.Instance != null)
         {
             GameLogManager.Instance
@@ -729,6 +874,10 @@ public class LimboBossController : BossEncounterController
 
     private void ClearAllLimboBlocks()
     {
+        plannedTargetSegmentIndex =
+            -1;
+
+
         if (generator == null)
         {
             specialBlocks.Clear();
@@ -740,10 +889,8 @@ public class LimboBossController : BossEncounterController
 
 
         /*
-         * Limbo's unlock/defeat is an encounter-wide reset. The current
-         * WheelGenerator has only a public ClearAllSegmentBlocks API, so this
-         * deliberately clears every active Segment Block, including any normal
-         * block that happened to survive into the boss encounter.
+         * Collect + Unlock is intentionally encounter-wide: it unlocks every
+         * currently blocked segment, not only blocks created by Limbo.
          */
         generator.ClearAllSegmentBlocks();
 
@@ -753,10 +900,10 @@ public class LimboBossController : BossEncounterController
 
 
     // =========================================================
-    // PATTERNS
+    // PROCEDURAL BLOCK PATTERNS
     // =========================================================
 
-    private LimboPatternStyle GetPatternStyle(
+    private SegmentMesh.BlockedPatternType GetBlockedPatternType(
         LimboBlockEffectType type)
     {
         switch (type)
@@ -771,14 +918,14 @@ public class LimboBossController : BossEncounterController
                 return damageBossPattern;
 
             default:
-                return null;
+                return SegmentMesh.BlockedPatternType.Diagonal;
         }
     }
 
 
     private void ApplySpecialPattern(
         int segmentIndex,
-        LimboBlockEffectType type)
+        LimboBlockData data)
     {
         if (!TryGetSegmentMesh(
                 segmentIndex,
@@ -788,20 +935,10 @@ public class LimboBossController : BossEncounterController
         }
 
 
-        LimboPatternStyle style =
-            GetPatternStyle(type);
-
-
-        if (style == null)
-            return;
-
-
-        mesh.ConfigureCosmeticPattern(
-            style.texture,
-            style.color,
-            style.opacity,
-            style.scale,
-            style.rotation
+        mesh.ConfigureBlockedPattern(
+            GetBlockedPatternType(
+                data.type
+            )
         );
     }
 
@@ -812,7 +949,7 @@ public class LimboBossController : BossEncounterController
             return;
 
 
-        foreach (KeyValuePair<int, LimboBlockEffectType> entry in
+        foreach (KeyValuePair<int, LimboBlockData> entry in
                  specialBlocks)
         {
             if (!generator.IsSegmentBlocked(
@@ -840,16 +977,15 @@ public class LimboBossController : BossEncounterController
 
         foreach (int index in indices)
         {
-            RestoreFoundationPattern(index);
+            RestoreDefaultBlockedPattern(index);
         }
     }
 
 
-    private void RestoreFoundationPattern(
+    private void RestoreDefaultBlockedPattern(
         int segmentIndex)
     {
-        if (generator == null ||
-            !TryGetSegmentMesh(
+        if (!TryGetSegmentMesh(
                 segmentIndex,
                 out SegmentMesh mesh))
         {
@@ -857,12 +993,8 @@ public class LimboBossController : BossEncounterController
         }
 
 
-        mesh.ConfigureCosmeticPattern(
-            generator.cosmeticPatternTexture,
-            generator.cosmeticPatternColor,
-            generator.cosmeticPatternOpacity,
-            generator.cosmeticPatternScale,
-            generator.cosmeticPatternRotation
+        mesh.ConfigureBlockedPattern(
+            SegmentMesh.BlockedPatternType.Diagonal
         );
     }
 
@@ -906,17 +1038,152 @@ public class LimboBossController : BossEncounterController
 
 
     // =========================================================
+    // SEGMENT BLOCK TOOLTIP OVERRIDE
+    // =========================================================
+
+    public bool TryGetSegmentBlockTooltipOverride(
+        int segmentIndex,
+        out SegmentBlockTooltipOverrideData data)
+    {
+        data =
+            default;
+
+
+        if (!EncounterActive ||
+            Enemy == null ||
+            Enemy.IsDead ||
+            generator == null)
+        {
+            return false;
+        }
+
+
+        if (!specialBlocks.TryGetValue(
+                segmentIndex,
+                out LimboBlockData blockData))
+        {
+            return false;
+        }
+
+
+        string effectText =
+            GetBlockEffectDescription(
+                blockData.type,
+                blockData.value,
+                sentenceCase: true
+            );
+
+
+        data =
+            new SegmentBlockTooltipOverrideData(
+                "Limbo's permanent block",
+                "Stickers in this segment do not activate and can't be moved. " +
+                effectText + ".",
+                "Permanent until Limbo uses Collect + Unlock"
+            );
+
+
+        return true;
+    }
+
+
+    // =========================================================
+    // TOOLTIP / PRESENTATION API
+    // =========================================================
+
+    public string GetBlockEffectDescription(
+        LimboBlockEffectType type,
+        int effectValue,
+        bool sentenceCase = false)
+    {
+        int safeValue =
+            NormalizeEffectValue(
+                type,
+                effectValue
+            );
+
+
+        string text;
+
+
+        switch (type)
+        {
+            case LimboBlockEffectType.DamagePlayer:
+                text =
+                    $"landing here deals {safeValue} Blood damage";
+                break;
+
+
+            case LimboBlockEffectType.DivideMoney:
+                text =
+                    $"landing here divides current money by {safeValue}";
+                break;
+
+
+            case LimboBlockEffectType.DamageBoss:
+                text =
+                    $"landing here deals {safeValue} damage to Limbo";
+                break;
+
+
+            default:
+                text =
+                    "landing here triggers a special effect";
+                break;
+        }
+
+
+        if (!sentenceCase ||
+            string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+
+
+        return
+            char.ToUpperInvariant(text[0]) +
+            text.Substring(1);
+    }
+
+
+    private int NormalizeEffectValue(
+        LimboBlockEffectType type,
+        int value)
+    {
+        if (type ==
+            LimboBlockEffectType.DivideMoney)
+        {
+            return
+                Mathf.Max(
+                    1,
+                    value
+                );
+        }
+
+
+        return
+            Mathf.Max(
+                0,
+                value
+            );
+    }
+
+
+    // =========================================================
     // LOGGING
     // =========================================================
 
     private void LogPermanentBlockCreated(
         int segmentIndex,
-        LimboBlockEffectType type)
+        LimboBlockData data)
     {
         if (GameLogManager.Instance != null)
         {
             string effectDescription =
-                GetBlockEffectDescription(type);
+                GetBlockEffectDescription(
+                    data.type,
+                    data.value
+                );
 
 
             GameLogManager.Instance
@@ -936,35 +1203,8 @@ public class LimboBossController : BossEncounterController
 
         Debug.Log(
             $"[LIMBO] Permanently blocked segment {segmentIndex + 1} " +
-            $"with effect {type}."
+            $"with effect {data.type} ({data.value})."
         );
-    }
-
-
-    private string GetBlockEffectDescription(
-        LimboBlockEffectType type)
-    {
-        switch (type)
-        {
-            case LimboBlockEffectType.DamagePlayer:
-                return
-                    $"landing here deals {Mathf.Max(0, playerDamage)} Blood damage";
-
-
-            case LimboBlockEffectType.DivideMoney:
-                return
-                    $"landing here divides current money by {Mathf.Max(1, moneyDivisor)}";
-
-
-            case LimboBlockEffectType.DamageBoss:
-                return
-                    $"landing here deals {Mathf.Max(0, bossDamage)} damage to Limbo";
-
-
-            default:
-                return
-                    "special effect";
-        }
     }
 
 

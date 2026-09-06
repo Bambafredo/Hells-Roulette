@@ -19,6 +19,7 @@ Shader "HellRoulette/SegmentVisual"
         _BlockedStripeOpacity ("Blocked Stripe Opacity", Range(0,1)) = 0.35
         _BlockedStripeDensity ("Blocked Stripe Density", Float) = 10
         _BlockedStripeWidth ("Blocked Stripe Width", Range(0.01,0.45)) = 0.12
+        _BlockedPatternType ("Blocked Pattern Type", Float) = 0
     }
 
     SubShader
@@ -76,6 +77,7 @@ Shader "HellRoulette/SegmentVisual"
                 float _BlockedStripeOpacity;
                 float _BlockedStripeDensity;
                 float _BlockedStripeWidth;
+                float _BlockedPatternType;
             CBUFFER_END
 
             Varyings Vert(Attributes input)
@@ -118,6 +120,70 @@ Shader "HellRoulette/SegmentVisual"
 
                 return
                     rotated + 0.5;
+            }
+
+            float ProceduralStripe(
+                float stripeCoord,
+                float stripeWidth)
+            {
+                float stripePhase =
+                    frac(
+                        stripeCoord
+                    );
+
+                float distanceToStripe =
+                    min(
+                        stripePhase,
+                        1.0 - stripePhase
+                    );
+
+                float aa =
+                    max(
+                        fwidth(
+                            stripeCoord
+                        ),
+                        0.0001
+                    );
+
+                return
+                    1.0 -
+                    smoothstep(
+                        stripeWidth,
+                        stripeWidth + aa,
+                        distanceToStripe
+                    );
+            }
+
+            float ProceduralDot(
+                float2 uv,
+                float density,
+                float radius)
+            {
+                float2 cell =
+                    frac(
+                        uv * density
+                    ) - 0.5;
+
+                float distanceToCenter =
+                    length(
+                        cell
+                    );
+
+                float aa =
+                    max(
+                        fwidth(
+                            distanceToCenter
+                        ),
+                        0.0001
+                    );
+
+                return
+                    1.0 -
+                    smoothstep(
+                        radius,
+                        radius + aa,
+                        distanceToCenter
+                    );
             }
 
             half4 Frag(Varyings input) : SV_Target
@@ -203,48 +269,80 @@ Shader "HellRoulette/SegmentVisual"
                         );
 
                     /*
-                     * uv.x + uv.y creates diagonal hatching.
+                     * All blocked patterns are procedural and use the same
+                     * wheel-space UVs. WheelShifter can therefore resize wedges
+                     * without stretching or reauthoring any texture.
                      *
-                     * UVs are generated in wheel-space, therefore:
-                     * - every segment uses the same stripe direction;
-                     * - WheelShifter can resize wedges freely;
-                     * - the stripes remain glued to the wheel.
+                     * 0 = normal diagonal Segment Block
+                     * 1 = crosshatch
+                     * 2 = horizontal bars
+                     * 3 = dots
                      */
-                    float stripeCoord =
-                        (input.uv.x +
-                         input.uv.y) *
-                        density;
+                    float pattern =
+                        0.0;
 
-                    float stripePhase =
-                        frac(
-                            stripeCoord
-                        );
+                    if (_BlockedPatternType < 0.5)
+                    {
+                        pattern =
+                            ProceduralStripe(
+                                (input.uv.x + input.uv.y) * density,
+                                _BlockedStripeWidth
+                            );
+                    }
+                    else if (_BlockedPatternType < 1.5)
+                    {
+                        float diagonalA =
+                            ProceduralStripe(
+                                (input.uv.x + input.uv.y) * density,
+                                _BlockedStripeWidth
+                            );
 
-                    float distanceToStripe =
-                        min(
-                            stripePhase,
-                            1.0 - stripePhase
-                        );
+                        float diagonalB =
+                            ProceduralStripe(
+                                (input.uv.x - input.uv.y) * density,
+                                _BlockedStripeWidth
+                            );
 
-                    float aa =
-                        max(
-                            fwidth(
-                                stripeCoord
-                            ),
-                            0.0001
-                        );
+                        pattern =
+                            max(
+                                diagonalA,
+                                diagonalB
+                            );
+                    }
+                    else if (_BlockedPatternType < 2.5)
+                    {
+                        pattern =
+                            ProceduralStripe(
+                                input.uv.y * density,
+                                _BlockedStripeWidth
+                            );
+                    }
+                    else
+                    {
+                        /*
+                         * Reuse stripe width as a convenient authored control,
+                         * remapped to a sensible dot radius inside each cell.
+                         */
+                        float dotRadius =
+                            lerp(
+                                0.12,
+                                0.38,
+                                saturate(
+                                    _BlockedStripeWidth / 0.45
+                                )
+                            );
 
-                    float stripe =
-                        1.0 -
-                        smoothstep(
-                            _BlockedStripeWidth,
-                            _BlockedStripeWidth + aa,
-                            distanceToStripe
-                        );
+                        pattern =
+                            ProceduralDot(
+                                input.uv,
+                                density * 0.5,
+                                dotRadius
+                            );
+                    }
 
                     float stripeAmount =
                         saturate(
-                            stripe *
+                            pattern *
                             _BlockedStripeOpacity
                         );
 

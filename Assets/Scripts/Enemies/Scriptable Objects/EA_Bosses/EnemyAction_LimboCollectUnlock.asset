@@ -15,4 +15,4 @@ MonoBehaviour:
   actionName: Collect
   icon: {fileID: 21300000, guid: 25d37163e7db53743adf1b71e6bc4566, type: 3}
   tooltipDescription: 
-  dollarsToCollect: 5
+  dollarsToCollect: 20
