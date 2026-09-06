@@ -24,4 +24,5 @@ MonoBehaviour:
   winningSegmentTooltip: Cash out ${banked}
   losingSegmentTooltip: 'Store ${storedPerMiss} (currently banked: ${banked})'
   albumTooltip: 
-  moneyStoredPerMiss: 1
+  destroyedTooltip: 
+  moneyStoredPerMiss: 2
