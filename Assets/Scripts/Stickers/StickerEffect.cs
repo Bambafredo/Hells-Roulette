@@ -491,6 +491,35 @@ public class StickerEffect : ScriptableObject
 
 
     // =========================================================
+    // REWARD REROLL EFFECT HOOKS
+    // =========================================================
+
+    /// <summary>
+    /// Optional passive hook for sticker effects that can make the next
+    /// RewardManager reroll free while this physical sticker is eligible.
+    ///
+    /// The base implementation does nothing. RewardManager therefore stays
+    /// completely unaware of concrete sticker types.
+    /// </summary>
+    public virtual bool CanProvideFreeRewardReroll(
+        BaseSticker owner)
+    {
+        return false;
+    }
+
+
+    /// <summary>
+    /// Called only when RewardManager is actually about to use this sticker
+    /// as the source of a free reroll. Returning false cancels that reroll.
+    /// </summary>
+    public virtual bool TryConsumeFreeRewardReroll(
+        BaseSticker owner)
+    {
+        return false;
+    }
+
+
+    // =========================================================
     // USE CONSUMPTION QUERY
     // =========================================================
 

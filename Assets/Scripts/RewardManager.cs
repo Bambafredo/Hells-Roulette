@@ -31,6 +31,11 @@ public class RewardManager : MonoBehaviour
     public enum RewardStage
     {
         None,
+
+        // A free-sticker modal requested by gameplay (for example Cupon).
+        // This is NOT an end-of-round Reward Phase.
+        GameplayFreeSticker,
+
         CleanRowBonus,
         StandardRewards
     }
@@ -73,6 +78,17 @@ public class RewardManager : MonoBehaviour
         "Reward Phase. If left empty, a direct child named 'Background' is used."
     )]
     public GameObject regularRewardBackground;
+
+
+    [Header("Gameplay Free Sticker")]
+
+    [Tooltip(
+        "Text shown in RewardBonus when a gameplay effect grants a free sticker. " +
+        "{source} is replaced by the requesting effect/sticker name. " +
+        "The normal Clean Row text remains whatever is authored in Bonus_Text."
+    )]
+    public string gameplayFreeStickerBonusTextTemplate =
+        "{source}: Get a free sticker";
 
 
     // =========================================================
@@ -261,6 +277,12 @@ public class RewardManager : MonoBehaviour
         RewardStage.None;
 
 
+    public bool GameplayFreeStickerActive =>
+        RewardPhaseActive &&
+        CurrentRewardStage ==
+            RewardStage.GameplayFreeSticker;
+
+
     public bool CleanRowBonusActive =>
         RewardPhaseActive &&
         CurrentRewardStage ==
@@ -362,6 +384,15 @@ public class RewardManager : MonoBehaviour
 
     private GameObject currentBonusOffer;
 
+    /*
+     * Bonus_Text is intentionally discovered from RewardBonus instead of
+     * requiring another Inspector reference. The prefab-authored text is
+     * cached once and restored whenever the normal Clean Row Bonus is shown.
+     */
+    private TMP_Text rewardBonusText;
+    private string defaultRewardBonusText = null;
+    private bool defaultRewardBonusTextCaptured = false;
+
     private Camera cam;
 
     /*
@@ -369,6 +400,27 @@ public class RewardManager : MonoBehaviour
      * when the Reward Phase closes.
      */
     private bool enemyCameraWasEnabledBeforeReward = false;
+
+
+    // =========================================================
+    // GAMEPLAY FREE-STICKER REQUESTS
+    // =========================================================
+
+    /*
+     * Gameplay effects can request a single free sticker without opening the
+     * Reward screen in the middle of sticker/enemy resolution. Requests are
+     * queued and presented only from RoundManager's post-gameplay hook.
+     *
+     * Keeping the request source as text is presentation/debug information
+     * only; RewardManager never knows which concrete sticker requested it.
+     */
+    private readonly Queue<string> gameplayFreeStickerRequests =
+        new Queue<string>();
+
+    private string activeGameplayFreeStickerSource =
+        null;
+
+    private RoundManager roundManager;
 
 
     // =========================================================
@@ -436,6 +488,19 @@ public class RewardManager : MonoBehaviour
 
         UpdateCurrencyButtonVisuals();
         UpdateRewardTexts();
+
+
+        ResolveRoundManagerReference();
+
+        if (roundManager != null)
+        {
+            roundManager.OnGameplaySpinResolutionCompleted +=
+                HandleGameplaySpinResolutionCompleted;
+        }
+
+
+        BaseSticker.OnAnyStickerDragEnded +=
+            HandleAnyStickerDragEnded;
     }
 
 
@@ -513,8 +578,307 @@ public class RewardManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (roundManager != null)
+        {
+            roundManager.OnGameplaySpinResolutionCompleted -=
+                HandleGameplaySpinResolutionCompleted;
+        }
+
+
+        BaseSticker.OnAnyStickerDragEnded -=
+            HandleAnyStickerDragEnded;
+
+
         if (Instance == this)
             Instance = null;
+    }
+
+
+    // =========================================================
+    // GAMEPLAY FREE-STICKER API
+    // =========================================================
+
+    /// <summary>
+    /// Queues one free sticker to be offered after the current gameplay spin
+    /// has completely resolved. Multiple requests are shown one after another.
+    ///
+    /// The request does not open UI immediately, so a sticker can safely call
+    /// this from inside normal spin resolution.
+    /// </summary>
+    public bool RequestFreeStickerReward(
+        string sourceName = null)
+    {
+        if (rewardPanel == null ||
+            rewardBonusSlot == null ||
+            stickerPrefabs == null ||
+            stickerPrefabs.Length <= 0)
+        {
+            Debug.LogWarning(
+                "[FREE STICKER] Cannot queue reward: Reward Panel, " +
+                "Reward Bonus Slot or sticker reward pool is missing."
+            );
+
+            return false;
+        }
+
+
+        string normalizedSourceName =
+            string.IsNullOrWhiteSpace(sourceName)
+                ? "Gameplay effect"
+                : sourceName;
+
+
+        gameplayFreeStickerRequests.Enqueue(
+            normalizedSourceName
+        );
+
+
+        Debug.Log(
+            $"[FREE STICKER] Request queued by '{normalizedSourceName}'. " +
+            $"Queued requests = {gameplayFreeStickerRequests.Count}."
+        );
+
+
+        return true;
+    }
+
+
+    private void HandleGameplaySpinResolutionCompleted()
+    {
+        if (gameplayFreeStickerRequests.Count <= 0 ||
+            RewardPhaseActive)
+        {
+            return;
+        }
+
+
+        BeginGameplayFreeStickerSequence();
+    }
+
+
+    private void HandleAnyStickerDragEnded(
+        BaseSticker sticker)
+    {
+        if (!StandardRewardStageActive)
+            return;
+
+
+        /*
+         * Passive Album effects can change when a sticker is moved into or out
+         * of the Album while Rewards are open. Refresh only presentation; the
+         * reroll itself always revalidates the provider when clicked.
+         */
+        UpdateRewardTexts();
+    }
+
+
+    private void BeginGameplayFreeStickerSequence()
+    {
+        if (gameplayFreeStickerRequests.Count <= 0)
+            return;
+
+
+        ResolveRoundManagerReference();
+        ResolveCleanRowBonusReferences();
+
+
+        /*
+         * The gameplay free-sticker modal must finish before Debt / Clean Row /
+         * normal Rewards are allowed to continue on a final spin. RoundManager
+         * already owns the generic external-flow lock for exactly this case.
+         */
+        if (roundManager != null)
+        {
+            roundManager.SetExternalSpinBlock(
+                true
+            );
+        }
+
+
+        if (enemyCamera != null)
+        {
+            enemyCameraWasEnabledBeforeReward =
+                enemyCamera.enabled;
+
+            enemyCamera.enabled =
+                false;
+        }
+
+
+        RewardPhaseActive =
+            true;
+
+        CurrentRewardStage =
+            RewardStage.GameplayFreeSticker;
+
+
+        rewardPanel.SetActive(
+            true
+        );
+
+
+        ShowCleanRowBonusView();
+
+        BeginNextGameplayFreeStickerOffer();
+    }
+
+
+    private void BeginNextGameplayFreeStickerOffer()
+    {
+        ClearBonusOffer();
+
+
+        if (gameplayFreeStickerRequests.Count <= 0)
+        {
+            CompleteGameplayFreeStickerSequence();
+            return;
+        }
+
+
+        activeGameplayFreeStickerSource =
+            gameplayFreeStickerRequests.Dequeue();
+
+
+        ApplyGameplayFreeStickerBonusText();
+
+
+        int randomIndex =
+            UnityEngine.Random.Range(
+                0,
+                stickerPrefabs.Length
+            );
+
+
+        currentBonusOffer =
+            SpawnOffer(
+                stickerPrefabs[randomIndex],
+                rewardBonusSlot,
+                RewardStickerOffer.OfferMode.FreeClaim
+            );
+
+
+        if (currentBonusOffer == null)
+        {
+            Debug.LogWarning(
+                $"[FREE STICKER] Could not spawn reward requested by " +
+                $"'{activeGameplayFreeStickerSource}'."
+            );
+
+            activeGameplayFreeStickerSource =
+                null;
+
+            BeginNextGameplayFreeStickerOffer();
+            return;
+        }
+
+
+        Debug.Log(
+            $"[FREE STICKER] {activeGameplayFreeStickerSource} offers " +
+            $"'{GetOfferName(currentBonusOffer)}' for FREE."
+        );
+    }
+
+
+    private void CompleteCurrentGameplayFreeStickerOffer(
+        bool claimed,
+        string claimedStickerName = null)
+    {
+        if (claimed)
+        {
+            Debug.Log(
+                $"[FREE STICKER] {activeGameplayFreeStickerSource} reward " +
+                $"claimed: '{claimedStickerName}'."
+            );
+        }
+        else
+        {
+            Debug.Log(
+                $"[FREE STICKER] {activeGameplayFreeStickerSource} reward skipped."
+            );
+        }
+
+
+        activeGameplayFreeStickerSource =
+            null;
+
+
+        if (gameplayFreeStickerRequests.Count > 0)
+        {
+            BeginNextGameplayFreeStickerOffer();
+            return;
+        }
+
+
+        CompleteGameplayFreeStickerSequence();
+    }
+
+
+    private void CompleteGameplayFreeStickerSequence()
+    {
+        ClearBonusOffer();
+
+        RestoreDefaultRewardBonusText();
+
+        activeGameplayFreeStickerSource =
+            null;
+
+        RewardPhaseActive =
+            false;
+
+        CurrentRewardStage =
+            RewardStage.None;
+
+
+        if (rewardPanel != null)
+        {
+            rewardPanel.SetActive(
+                false
+            );
+        }
+
+
+        if (enemyCamera != null)
+        {
+            enemyCamera.enabled =
+                enemyCameraWasEnabledBeforeReward;
+        }
+
+
+        /*
+         * Do NOT invoke OnRewardPhaseCompleted here. This modal can happen in
+         * the middle of a round. Releasing RoundManager's generic flow lock is
+         * enough; if this was the final spin, RoundManager resumes the deferred
+         * Debt / Clean Row / Reward flow itself.
+         */
+        if (roundManager != null)
+        {
+            roundManager.SetExternalSpinBlock(
+                false
+            );
+        }
+
+
+        Debug.Log(
+            "[FREE STICKER] Gameplay free-sticker sequence completed."
+        );
+    }
+
+
+    private void ResolveRoundManagerReference()
+    {
+        if (roundManager != null)
+            return;
+
+
+        roundManager =
+            RoundManager.Instance;
+
+
+        if (roundManager == null)
+        {
+            roundManager =
+                FindObjectOfType<RoundManager>();
+        }
     }
 
 
@@ -695,6 +1059,8 @@ public class RewardManager : MonoBehaviour
             RewardStage.CleanRowBonus;
 
 
+        RestoreDefaultRewardBonusText();
+
         ShowCleanRowBonusView();
 
 
@@ -749,7 +1115,12 @@ public class RewardManager : MonoBehaviour
         GameObject offerObject,
         BaseSticker sticker)
     {
-        if (!CleanRowBonusActive ||
+        bool freeClaimStageActive =
+            CleanRowBonusActive ||
+            GameplayFreeStickerActive;
+
+
+        if (!freeClaimStageActive ||
             offerObject == null ||
             sticker == null ||
             currentBonusOffer !=
@@ -771,6 +1142,17 @@ public class RewardManager : MonoBehaviour
          */
         currentBonusOffer =
             null;
+
+
+        if (GameplayFreeStickerActive)
+        {
+            CompleteCurrentGameplayFreeStickerOffer(
+                true,
+                stickerName
+            );
+
+            return true;
+        }
 
 
         Debug.Log(
@@ -839,6 +1221,103 @@ public class RewardManager : MonoBehaviour
                     background.gameObject;
             }
         }
+
+
+        /*
+         * RewardBonus already owns Bonus_Text in the prefab. Discover it once
+         * instead of adding a new Inspector reference just for dynamic wording.
+         */
+        if (!defaultRewardBonusTextCaptured &&
+            rewardBonusSlot != null)
+        {
+            Transform bonusTextTransform =
+                rewardBonusSlot
+                    .Find(
+                        "Bonus_Text"
+                    );
+
+
+            if (bonusTextTransform != null)
+            {
+                rewardBonusText =
+                    bonusTextTransform
+                        .GetComponent<TMP_Text>();
+            }
+
+
+            /*
+             * Safe fallback in case the child is renamed later. At Start this
+             * runs before any reward sticker is spawned under RewardBonus.
+             */
+            if (rewardBonusText == null)
+            {
+                rewardBonusText =
+                    rewardBonusSlot
+                        .GetComponentInChildren<TMP_Text>(
+                            true
+                        );
+            }
+
+
+            if (rewardBonusText != null)
+            {
+                defaultRewardBonusText =
+                    rewardBonusText.text;
+
+                defaultRewardBonusTextCaptured =
+                    true;
+            }
+        }
+    }
+
+
+    private void RestoreDefaultRewardBonusText()
+    {
+        ResolveCleanRowBonusReferences();
+
+
+        if (rewardBonusText == null ||
+            !defaultRewardBonusTextCaptured)
+        {
+            return;
+        }
+
+
+        rewardBonusText.text =
+            defaultRewardBonusText;
+    }
+
+
+    private void ApplyGameplayFreeStickerBonusText()
+    {
+        ResolveCleanRowBonusReferences();
+
+
+        if (rewardBonusText == null)
+            return;
+
+
+        string sourceName =
+            string.IsNullOrWhiteSpace(
+                activeGameplayFreeStickerSource
+            )
+                ? "Free reward"
+                : activeGameplayFreeStickerSource;
+
+
+        string template =
+            string.IsNullOrWhiteSpace(
+                gameplayFreeStickerBonusTextTemplate
+            )
+                ? "{source}: Get a free sticker"
+                : gameplayFreeStickerBonusTextTemplate;
+
+
+        rewardBonusText.text =
+            template.Replace(
+                "{source}",
+                sourceName
+            );
     }
 
 
@@ -1710,10 +2189,212 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
+    // GENERIC ALBUM REROLL EFFECTS
+    // =========================================================
+
+    private List<BaseSticker> GetEligibleFreeRewardRerollProviders()
+    {
+        List<BaseSticker> candidates =
+            new List<BaseSticker>();
+
+
+        if (AlbumManager.Instance == null ||
+            AlbumManager.Instance.albumZone == null)
+        {
+            return candidates;
+        }
+
+
+        Transform albumRoot =
+            AlbumManager.Instance
+                .albumZone
+                .GetContentRoot();
+
+
+        if (albumRoot == null)
+            return candidates;
+
+
+        BaseSticker[] albumStickers =
+            albumRoot
+                .GetComponentsInChildren<BaseSticker>(
+                    true
+                );
+
+
+        foreach (BaseSticker sticker in
+                 albumStickers)
+        {
+            if (sticker == null ||
+                sticker.effect == null ||
+                sticker.IsConsumed ||
+                sticker.IsPendingGameplayDestruction)
+            {
+                continue;
+            }
+
+
+            if (!AlbumManager.Instance
+                .IsStickerInAlbum(sticker))
+            {
+                continue;
+            }
+
+
+            if (!sticker.effect
+                .CanProvideFreeRewardReroll(
+                    sticker))
+            {
+                continue;
+            }
+
+
+            candidates.Add(
+                sticker
+            );
+        }
+
+
+        return candidates;
+    }
+
+
+    private bool HasFreeRewardRerollProvider()
+    {
+        return
+            GetEligibleFreeRewardRerollProviders()
+                .Count > 0;
+    }
+
+
+    private bool TryGetFreeRewardRerollProvider(
+        out BaseSticker providerOwner,
+        out StickerEffect providerEffect)
+    {
+        providerOwner =
+            null;
+
+        providerEffect =
+            null;
+
+
+        List<BaseSticker> candidates =
+            GetEligibleFreeRewardRerollProviders();
+
+
+        if (candidates.Count <= 0)
+            return false;
+
+
+        /*
+         * Prefer the consumable provider closest to depletion.
+         *
+         * For Cupon this means:
+         * - 1 use beats 2 uses;
+         * - 2 uses beats 3 uses;
+         * - equal lowest-use Cupons are chosen randomly.
+         *
+         * Unlimited providers are treated as having the largest possible
+         * remaining-use value, so a finite consumable is depleted first.
+         */
+        int lowestRemainingUses =
+            int.MaxValue;
+
+        List<BaseSticker> lowestUseCandidates =
+            new List<BaseSticker>();
+
+
+        foreach (BaseSticker candidate in
+                 candidates)
+        {
+            int remainingUses =
+                candidate.HasLimitedUses
+                    ? Mathf.Max(
+                        0,
+                        candidate.RemainingUses
+                    )
+                    : int.MaxValue;
+
+
+            if (remainingUses <
+                lowestRemainingUses)
+            {
+                lowestRemainingUses =
+                    remainingUses;
+
+                lowestUseCandidates.Clear();
+                lowestUseCandidates.Add(
+                    candidate
+                );
+
+                continue;
+            }
+
+
+            if (remainingUses ==
+                lowestRemainingUses)
+            {
+                lowestUseCandidates.Add(
+                    candidate
+                );
+            }
+        }
+
+
+        if (lowestUseCandidates.Count <= 0)
+            return false;
+
+
+        int selectedIndex =
+            lowestUseCandidates.Count == 1
+                ? 0
+                : UnityEngine.Random.Range(
+                    0,
+                    lowestUseCandidates.Count
+                );
+
+
+        providerOwner =
+            lowestUseCandidates[selectedIndex];
+
+        providerEffect =
+            providerOwner != null
+                ? providerOwner.effect
+                : null;
+
+
+        return
+            providerOwner != null &&
+            providerEffect != null;
+    }
+
+
+    // =========================================================
     // REROLL COST
     // =========================================================
 
     private int CalculateCurrentRerollCost()
+    {
+        int normalCost =
+            CalculateRerollCostWithoutStickerEffects();
+
+
+        /*
+         * Presentation only needs to know WHETHER a free provider exists.
+         * Do not randomly select a tied Cupon just because the UI asks for
+         * CurrentRerollCost; random selection happens only on an actual reroll.
+         */
+        if (HasFreeRewardRerollProvider())
+        {
+            return 0;
+        }
+
+
+        return normalCost;
+    }
+
+
+    private int CalculateRerollCostWithoutStickerEffects()
     {
         int baseCost =
             Mathf.Max(
@@ -1824,8 +2505,24 @@ public class RewardManager : MonoBehaviour
             return false;
 
 
+        int normalCost =
+            CalculateRerollCostWithoutStickerEffects();
+
+
+        BaseSticker freeRerollOwner;
+        StickerEffect freeRerollEffect;
+
+        bool hasStickerProvidedFreeReroll =
+            TryGetFreeRewardRerollProvider(
+                out freeRerollOwner,
+                out freeRerollEffect
+            );
+
+
         int currentCost =
-            CurrentRerollCost;
+            hasStickerProvidedFreeReroll
+                ? 0
+                : normalCost;
 
 
         // -----------------------------------------------------
@@ -1834,6 +2531,22 @@ public class RewardManager : MonoBehaviour
 
         if (currentCost <= 0)
         {
+            /*
+             * A sticker-provided free reroll consumes its passive resource
+             * only when the reroll is actually used. While the provider is
+             * active, EVERY reroll consumes one of its uses.
+             */
+            if (hasStickerProvidedFreeReroll)
+            {
+                if (freeRerollEffect == null ||
+                    !freeRerollEffect.TryConsumeFreeRewardReroll(
+                        freeRerollOwner))
+                {
+                    return false;
+                }
+            }
+
+
             /*
              * Aunque sea gratis, cuenta como reroll
              * para avanzar Fibonacci.
@@ -1845,11 +2558,13 @@ public class RewardManager : MonoBehaviour
 
 
             Debug.Log(
-                "[REWARD] Free reroll. " +
-                $"Rerolls this phase = " +
-                $"{RerollsThisPhase}. " +
-                $"Next reroll cost = " +
-                $"{CurrentRerollCost}."
+                hasStickerProvidedFreeReroll
+                    ? "[REWARD] Sticker effect provided a free reroll. " +
+                      $"Rerolls this phase = {RerollsThisPhase}. " +
+                      $"Next reroll cost = {CurrentRerollCost}."
+                    : "[REWARD] Free reroll. " +
+                      $"Rerolls this phase = {RerollsThisPhase}. " +
+                      $"Next reroll cost = {CurrentRerollCost}."
             );
 
 
@@ -1935,6 +2650,22 @@ public class RewardManager : MonoBehaviour
     {
         if (!RewardPhaseActive)
             return;
+
+
+        // -----------------------------------------------------
+        // GAMEPLAY FREE STICKER
+        // -----------------------------------------------------
+
+        if (GameplayFreeStickerActive)
+        {
+            ClearBonusOffer();
+
+            CompleteCurrentGameplayFreeStickerOffer(
+                false
+            );
+
+            return;
+        }
 
 
         // -----------------------------------------------------
