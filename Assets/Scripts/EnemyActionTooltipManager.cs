@@ -236,7 +236,7 @@ public class EnemyActionTooltipManager : MonoBehaviour
             HoverKind.Curse)
         {
             EnemyCurse curse =
-                hover.enemy.CurrentCurse;
+                hover.curse;
 
 
             if (curse == null)
@@ -249,7 +249,8 @@ public class EnemyActionTooltipManager : MonoBehaviour
             string tooltip =
                 BuildCurseTooltip(
                     hover.enemy,
-                    curse
+                    curse,
+                    hover.curseValue
                 );
 
 
@@ -401,6 +402,8 @@ public class EnemyActionTooltipManager : MonoBehaviour
     {
         public BaseEnemy enemy;
         public HoverKind kind;
+        public EnemyCurse curse;
+        public int curseValue;
     }
 
 
@@ -410,7 +413,9 @@ public class EnemyActionTooltipManager : MonoBehaviour
             new HoverResult
             {
                 enemy = null,
-                kind = HoverKind.None
+                kind = HoverKind.None,
+                curse = null,
+                curseValue = 0
             };
 
 
@@ -486,15 +491,22 @@ public class EnemyActionTooltipManager : MonoBehaviour
             // CURSE ICON
             // -------------------------------------------------
 
-            if (BelongsToRenderer(
-                hitTransform,
-                enemy.curseIconRenderer))
+            if (enemy.TryGetCurseForIconTransform(
+                    hitTransform,
+                    out EnemyCurse hoveredCurse,
+                    out int hoveredCurseValue))
             {
                 result.enemy =
                     enemy;
 
                 result.kind =
                     HoverKind.Curse;
+
+                result.curse =
+                    hoveredCurse;
+
+                result.curseValue =
+                    hoveredCurseValue;
 
                 return result;
             }
@@ -568,12 +580,13 @@ public class EnemyActionTooltipManager : MonoBehaviour
 
     private string BuildCurseTooltip(
         BaseEnemy enemy,
-        EnemyCurse curse)
+        EnemyCurse curse,
+        int curseValue)
     {
         string description =
             curse.GetTooltipDescription(
                 enemy,
-                enemy.CurseValue
+                curseValue
             );
 
 

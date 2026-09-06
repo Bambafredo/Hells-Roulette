@@ -1,9 +1,24 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System;
 
 public class BaseSticker : MonoBehaviour
 {
+    // ===========================================================
+    // LOCATION TRANSITION EVENTS
+    // ===========================================================
+
+    /// <summary>
+    /// Fired only after a MANUAL placement succeeds on the wheel and the
+    /// sticker's drag origin was the Album.
+    ///
+    /// This is a generic location-transition event. BaseSticker does not know
+    /// which Curse/effect, if any, is listening to it.
+    /// </summary>
+    public static event Action<BaseSticker>
+        OnStickerPlacedFromAlbumToWheel;
+
     [Header("Sticker Config")]
     public StickerEffect effect;
     public Transform wheelCenter;
@@ -856,6 +871,8 @@ public class BaseSticker : MonoBehaviour
         // Ya no pertenece al Album.
         currentAlbumZone = null;
 
+        NotifyAlbumToWheelPlacementIfNeeded();
+
         return true;
     }
 
@@ -899,6 +916,32 @@ public class BaseSticker : MonoBehaviour
         isPlaced = true;
 
         currentAlbumZone = null;
+
+        NotifyAlbumToWheelPlacementIfNeeded();
+    }
+
+    // ===========================================================
+    // ALBUM -> WHEEL EVENT
+    // ===========================================================
+
+    private void NotifyAlbumToWheelPlacementIfNeeded()
+    {
+        /*
+         * originalAlbumZone is captured at drag start, before BaseSticker
+         * temporarily clears currentAlbumZone.
+         *
+         * Requiring isDragging ensures programmatic/reward placement cannot
+         * accidentally count as "moved from the Album" because of stale state.
+         */
+        if (!isDragging ||
+            originalAlbumZone == null)
+        {
+            return;
+        }
+
+
+        OnStickerPlacedFromAlbumToWheel?
+            .Invoke(this);
     }
 
     // ===========================================================

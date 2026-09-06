@@ -6,6 +6,32 @@ using TMPro;
 public class BaseEnemy : MonoBehaviour
 {
     // =========================================================
+    // ADDITIONAL CURSE SLOT
+    // =========================================================
+
+    [System.Serializable]
+    public class AdditionalCurseSlot
+    {
+        [Tooltip(
+            "Optional extra persistent Curse. Leave empty to disable this slot."
+        )]
+        public EnemyCurse curse;
+
+        [Tooltip(
+            "Generic numeric value passed to this additional Curse."
+        )]
+        [Min(0)]
+        public int value =
+            0;
+
+        [Tooltip(
+            "Optional SpriteRenderer used to display this Curse's icon. " +
+            "Leave empty if this extra Curse should have no separate icon."
+        )]
+        public SpriteRenderer iconRenderer;
+    }
+
+    // =========================================================
     // STATS
     // =========================================================
 
@@ -84,6 +110,16 @@ public class BaseEnemy : MonoBehaviour
         0;
 
 
+    [Header("Additional Curses")]
+
+    [Tooltip(
+        "Optional extra Curses for enemies that need more than one persistent " +
+        "effect. Existing enemies can leave this list empty."
+    )]
+    public AdditionalCurseSlot[] additionalCurses =
+        new AdditionalCurseSlot[0];
+
+
     // =========================================================
     // REFERENCES
     // =========================================================
@@ -127,6 +163,9 @@ public class BaseEnemy : MonoBehaviour
 
     private bool curseActive =
         false;
+
+    private bool[] additionalCurseActiveStates =
+        new bool[0];
 
     private RouletteController roulette;
 
@@ -202,6 +241,7 @@ public class BaseEnemy : MonoBehaviour
     private void Awake()
     {
         BuildRuntimeActionSequence();
+        EnsureAdditionalCurseRuntimeState();
     }
 
 
@@ -236,6 +276,7 @@ public class BaseEnemy : MonoBehaviour
     private void OnDestroy()
     {
         DeactivateCurseIfNeeded();
+        DeactivateAllAdditionalCursesIfNeeded();
 
 
         if (roulette != null)
@@ -516,6 +557,8 @@ public class BaseEnemy : MonoBehaviour
         }
 
 
+        RefreshAdditionalCurseStates();
+
         UpdateCurseFeedback();
     }
 
@@ -581,38 +624,317 @@ public class BaseEnemy : MonoBehaviour
     }
 
 
+    private void EnsureAdditionalCurseRuntimeState()
+    {
+        int count =
+            additionalCurses != null
+                ? additionalCurses.Length
+                : 0;
+
+
+        if (additionalCurseActiveStates != null &&
+            additionalCurseActiveStates.Length == count)
+        {
+            return;
+        }
+
+
+        additionalCurseActiveStates =
+            new bool[count];
+    }
+
+
+    private void RefreshAdditionalCurseStates()
+    {
+        EnsureAdditionalCurseRuntimeState();
+
+
+        if (additionalCurses == null)
+            return;
+
+
+        for (int i = 0;
+             i < additionalCurses.Length;
+             i++)
+        {
+            AdditionalCurseSlot slot =
+                additionalCurses[i];
+
+
+            EnemyCurse extraCurse =
+                slot != null
+                    ? slot.curse
+                    : null;
+
+
+            bool shouldBeActive =
+                combatActive &&
+                !isDead &&
+                extraCurse != null;
+
+
+            if (shouldBeActive)
+            {
+                ActivateAdditionalCurseIfNeeded(
+                    i,
+                    slot
+                );
+            }
+            else
+            {
+                DeactivateAdditionalCurseIfNeeded(
+                    i,
+                    slot
+                );
+            }
+        }
+    }
+
+
+    private void ActivateAdditionalCurseIfNeeded(
+        int index,
+        AdditionalCurseSlot slot)
+    {
+        if (slot == null ||
+            slot.curse == null ||
+            index < 0 ||
+            index >= additionalCurseActiveStates.Length ||
+            additionalCurseActiveStates[index])
+        {
+            return;
+        }
+
+
+        additionalCurseActiveStates[index] =
+            true;
+
+
+        slot.curse.Activate(
+            this,
+            Mathf.Max(
+                0,
+                slot.value
+            )
+        );
+
+
+        Debug.Log(
+            $"[ENEMY CURSE] {enemyName}: additional Curse " +
+            $"{slot.curse.CurseName} activated (value {Mathf.Max(0, slot.value)})."
+        );
+    }
+
+
+    private void DeactivateAdditionalCurseIfNeeded(
+        int index,
+        AdditionalCurseSlot slot)
+    {
+        if (index < 0 ||
+            index >= additionalCurseActiveStates.Length ||
+            !additionalCurseActiveStates[index])
+        {
+            return;
+        }
+
+
+        additionalCurseActiveStates[index] =
+            false;
+
+
+        if (slot == null ||
+            slot.curse == null)
+        {
+            return;
+        }
+
+
+        slot.curse.Deactivate(
+            this,
+            Mathf.Max(
+                0,
+                slot.value
+            )
+        );
+
+
+        Debug.Log(
+            $"[ENEMY CURSE] {enemyName}: additional Curse " +
+            $"{slot.curse.CurseName} removed."
+        );
+    }
+
+
+    private void DeactivateAllAdditionalCursesIfNeeded()
+    {
+        EnsureAdditionalCurseRuntimeState();
+
+
+        if (additionalCurses == null)
+            return;
+
+
+        for (int i = 0;
+             i < additionalCurses.Length;
+             i++)
+        {
+            DeactivateAdditionalCurseIfNeeded(
+                i,
+                additionalCurses[i]
+            );
+        }
+    }
+
+
     private void UpdateCurseFeedback()
     {
-        if (curseIconRenderer == null)
+        UpdateSingleCurseFeedback(
+            curse,
+            curseIconRenderer
+        );
+
+
+        if (additionalCurses == null)
+            return;
+
+
+        foreach (AdditionalCurseSlot slot in
+                 additionalCurses)
+        {
+            if (slot == null)
+                continue;
+
+
+            UpdateSingleCurseFeedback(
+                slot.curse,
+                slot.iconRenderer
+            );
+        }
+    }
+
+
+    private void UpdateSingleCurseFeedback(
+        EnemyCurse targetCurse,
+        SpriteRenderer renderer)
+    {
+        if (renderer == null)
             return;
 
 
         bool shouldShow =
             combatActive &&
             !isDead &&
-            curse != null &&
-            curse.Icon != null;
+            targetCurse != null &&
+            targetCurse.Icon != null;
 
 
-        if (curse != null)
+        if (targetCurse != null)
         {
-            curseIconRenderer.sprite =
-                curse.Icon;
+            renderer.sprite =
+                targetCurse.Icon;
         }
 
 
-        /*
-         * Same setup as Action_Icon:
-         * the whole child GameObject may be disabled in the prefab.
-         */
-        curseIconRenderer.gameObject
+        renderer.gameObject
             .SetActive(
                 shouldShow
             );
 
 
-        curseIconRenderer.enabled =
+        renderer.enabled =
             shouldShow;
+    }
+
+
+    /// <summary>
+    /// Generic tooltip/presentation lookup for the primary Curse icon and all
+    /// optional additional Curse icons.
+    /// </summary>
+    public bool TryGetCurseForIconTransform(
+        Transform hitTransform,
+        out EnemyCurse foundCurse,
+        out int foundValue)
+    {
+        foundCurse =
+            null;
+
+        foundValue =
+            0;
+
+
+        if (TransformBelongsToRenderer(
+                hitTransform,
+                curseIconRenderer) &&
+            curse != null)
+        {
+            foundCurse =
+                curse;
+
+            foundValue =
+                curseValue;
+
+            return true;
+        }
+
+
+        if (additionalCurses == null)
+            return false;
+
+
+        foreach (AdditionalCurseSlot slot in
+                 additionalCurses)
+        {
+            if (slot == null ||
+                slot.curse == null)
+            {
+                continue;
+            }
+
+
+            if (!TransformBelongsToRenderer(
+                    hitTransform,
+                    slot.iconRenderer))
+            {
+                continue;
+            }
+
+
+            foundCurse =
+                slot.curse;
+
+            foundValue =
+                Mathf.Max(
+                    0,
+                    slot.value
+                );
+
+            return true;
+        }
+
+
+        return false;
+    }
+
+
+    private bool TransformBelongsToRenderer(
+        Transform hitTransform,
+        SpriteRenderer targetRenderer)
+    {
+        if (hitTransform == null ||
+            targetRenderer == null)
+        {
+            return false;
+        }
+
+
+        Transform targetRoot =
+            targetRenderer.transform;
+
+
+        return
+            hitTransform == targetRoot ||
+            hitTransform.IsChildOf(
+                targetRoot
+            );
     }
 
 

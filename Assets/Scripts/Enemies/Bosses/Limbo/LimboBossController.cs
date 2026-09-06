@@ -11,6 +11,7 @@ using UnityEngine;
 /// - Limbo's permanent special Segment Blocks;
 /// - stable pre-planning of the next random target segment for EA preview;
 /// - the special effect captured when a spin lands on one of those blocks;
+/// - post-money resolution for Divide Money and Collect + Unlock;
 /// - tooltip presentation for Limbo's special Segment Blocks;
 /// - cleanup when Limbo leaves the encounter.
 ///
@@ -122,6 +123,38 @@ public class LimboBossController :
     private LimboBlockData pendingBlockData;
 
 
+    /*
+     * Collect + Unlock is authored/executed as a normal EnemyAction, but its
+     * money swipe is deliberately deferred until RoundManager announces that
+     * the complete gameplay resolution has finished. RouletteController calls
+     * that hook only AFTER sticker/enemy money and the Lucky Shot bonus have
+     * already resolved.
+     */
+    private bool collectUnlockPending =
+        false;
+
+    private int pendingCollectMoney =
+        0;
+
+
+    /*
+     * Divide Money is also deferred to the same post-money hook.
+     *
+     * This makes the block divide the player's FINAL money after all sticker
+     * earnings and the Lucky Shot bonus have been awarded. If Collect + Unlock
+     * is also queued on that spin, Divide Money resolves first and Collect
+     * resolves second.
+     */
+    private bool divideMoneyPending =
+        false;
+
+    private int pendingDivideSegmentIndex =
+        -1;
+
+    private int pendingMoneyDivisor =
+        1;
+
+
     private RouletteController roulette;
     private WheelGenerator generator;
 
@@ -178,6 +211,26 @@ public class LimboBossController :
 
 
         base.Start();
+
+
+        if (RoundManagerRef != null)
+        {
+            RoundManagerRef.OnGameplaySpinResolutionCompleted +=
+                HandlePostMoneySpinResolution;
+        }
+    }
+
+
+    protected override void OnDestroy()
+    {
+        if (RoundManagerRef != null)
+        {
+            RoundManagerRef.OnGameplaySpinResolutionCompleted -=
+                HandlePostMoneySpinResolution;
+        }
+
+
+        base.OnDestroy();
     }
 
 
@@ -206,6 +259,21 @@ public class LimboBossController :
         pendingBlockSegmentIndex =
             -1;
 
+        collectUnlockPending =
+            false;
+
+        pendingCollectMoney =
+            0;
+
+        divideMoneyPending =
+            false;
+
+        pendingDivideSegmentIndex =
+            -1;
+
+        pendingMoneyDivisor =
+            1;
+
 
         /*
          * Defensive escape hatch for debug/manual corridor transitions that
@@ -230,6 +298,21 @@ public class LimboBossController :
 
         pendingBlockEffect =
             false;
+
+        collectUnlockPending =
+            false;
+
+        pendingCollectMoney =
+            0;
+
+        divideMoneyPending =
+            false;
+
+        pendingDivideSegmentIndex =
+            -1;
+
+        pendingMoneyDivisor =
+            1;
     }
 
 
@@ -239,6 +322,21 @@ public class LimboBossController :
 
         pendingBlockEffect =
             false;
+
+        collectUnlockPending =
+            false;
+
+        pendingCollectMoney =
+            0;
+
+        divideMoneyPending =
+            false;
+
+        pendingDivideSegmentIndex =
+            -1;
+
+        pendingMoneyDivisor =
+            1;
 
 
         Debug.Log(
@@ -601,6 +699,18 @@ public class LimboBossController :
     // EA API - COLLECT + UNLOCK
     // =========================================================
 
+    /// <summary>
+    /// Queues Collect + Unlock for the post-money phase of this spin.
+    ///
+    /// Enemy actions normally execute before RouletteController calculates the
+    /// Lucky Shot bonus. Limbo is intentionally different: his swipe must see
+    /// every dollar the player earned this spin, including that bonus.
+    ///
+    /// RoundManager.OnGameplaySpinResolutionCompleted is fired after
+    /// ResolveSpinMoneyAndLuckyShotBonus(), so it gives Limbo a clean, existing
+    /// lifecycle hook without adding any Limbo branch to RouletteController or
+    /// RoundManager.
+    /// </summary>
     public void ExecuteCollectUnlock(
         int requestedMoney)
     {
@@ -611,6 +721,102 @@ public class LimboBossController :
         }
 
 
+        collectUnlockPending =
+            true;
+
+        pendingCollectMoney =
+            Mathf.Max(
+                0,
+                requestedMoney
+            );
+
+
+        Debug.Log(
+            $"[LIMBO] Collect + Unlock queued for post-money resolution: " +
+            $"up to ${pendingCollectMoney}."
+        );
+    }
+
+
+    private void HandlePostMoneySpinResolution()
+    {
+        if (!divideMoneyPending &&
+            !collectUnlockPending)
+        {
+            return;
+        }
+
+
+        bool resolveDivide =
+            divideMoneyPending;
+
+        int divideSegmentIndex =
+            pendingDivideSegmentIndex;
+
+        int divisor =
+            pendingMoneyDivisor;
+
+        bool resolveCollect =
+            collectUnlockPending;
+
+        int requestedCollect =
+            pendingCollectMoney;
+
+
+        divideMoneyPending =
+            false;
+
+        pendingDivideSegmentIndex =
+            -1;
+
+        pendingMoneyDivisor =
+            1;
+
+        collectUnlockPending =
+            false;
+
+        pendingCollectMoney =
+            0;
+
+
+        if (!EncounterActive ||
+            Enemy == null ||
+            Enemy.IsDead)
+        {
+            return;
+        }
+
+
+        /*
+         * IMPORTANT ORDER:
+         *
+         * 1. The landed Segment Block resolves first.
+         * 2. Limbo's authored Enemy Action resolves second.
+         *
+         * Therefore, when Divide Money and Collect + Unlock happen on the same
+         * spin, the player first has final money divided, then Limbo collects.
+         */
+        if (resolveDivide)
+        {
+            ResolveDivideMoneyBlock(
+                divideSegmentIndex,
+                divisor
+            );
+        }
+
+
+        if (resolveCollect)
+        {
+            ResolveCollectUnlockNow(
+                requestedCollect
+            );
+        }
+    }
+
+
+    private void ResolveCollectUnlockNow(
+        int requestedMoney)
+    {
         ClearAllLimboBlocks();
 
 
@@ -665,6 +871,17 @@ public class LimboBossController :
     /// </summary>
     public bool ResolvePendingBlockEffect()
     {
+        /*
+         * WheelShifter regenerates SegmentMesh objects. WheelGenerator restores
+         * the generic blocked presentation correctly, but it cannot know that a
+         * particular block belongs to Limbo. Reapply Limbo's authored procedural
+         * pattern at the start of EVERY Limbo EA, even when this spin did not
+         * land on a special block.
+         */
+        ReconcileSpecialBlocksWithWheel();
+        ReapplyAllSpecialPatterns();
+
+
         if (!pendingBlockEffect)
             return false;
 
@@ -683,14 +900,6 @@ public class LimboBossController :
             -1;
 
 
-        /*
-         * A WheelShifter may have regenerated SegmentMesh objects during the
-         * sticker pass. Reapply surviving patterns before resolving the boss EA.
-         */
-        ReconcileSpecialBlocksWithWheel();
-        ReapplyAllSpecialPatterns();
-
-
         switch (data.type)
         {
             case LimboBlockEffectType.DamagePlayer:
@@ -702,7 +911,7 @@ public class LimboBossController :
 
 
             case LimboBlockEffectType.DivideMoney:
-                ResolveDivideMoneyBlock(
+                QueueDivideMoneyForPostMoneyResolution(
                     segmentIndex,
                     data.value
                 );
@@ -781,6 +990,30 @@ public class LimboBossController :
         Debug.Log(
             $"[LIMBO] Damage Player block requested {safeDamage}. " +
             $"Prevented = {result.preventedDamage}, Blood lost = {result.bloodLost}."
+        );
+    }
+
+
+    private void QueueDivideMoneyForPostMoneyResolution(
+        int segmentIndex,
+        int requestedDivisor)
+    {
+        divideMoneyPending =
+            true;
+
+        pendingDivideSegmentIndex =
+            segmentIndex;
+
+        pendingMoneyDivisor =
+            Mathf.Max(
+                1,
+                requestedDivisor
+            );
+
+
+        Debug.Log(
+            $"[LIMBO] Divide Money block queued for post-money resolution: " +
+            $"Segment {segmentIndex + 1}, divisor {pendingMoneyDivisor}."
         );
     }
 
@@ -1157,7 +1390,7 @@ public class LimboBossController :
 
             case LimboBlockEffectType.DivideMoney:
                 text =
-                    $"landing here divides current money by {safeValue}";
+                    $"at the end of the spin, divide your money by {safeValue}";
                 break;
 
 
