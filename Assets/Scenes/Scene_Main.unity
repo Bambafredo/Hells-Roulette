@@ -9141,6 +9141,13 @@ MonoBehaviour:
     weightSchedule:
     - fromRound: 1
       weight: 1
+  specialEncounterPool:
+  - preset: {fileID: 11400000, guid: f72430fefa7998b4a93566828c9bef2d, type: 2}
+    weightSchedule:
+    - fromRound: 3
+      weight: 1
+    - fromRound: 4
+      weight: 0
 --- !u!1 &1403957980
 GameObject:
   m_ObjectHideFlags: 0

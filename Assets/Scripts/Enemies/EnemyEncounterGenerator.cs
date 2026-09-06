@@ -22,6 +22,148 @@ public class EnemyEncounterGenerator : MonoBehaviour
 
 
     // =========================================================
+    // SPECIAL ENCOUNTER OVERRIDE
+    // =========================================================
+
+    private bool TryGenerateFromSpecialEncounterPool(
+        int playableRound,
+        int slotCount,
+        out GeneratedEncounter encounter)
+    {
+        encounter =
+            null;
+
+
+        if (specialEncounterPool == null ||
+            specialEncounterPool.Count == 0)
+        {
+            return false;
+        }
+
+
+        List<WeightedSpecialEncounterEntry> eligible =
+            new List<WeightedSpecialEncounterEntry>();
+
+
+        foreach (SpecialEncounterEntry entry in
+                 specialEncounterPool)
+        {
+            if (entry == null ||
+                entry.preset == null)
+            {
+                continue;
+            }
+
+
+            float activeWeight =
+                GetWeightForRound(
+                    entry.weightSchedule,
+                    playableRound
+                );
+
+
+            if (activeWeight <= 0f)
+                continue;
+
+
+            eligible.Add(
+                new WeightedSpecialEncounterEntry
+                {
+                    entry =
+                        entry,
+
+                    weight =
+                        activeWeight
+                }
+            );
+        }
+
+
+        if (eligible.Count == 0)
+        {
+            return false;
+        }
+
+
+        WeightedSpecialEncounterEntry rolled =
+            WeightedRoll(
+                eligible,
+                item => item.weight
+            );
+
+
+        if (rolled == null ||
+            rolled.entry == null ||
+            rolled.entry.preset == null)
+        {
+            encounter =
+                EmptyEncounter(
+                    slotCount,
+                    true
+                );
+
+            return true;
+        }
+
+
+        GameObject[] authored =
+            rolled.entry.preset
+                .GetEnemies();
+
+
+        GameObject[] result =
+            new GameObject[
+                slotCount
+            ];
+
+
+        int copyCount =
+            Mathf.Min(
+                slotCount,
+                authored.Length
+            );
+
+
+        for (int i = 0;
+             i < copyCount;
+             i++)
+        {
+            result[i] =
+                authored[i];
+        }
+
+
+        Debug.Log(
+            $"[ENCOUNTER GENERATOR] Special encounter " +
+            $"'{rolled.entry.preset.name}' selected for playable round " +
+            $"{playableRound} (UI R-{playableRound - 1}) " +
+            $"with active weight {rolled.weight}. Normal generation skipped."
+        );
+
+
+        encounter =
+            new GeneratedEncounter
+            {
+                enemies =
+                    result,
+
+                preserveSlotOrder =
+                    true
+            };
+
+
+        return true;
+    }
+
+
+    private class WeightedSpecialEncounterEntry
+    {
+        public SpecialEncounterEntry entry;
+        public float weight;
+    }
+
+
+    // =========================================================
     // ROUND WEIGHT SCHEDULE
     // =========================================================
 
@@ -112,6 +254,47 @@ public class EnemyEncounterGenerator : MonoBehaviour
 
 
     // =========================================================
+    // SPECIAL ENCOUNTER OVERRIDE
+    // =========================================================
+
+    [System.Serializable]
+    public class SpecialEncounterEntry
+    {
+        [Tooltip(
+            "Authored special encounter formation. If this entry is rolled, it " +
+            "overrides normal row generation for that round and preserves its " +
+            "Left / Center / Right order exactly."
+        )]
+        public EnemyEncounterPreset preset;
+
+
+        [Tooltip(
+            "Weight progression for this special encounter. The latest stage " +
+            "whose From Round has been reached determines the current weight. " +
+            "Before the first stage, the encounter is unavailable. If at least " +
+            "one special encounter has positive weight for the current round, " +
+            "normal generation is skipped entirely."
+        )]
+        public List<RoundWeightStage> weightSchedule =
+            new List<RoundWeightStage>()
+            {
+                new RoundWeightStage()
+            };
+    }
+
+
+    [Header("Special Encounter Override")]
+
+    [Tooltip(
+        "If any special encounter has positive weight for the current round, " +
+        "one of them is rolled and returned instead of the normal Enemy Pool / " +
+        "Preset Pool result. Use this for bosses or other authored special rows."
+    )]
+    public List<SpecialEncounterEntry> specialEncounterPool =
+        new List<SpecialEncounterEntry>();
+
+
+    // =========================================================
     // RESULT
     // =========================================================
 
@@ -150,6 +333,15 @@ public class EnemyEncounterGenerator : MonoBehaviour
                 0,
                 slotCount
             );
+
+
+        if (TryGenerateFromSpecialEncounterPool(
+                safeRound,
+                safeSlotCount,
+                out GeneratedEncounter specialEncounter))
+        {
+            return specialEncounter;
+        }
 
 
         switch (generationMode)
