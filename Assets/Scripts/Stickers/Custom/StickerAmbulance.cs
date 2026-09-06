@@ -212,39 +212,15 @@ public class StickerAmbulance : StickerEffect
 
 
         /*
-         * CurrencyManager currently exposes Spend(), not a separate gameplay-loss
-         * API. Keep the sticker self-contained and use the existing economy route.
-         *
-         * Ambulance takes up to X: calculate the payable amount first, then call
-         * Spend() with an amount we already know the player can afford. This avoids
-         * mutating CurrencyManager.dollars directly and requires no core change.
+         * Ambulance is a gameplay money LOSS, not a normal payment/cost.
+         * LoseDollars() removes up to X and lets CurrencyManager include the
+         * actual amount in the current spin's final net-money summary.
          */
         int actualPaid =
-            Mathf.Min(
-                requestedCost,
-                Mathf.Max(
-                    0,
-                    CurrencyManager.Instance.dollars
-                )
-            );
-
-
-        bool paid =
             CurrencyManager.Instance
-                .Spend(
-                    actualPaid
+                .LoseDollars(
+                    requestedCost
                 );
-
-
-        if (!paid)
-        {
-            Debug.LogWarning(
-                "[AMBULANCE] Album payment unexpectedly failed after " +
-                "the payable amount had already been clamped."
-            );
-
-            return;
-        }
 
 
         RegisterActivation(

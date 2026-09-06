@@ -1634,8 +1634,13 @@ public class GameLogManager : MonoBehaviour
     // =========================================================
 
     /// <summary>
-    /// Always appends the two spin-summary rows at the very end of the open
+    /// Appends the compact spin-summary rows at the very end of the open
     /// valid-spin block.
+    ///
+    /// Ordinary spins preserve the existing money wording exactly.
+    /// If a gameplay effect removed money through CurrencyManager.LoseDollars(),
+    /// the money row becomes a NET result so the summary reflects both gains and
+    /// losses without adding an extra summary line.
     ///
     /// The labels use a dedicated pink summary color so they are easy to find,
     /// while the values retain their semantic money / Blood colors.
@@ -1650,6 +1655,26 @@ public class GameLogManager : MonoBehaviour
                 totalMoneyEarned
             );
 
+
+        /*
+         * Loss tracking is closed here, at the exact point where the final
+         * spin summary is authored. This keeps RouletteController completely
+         * unaware of the extra summary bookkeeping.
+         */
+        int totalMoneyLost =
+            CurrencyManager.Instance != null
+                ? CurrencyManager.Instance
+                    .EndSpinMoneyLossTracking()
+                : 0;
+
+
+        totalMoneyLost =
+            Mathf.Max(
+                0,
+                totalMoneyLost
+            );
+
+
         totalBloodLost =
             Mathf.Max(
                 0,
@@ -1657,15 +1682,43 @@ public class GameLogManager : MonoBehaviour
             );
 
 
-        AddGameplayLine(
-            SpinTotalText(
-                "Total money earned this spin:"
-            ) +
-            " " +
-            MoneyText(
-                "$" + totalMoneyEarned
-            )
-        );
+        if (totalMoneyLost <= 0)
+        {
+            AddGameplayLine(
+                SpinTotalText(
+                    "Total money earned this spin:"
+                ) +
+                " " +
+                MoneyText(
+                    "$" + totalMoneyEarned
+                )
+            );
+        }
+        else
+        {
+            int netMoney =
+                totalMoneyEarned -
+                totalMoneyLost;
+
+
+            string netMoneyLabel =
+                netMoney >= 0
+                    ? "$" + netMoney
+                    : "-$" + Mathf.Abs(
+                        netMoney
+                    );
+
+
+            AddGameplayLine(
+                SpinTotalText(
+                    "Total money this spin after losses:"
+                ) +
+                " " +
+                MoneyText(
+                    netMoneyLabel
+                )
+            );
+        }
 
 
         AddGameplayLine(

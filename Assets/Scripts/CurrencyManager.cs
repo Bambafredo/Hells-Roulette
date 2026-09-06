@@ -12,7 +12,7 @@ public class CurrencyManager : MonoBehaviour
     public int pendingDollars = 0;
 
     // =========================================================
-    // SPIN EARNINGS TRACKING
+    // SPIN MONEY TRACKING
     // =========================================================
 
     /*
@@ -27,6 +27,30 @@ public class CurrencyManager : MonoBehaviour
         get;
         private set;
     } = 0;
+
+
+    /*
+     * Gross money removed by GAMEPLAY LOSS effects during the current spin.
+     *
+     * This is deliberately separate from Spend():
+     * - Spend() = normal costs/payments such as debt, shops and authored
+     *   special cases such as Limbo's post-money Collect.
+     * - LoseDollars() = gameplay consequences that should affect the spin's
+     *   final net-money summary, such as Ambulance while it is in the Album.
+     */
+    public int MoneyLostThisSpin
+    {
+        get;
+        private set;
+    } = 0;
+
+
+    public bool SpinMoneyLossTrackingActive
+    {
+        get;
+        private set;
+    } = false;
+
 
     public bool SpinEarningsTrackingActive
     {
@@ -134,6 +158,60 @@ public class CurrencyManager : MonoBehaviour
         return true;
     }
 
+
+    /// <summary>
+    /// Removes up to amount dollars as a GAMEPLAY LOSS and returns the amount
+    /// actually removed.
+    ///
+    /// Unlike Spend(), this never fails because the player has less than the
+    /// requested amount: asking to lose $5 while owning $3 loses the remaining
+    /// $3 and returns 3.
+    ///
+    /// When a physical spin is being tracked, this amount contributes to the
+    /// final net-money summary. Ordinary costs/payments must continue to use
+    /// Spend() so they are not accidentally classified as spin losses.
+    /// </summary>
+    public int LoseDollars(int amount)
+    {
+        int requested =
+            Mathf.Max(
+                0,
+                amount
+            );
+
+
+        if (requested <= 0 ||
+            dollars <= 0)
+        {
+            return 0;
+        }
+
+
+        int actualLoss =
+            Mathf.Min(
+                requested,
+                dollars
+            );
+
+
+        dollars -=
+            actualLoss;
+
+
+        if (SpinMoneyLossTrackingActive)
+        {
+            MoneyLostThisSpin +=
+                actualLoss;
+        }
+
+
+        UpdateDollarsUI();
+
+
+        return
+            actualLoss;
+    }
+
     // =========================================================
     // PENDING MONEY
     // =========================================================
@@ -149,7 +227,10 @@ public class CurrencyManager : MonoBehaviour
         pendingDollars = 0;
 
         MoneyEarnedThisSpin = 0;
+        MoneyLostThisSpin = 0;
+
         SpinEarningsTrackingActive = true;
+        SpinMoneyLossTrackingActive = true;
 
         UpdatePendingUI();
         SetPendingVisible(true);
@@ -223,14 +304,17 @@ public class CurrencyManager : MonoBehaviour
          * Invalid spins cannot leave earnings tracking active.
          */
         MoneyEarnedThisSpin = 0;
+        MoneyLostThisSpin = 0;
+
         SpinEarningsTrackingActive = false;
+        SpinMoneyLossTrackingActive = false;
 
         UpdatePendingUI();
         SetPendingVisible(false);
     }
 
     // =========================================================
-    // SPIN EARNINGS TRACKING
+    // SPIN MONEY TRACKING
     // =========================================================
 
     /// <summary>
@@ -246,6 +330,26 @@ public class CurrencyManager : MonoBehaviour
             MoneyEarnedThisSpin;
 
         SpinEarningsTrackingActive =
+            false;
+
+        return total;
+    }
+
+
+    /// <summary>
+    /// Stops gameplay-loss tracking and returns the gross dollars removed by
+    /// LoseDollars() during the completed valid spin.
+    ///
+    /// This may end later than earnings tracking. GameLogManager closes this
+    /// counter only when it writes the final spin summary, so late gameplay
+    /// losses can still be included without RouletteController knowing about it.
+    /// </summary>
+    public int EndSpinMoneyLossTracking()
+    {
+        int total =
+            MoneyLostThisSpin;
+
+        SpinMoneyLossTrackingActive =
             false;
 
         return total;
@@ -268,7 +372,10 @@ public class CurrencyManager : MonoBehaviour
         pendingDollars = 0;
 
         MoneyEarnedThisSpin = 0;
+        MoneyLostThisSpin = 0;
+
         SpinEarningsTrackingActive = false;
+        SpinMoneyLossTrackingActive = false;
 
         UpdateDollarsUI();
         UpdatePendingUI();
