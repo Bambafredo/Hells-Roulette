@@ -94,6 +94,37 @@ public class LimboBossController :
         true;
 
 
+    [Tooltip(
+        "If enabled, the segment targeted by Limbo's NEXT Permanent Block " +
+        "softly pulses until that action resolves."
+    )]
+    public bool highlightPermanentBlockTarget =
+        true;
+
+    [Tooltip(
+        "Temporarily hides the target pulse while any sticker is being dragged, " +
+        "so placement boundaries stay visually clean."
+    )]
+    public bool hideTargetHighlightWhileDraggingSticker =
+        true;
+
+    [Tooltip(
+        "Color the target segment pulses towards. White produces a clean " +
+        "lightening effect while preserving the segment's own color."
+    )]
+    public Color permanentBlockTargetHighlightColor =
+        Color.white;
+
+    [Range(0f, 1f)]
+    public float permanentBlockTargetHighlightStrength =
+        0.18f;
+
+    [Min(0.01f)]
+    [Tooltip("Pulse cycles per second.")]
+    public float permanentBlockTargetPulseSpeed =
+        1.2f;
+
+
     // =========================================================
     // RUNTIME STATE
     // =========================================================
@@ -112,6 +143,22 @@ public class LimboBossController :
      */
     private int plannedTargetSegmentIndex =
         -1;
+
+
+    /*
+     * Visual-only telegraph cache.
+     *
+     * We keep the actual SegmentMesh reference as well as the index because a
+     * WheelShifter can rebuild the wheel while the planned target remains the
+     * same logical segment index.
+     */
+    private int telegraphedSegmentIndex =
+        -1;
+
+    private SegmentMesh telegraphedSegmentMesh;
+
+    private bool stickerDragInProgress =
+        false;
 
 
     private bool pendingBlockEffect =
@@ -180,15 +227,44 @@ public class LimboBossController :
             .Register(
                 this
             );
+
+        BaseSticker.OnAnyStickerDragStarted +=
+            HandleAnyStickerDragStarted;
+
+        BaseSticker.OnAnyStickerDragEnded +=
+            HandleAnyStickerDragEnded;
     }
 
 
     private void OnDisable()
     {
+        BaseSticker.OnAnyStickerDragStarted -=
+            HandleAnyStickerDragStarted;
+
+        BaseSticker.OnAnyStickerDragEnded -=
+            HandleAnyStickerDragEnded;
+
+        ClearPermanentBlockTargetTelegraph();
+
+        stickerDragInProgress =
+            false;
+
         SegmentBlockTooltipOverrideRegistry
             .Unregister(
                 this
             );
+    }
+
+
+    protected override void Update()
+    {
+        /*
+         * BossEncounterController owns encounter activation / defeat polling.
+         * Never replace that lifecycle work.
+         */
+        base.Update();
+
+        RefreshPermanentBlockTargetTelegraph();
     }
 
 
@@ -250,8 +326,13 @@ public class LimboBossController :
 
         specialBlocks.Clear();
 
+        ClearPermanentBlockTargetTelegraph();
+
         plannedTargetSegmentIndex =
             -1;
+
+        stickerDragInProgress =
+            false;
 
         pendingBlockEffect =
             false;
@@ -294,6 +375,7 @@ public class LimboBossController :
 
     protected override void OnBossEncounterDeactivated()
     {
+        ClearPermanentBlockTargetTelegraph();
         ClearAllLimboBlocks();
 
         pendingBlockEffect =
@@ -318,6 +400,7 @@ public class LimboBossController :
 
     protected override void OnBossDefeated()
     {
+        ClearPermanentBlockTargetTelegraph();
         ClearAllLimboBlocks();
 
         pendingBlockEffect =
@@ -502,6 +585,147 @@ public class LimboBossController :
 
 
     // =========================================================
+    // NEXT TARGET VISUAL TELEGRAPH
+    // =========================================================
+
+    private void RefreshPermanentBlockTargetTelegraph()
+    {
+        bool shouldShow =
+            highlightPermanentBlockTarget &&
+            EncounterActive &&
+            Enemy != null &&
+            !Enemy.IsDead &&
+            Enemy.CurrentAction is
+                EnemyActionLimboPermanentBlock;
+
+
+        if (hideTargetHighlightWhileDraggingSticker &&
+            stickerDragInProgress)
+        {
+            shouldShow =
+                false;
+        }
+
+
+        if (!shouldShow)
+        {
+            ClearPermanentBlockTargetTelegraph();
+            return;
+        }
+
+
+        if (!TryGetNextPermanentBlockTarget(
+                out int targetIndex))
+        {
+            ClearPermanentBlockTargetTelegraph();
+            return;
+        }
+
+
+        if (!TryGetSegmentMesh(
+                targetIndex,
+                out SegmentMesh targetMesh))
+        {
+            ClearPermanentBlockTargetTelegraph();
+            return;
+        }
+
+
+        /*
+         * WheelShifter can rebuild SegmentMesh objects while preserving the
+         * logical segment index. Comparing the component reference guarantees
+         * the pulse moves onto the freshly generated mesh automatically.
+         */
+        bool targetChanged =
+            telegraphedSegmentIndex !=
+                targetIndex ||
+            telegraphedSegmentMesh !=
+                targetMesh;
+
+
+        if (targetChanged)
+        {
+            ClearPermanentBlockTargetTelegraph();
+
+            telegraphedSegmentIndex =
+                targetIndex;
+
+            telegraphedSegmentMesh =
+                targetMesh;
+        }
+
+
+        if (telegraphedSegmentMesh == null)
+            return;
+
+
+        /*
+         * Configure only when the visual target changes (or was previously
+         * hidden). The shader animates itself through _Time, so no per-frame
+         * MaterialPropertyBlock writes are needed for the pulse.
+         */
+        if (targetChanged ||
+            !telegraphedSegmentMesh.IsTelegraphed)
+        {
+            telegraphedSegmentMesh
+                .ConfigureTelegraph(
+                    permanentBlockTargetHighlightColor,
+                    permanentBlockTargetHighlightStrength,
+                    permanentBlockTargetPulseSpeed
+                );
+
+            telegraphedSegmentMesh
+                .SetTelegraphed(
+                    true
+                );
+        }
+    }
+
+
+    private void ClearPermanentBlockTargetTelegraph()
+    {
+        if (telegraphedSegmentMesh != null)
+        {
+            telegraphedSegmentMesh
+                .SetTelegraphed(
+                    false
+                );
+        }
+
+
+        telegraphedSegmentIndex =
+            -1;
+
+        telegraphedSegmentMesh =
+            null;
+    }
+
+
+    private void HandleAnyStickerDragStarted(
+        BaseSticker sticker)
+    {
+        stickerDragInProgress =
+            true;
+
+
+        if (hideTargetHighlightWhileDraggingSticker)
+        {
+            ClearPermanentBlockTargetTelegraph();
+        }
+    }
+
+
+    private void HandleAnyStickerDragEnded(
+        BaseSticker sticker)
+    {
+        stickerDragInProgress =
+            false;
+
+        RefreshPermanentBlockTargetTelegraph();
+    }
+
+
+    // =========================================================
     // PERMANENT BLOCK MAINTENANCE
     // =========================================================
 
@@ -629,6 +853,8 @@ public class LimboBossController :
              * Defensive retry if some other effect changed the target between
              * tooltip preview and execution.
              */
+            ClearPermanentBlockTargetTelegraph();
+
             plannedTargetSegmentIndex =
                 -1;
 
@@ -678,6 +904,12 @@ public class LimboBossController :
             targetIndex,
             data
         );
+
+
+        /*
+         * The threatened state has now become a real Segment Block state.
+         */
+        ClearPermanentBlockTargetTelegraph();
 
 
         /*
@@ -1122,6 +1354,8 @@ public class LimboBossController :
 
     private void ClearAllLimboBlocks()
     {
+        ClearPermanentBlockTargetTelegraph();
+
         plannedTargetSegmentIndex =
             -1;
 

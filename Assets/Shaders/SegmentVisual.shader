@@ -20,6 +20,12 @@ Shader "HellRoulette/SegmentVisual"
         _BlockedStripeDensity ("Blocked Stripe Density", Float) = 10
         _BlockedStripeWidth ("Blocked Stripe Width", Range(0.01,0.45)) = 0.12
         _BlockedPatternType ("Blocked Pattern Type", Float) = 0
+
+        [Header(Telegraph Gameplay State)]
+        _Telegraphed ("Telegraphed", Float) = 0
+        _TelegraphColor ("Telegraph Color", Color) = (1,1,1,1)
+        _TelegraphStrength ("Telegraph Strength", Range(0,1)) = 0.18
+        _TelegraphPulseSpeed ("Telegraph Pulse Speed", Float) = 1.2
     }
 
     SubShader
@@ -78,6 +84,11 @@ Shader "HellRoulette/SegmentVisual"
                 float _BlockedStripeDensity;
                 float _BlockedStripeWidth;
                 float _BlockedPatternType;
+
+                float _Telegraphed;
+                half4 _TelegraphColor;
+                float _TelegraphStrength;
+                float _TelegraphPulseSpeed;
             CBUFFER_END
 
             Varyings Vert(Attributes input)
@@ -239,6 +250,59 @@ Shader "HellRoulette/SegmentVisual"
                             result.rgb,
                             _PatternColor.rgb,
                             patternMask
+                        );
+                }
+
+                // ---------------------------------------------------------
+                // TELEGRAPH GAMEPLAY STATE
+                // ---------------------------------------------------------
+                //
+                // A telegraph is a future-state hint, not a blocked state.
+                // It softly pulses the segment towards the authored highlight
+                // color while leaving geometry / gameplay completely untouched.
+                //
+                // Blocked presentation always wins if both flags are ever set.
+                // ---------------------------------------------------------
+
+                if (_Blocked < 0.5 &&
+                    _Telegraphed >= 0.5)
+                {
+                    float speed =
+                        max(
+                            0.01,
+                            _TelegraphPulseSpeed
+                        );
+
+                    float wave =
+                        0.5 +
+                        0.5 *
+                        sin(
+                            _Time.y *
+                            speed *
+                            6.2831853
+                        );
+
+                    /*
+                     * Keep a faint floor instead of disappearing completely.
+                     * The target remains readable, but the animation still has
+                     * enough range to feel like a deliberate pulse.
+                     */
+                    float pulse =
+                        0.2 +
+                        0.8 *
+                        wave;
+
+                    float amount =
+                        saturate(
+                            _TelegraphStrength *
+                            pulse
+                        );
+
+                    result.rgb =
+                        lerp(
+                            result.rgb,
+                            _TelegraphColor.rgb,
+                            amount
                         );
                 }
 

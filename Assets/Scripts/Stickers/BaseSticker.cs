@@ -19,6 +19,19 @@ public class BaseSticker : MonoBehaviour
     public static event Action<BaseSticker>
         OnStickerPlacedFromAlbumToWheel;
 
+
+    /// <summary>
+    /// Generic manual-drag lifecycle events.
+    ///
+    /// They report only that a real sticker drag started / ended. Listeners
+    /// must not use them to influence placement validity or drag behaviour.
+    /// </summary>
+    public static event Action<BaseSticker>
+        OnAnyStickerDragStarted;
+
+    public static event Action<BaseSticker>
+        OnAnyStickerDragEnded;
+
     [Header("Sticker Config")]
     public StickerEffect effect;
     public Transform wheelCenter;
@@ -293,8 +306,16 @@ public class BaseSticker : MonoBehaviour
     {
         EndDragRenderingOverride();
 
-        isDragging =
-            false;
+        if (isDragging)
+        {
+            isDragging =
+                false;
+
+            OnAnyStickerDragEnded?
+                .Invoke(
+                    this
+                );
+        }
     }
 
 
@@ -454,6 +475,11 @@ public class BaseSticker : MonoBehaviour
             {
                 isDragging = true;
 
+                OnAnyStickerDragStarted?
+                    .Invoke(
+                        this
+                    );
+
                 // ------------------------------------------------
                 // GUARDAMOS TODO EL ESTADO ORIGINAL
                 // ------------------------------------------------
@@ -560,6 +586,11 @@ public class BaseSticker : MonoBehaviour
                 HandleDrop();
 
                 isDragging = false;
+
+                OnAnyStickerDragEnded?
+                    .Invoke(
+                        this
+                    );
 
                 controller?.SetInputBlocked(false);
 

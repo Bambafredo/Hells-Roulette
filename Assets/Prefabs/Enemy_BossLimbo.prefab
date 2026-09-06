@@ -464,6 +464,11 @@ MonoBehaviour:
   divideMoneyPattern: 1
   damageBossPattern: 3
   showPermanentBlockTargetInTooltip: 1
+  highlightPermanentBlockTarget: 1
+  hideTargetHighlightWhileDraggingSticker: 1
+  permanentBlockTargetHighlightColor: {r: 1, g: 1, b: 1, a: 1}
+  permanentBlockTargetHighlightStrength: 1
+  permanentBlockTargetPulseSpeed: 1.2
 --- !u!1 &8918271814273000214
 GameObject:
   m_ObjectHideFlags: 0

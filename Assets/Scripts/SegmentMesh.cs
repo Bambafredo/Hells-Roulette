@@ -87,6 +87,25 @@ public class SegmentMesh : MonoBehaviour
         BlockedPatternType.Diagonal;
 
 
+    /*
+     * Generic future-state / intention highlight.
+     *
+     * This is presentation only. It never affects blocked state, colliders,
+     * placement, sticker activation or wheel geometry.
+     */
+    private bool telegraphed =
+        false;
+
+    private Color telegraphColor =
+        Color.white;
+
+    private float telegraphStrength =
+        0.18f;
+
+    private float telegraphPulseSpeed =
+        1.2f;
+
+
     private MaterialPropertyBlock propertyBlock;
 
 
@@ -96,6 +115,9 @@ public class SegmentMesh : MonoBehaviour
 
     public bool IsBlocked =>
         blocked;
+
+    public bool IsTelegraphed =>
+        telegraphed;
 
 
     // =========================================================
@@ -179,6 +201,26 @@ public class SegmentMesh : MonoBehaviour
     private static readonly int BlockedPatternTypeId =
         Shader.PropertyToID(
             "_BlockedPatternType"
+        );
+
+    private static readonly int TelegraphedId =
+        Shader.PropertyToID(
+            "_Telegraphed"
+        );
+
+    private static readonly int TelegraphColorId =
+        Shader.PropertyToID(
+            "_TelegraphColor"
+        );
+
+    private static readonly int TelegraphStrengthId =
+        Shader.PropertyToID(
+            "_TelegraphStrength"
+        );
+
+    private static readonly int TelegraphPulseSpeedId =
+        Shader.PropertyToID(
+            "_TelegraphPulseSpeed"
         );
 
 
@@ -318,6 +360,47 @@ public class SegmentMesh : MonoBehaviour
         bool value)
     {
         blocked =
+            value;
+
+        ApplyVisualState();
+    }
+
+
+    /// <summary>
+    /// Configures the generic pulsing telegraph presentation.
+    ///
+    /// pulseSpeed is authored as cycles per second.
+    /// </summary>
+    public void ConfigureTelegraph(
+        Color highlightColor,
+        float strength,
+        float pulseSpeed)
+    {
+        telegraphColor =
+            highlightColor;
+
+        telegraphStrength =
+            Mathf.Clamp01(
+                strength
+            );
+
+        telegraphPulseSpeed =
+            Mathf.Max(
+                0.01f,
+                pulseSpeed
+            );
+
+        ApplyVisualState();
+    }
+
+
+    /// <summary>
+    /// Enables / disables the generic telegraph visual only.
+    /// </summary>
+    public void SetTelegraphed(
+        bool value)
+    {
+        telegraphed =
             value;
 
         ApplyVisualState();
@@ -626,6 +709,29 @@ public class SegmentMesh : MonoBehaviour
         propertyBlock.SetFloat(
             BlockedPatternTypeId,
             (float)blockedPatternType
+        );
+
+
+        propertyBlock.SetFloat(
+            TelegraphedId,
+            telegraphed
+                ? 1f
+                : 0f
+        );
+
+        propertyBlock.SetColor(
+            TelegraphColorId,
+            telegraphColor
+        );
+
+        propertyBlock.SetFloat(
+            TelegraphStrengthId,
+            telegraphStrength
+        );
+
+        propertyBlock.SetFloat(
+            TelegraphPulseSpeedId,
+            telegraphPulseSpeed
         );
 
 
