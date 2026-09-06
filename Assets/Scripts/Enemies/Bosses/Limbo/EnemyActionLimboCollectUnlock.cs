@@ -13,12 +13,31 @@ public class EnemyActionLimboCollectUnlock : EnemyAction
     [Header("Collect + Unlock")]
 
     [Tooltip(
-        "Maximum dollars Limbo takes after unlocking all segments. " +
+        "Base dollars Limbo takes after unlocking all segments. " +
         "If the player has less, Limbo takes everything and leaves $0."
     )]
     [Min(0)]
     public int dollarsToCollect =
         5;
+
+
+    [Header("Optional Escalation")]
+
+    [Tooltip(
+        "If enabled, this Collect action becomes more expensive every time " +
+        "it successfully executes during the current Limbo encounter."
+    )]
+    public bool increaseCollectValueAfterUse =
+        false;
+
+
+    [Tooltip(
+        "Amount added to the NEXT Collect value after each use. " +
+        "Example: base $20 and increase $10 -> $20, $30, $40..."
+    )]
+    [Min(0)]
+    public int collectIncreasePerUse =
+        10;
 
 
     // =========================================================
@@ -28,30 +47,95 @@ public class EnemyActionLimboCollectUnlock : EnemyAction
     public override string GetTooltipDescription(
         BaseEnemy enemy)
     {
+        LimboBossController limbo =
+            enemy != null
+                ? enemy.GetComponent<LimboBossController>()
+                : null;
+
+
+        int currentCollect =
+            limbo != null
+                ? limbo.GetCurrentCollectValue(
+                    this,
+                    dollarsToCollect,
+                    increaseCollectValueAfterUse,
+                    collectIncreasePerUse
+                )
+                : Mathf.Max(
+                    0,
+                    dollarsToCollect
+                );
+
+
+        int safeIncrease =
+            Mathf.Max(
+                0,
+                collectIncreasePerUse
+            );
+
+        int nextCollect =
+            currentCollect;
+
+        if (increaseCollectValueAfterUse &&
+            safeIncrease > 0)
+        {
+            long calculated =
+                (long)currentCollect +
+                safeIncrease;
+
+            nextCollect =
+                calculated >= int.MaxValue
+                    ? int.MaxValue
+                    : (int)calculated;
+        }
+
+
         string authored =
             base.GetTooltipDescription(
                 enemy
             );
 
+        string mainText;
+
 
         if (!string.IsNullOrWhiteSpace(
                 authored))
         {
-            return
-                authored.Replace(
-                    "{money}",
-                    Mathf.Max(
-                        0,
-                        dollarsToCollect
+            mainText =
+                authored
+                    .Replace(
+                        "{money}",
+                        currentCollect.ToString()
                     )
-                    .ToString()
-                );
+                    .Replace(
+                        "{increase}",
+                        safeIncrease.ToString()
+                    )
+                    .Replace(
+                        "{nextMoney}",
+                        nextCollect.ToString()
+                    );
+        }
+        else
+        {
+            mainText =
+                $"Unlocks all segments and takes up to " +
+                $"${currentCollect}.";
+        }
+
+
+        if (increaseCollectValueAfterUse &&
+            safeIncrease > 0)
+        {
+            return
+                mainText +
+                "\nAfter use, the next Collect value increases by " +
+                $"${safeIncrease} to ${nextCollect}.";
         }
 
 
         return
-            $"Unlocks all segments and takes up to " +
-            $"${Mathf.Max(0, dollarsToCollect)}.";
+            mainText;
     }
 
 
@@ -96,7 +180,10 @@ public class EnemyActionLimboCollectUnlock : EnemyAction
 
 
         limbo.ExecuteCollectUnlock(
-            dollarsToCollect
+            this,
+            dollarsToCollect,
+            increaseCollectValueAfterUse,
+            collectIncreasePerUse
         );
     }
 }

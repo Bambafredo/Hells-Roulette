@@ -126,12 +126,38 @@ public class LimboBossController :
 
 
     // =========================================================
+    // ENCOUNTER UI
+    // =========================================================
+
+    [Header("Limbo - Encounter UI")]
+
+    [Tooltip(
+        "Hides the normal round token icons while Limbo is active. " +
+        "Limbo grants unlimited valid spins, so those icons are intentionally " +
+        "irrelevant during this encounter."
+    )]
+    public bool hideSpinTokenIconsDuringEncounter =
+        true;
+
+
+    // =========================================================
     // RUNTIME STATE
     // =========================================================
 
     private readonly Dictionary<int, LimboBlockData>
         specialBlocks =
             new Dictionary<int, LimboBlockData>();
+
+
+    /*
+     * Runtime use counts for Collect + Unlock EnemyAction assets.
+     *
+     * The ScriptableObject itself stays immutable/shared. Escalation therefore
+     * belongs to this Limbo encounter instance, not to the asset.
+     */
+    private readonly Dictionary<EnemyActionLimboCollectUnlock, int>
+        collectUseCounts =
+            new Dictionary<EnemyActionLimboCollectUnlock, int>();
 
 
     /*
@@ -146,19 +172,12 @@ public class LimboBossController :
 
 
     /*
-     * Visual-only telegraph cache.
-     *
-     * We keep the actual SegmentMesh reference as well as the index because a
-     * WheelShifter can rebuild the wheel while the planned target remains the
-     * same logical segment index.
+     * Reusable visual presenter. Limbo decides WHICH logical segment is the
+     * target; SegmentTelegraphPresenter owns the generic pulsing/rebinding/drag
+     * suppression behaviour.
      */
-    private int telegraphedSegmentIndex =
-        -1;
-
-    private SegmentMesh telegraphedSegmentMesh;
-
-    private bool stickerDragInProgress =
-        false;
+    private SegmentTelegraphPresenter
+        permanentBlockTargetTelegraph;
 
 
     private bool pendingBlockEffect =
@@ -181,6 +200,15 @@ public class LimboBossController :
         false;
 
     private int pendingCollectMoney =
+        0;
+
+    private bool pendingCollectEscalation =
+        false;
+
+    private int pendingCollectIncrease =
+        0;
+
+    private int pendingNextCollectMoney =
         0;
 
 
@@ -227,27 +255,19 @@ public class LimboBossController :
             .Register(
                 this
             );
-
-        BaseSticker.OnAnyStickerDragStarted +=
-            HandleAnyStickerDragStarted;
-
-        BaseSticker.OnAnyStickerDragEnded +=
-            HandleAnyStickerDragEnded;
     }
 
 
     private void OnDisable()
     {
-        BaseSticker.OnAnyStickerDragStarted -=
-            HandleAnyStickerDragStarted;
-
-        BaseSticker.OnAnyStickerDragEnded -=
-            HandleAnyStickerDragEnded;
-
         ClearPermanentBlockTargetTelegraph();
+        RestoreSpinTokenIcons();
 
-        stickerDragInProgress =
-            false;
+        permanentBlockTargetTelegraph?
+            .Dispose();
+
+        permanentBlockTargetTelegraph =
+            null;
 
         SegmentBlockTooltipOverrideRegistry
             .Unregister(
@@ -289,10 +309,16 @@ public class LimboBossController :
         base.Start();
 
 
+        EnsurePermanentBlockTargetTelegraph();
+
+
         if (RoundManagerRef != null)
         {
             RoundManagerRef.OnGameplaySpinResolutionCompleted +=
                 HandlePostMoneySpinResolution;
+
+            RoundManagerRef.OnTokensChanged +=
+                HandleTokensChanged;
         }
     }
 
@@ -303,7 +329,19 @@ public class LimboBossController :
         {
             RoundManagerRef.OnGameplaySpinResolutionCompleted -=
                 HandlePostMoneySpinResolution;
+
+            RoundManagerRef.OnTokensChanged -=
+                HandleTokensChanged;
         }
+
+
+        RestoreSpinTokenIcons();
+
+        permanentBlockTargetTelegraph?
+            .Dispose();
+
+        permanentBlockTargetTelegraph =
+            null;
 
 
         base.OnDestroy();
@@ -325,14 +363,12 @@ public class LimboBossController :
 
 
         specialBlocks.Clear();
+        collectUseCounts.Clear();
 
         ClearPermanentBlockTargetTelegraph();
 
         plannedTargetSegmentIndex =
             -1;
-
-        stickerDragInProgress =
-            false;
 
         pendingBlockEffect =
             false;
@@ -344,6 +380,15 @@ public class LimboBossController :
             false;
 
         pendingCollectMoney =
+            0;
+
+        pendingCollectEscalation =
+            false;
+
+        pendingCollectIncrease =
+            0;
+
+        pendingNextCollectMoney =
             0;
 
         divideMoneyPending =
@@ -367,6 +412,12 @@ public class LimboBossController :
         }
 
 
+        if (hideSpinTokenIconsDuringEncounter)
+        {
+            HideSpinTokenIcons();
+        }
+
+
         Debug.Log(
             "[LIMBO] Boss encounter active. Valid spins will not consume tokens."
         );
@@ -377,6 +428,7 @@ public class LimboBossController :
     {
         ClearPermanentBlockTargetTelegraph();
         ClearAllLimboBlocks();
+        RestoreSpinTokenIcons();
 
         pendingBlockEffect =
             false;
@@ -386,6 +438,17 @@ public class LimboBossController :
 
         pendingCollectMoney =
             0;
+
+        pendingCollectEscalation =
+            false;
+
+        pendingCollectIncrease =
+            0;
+
+        pendingNextCollectMoney =
+            0;
+
+        collectUseCounts.Clear();
 
         divideMoneyPending =
             false;
@@ -402,6 +465,7 @@ public class LimboBossController :
     {
         ClearPermanentBlockTargetTelegraph();
         ClearAllLimboBlocks();
+        RestoreSpinTokenIcons();
 
         pendingBlockEffect =
             false;
@@ -411,6 +475,17 @@ public class LimboBossController :
 
         pendingCollectMoney =
             0;
+
+        pendingCollectEscalation =
+            false;
+
+        pendingCollectIncrease =
+            0;
+
+        pendingNextCollectMoney =
+            0;
+
+        collectUseCounts.Clear();
 
         divideMoneyPending =
             false;
@@ -425,6 +500,79 @@ public class LimboBossController :
         Debug.Log(
             "[LIMBO] Defeated. Boss Segment Blocks cleared; normal encounter flow resumes."
         );
+    }
+
+
+    // =========================================================
+    // ENCOUNTER TOKEN UI
+    // =========================================================
+
+    private void HandleTokensChanged(
+        int tokensRemaining)
+    {
+        /*
+         * RoundManager refreshes its own token icons before publishing
+         * OnTokensChanged. Limbo listens afterwards and hides them again.
+         *
+         * This keeps the exception local to the boss while allowing the
+         * underlying token accounting to continue unchanged.
+         */
+        if (isActiveAndEnabled &&
+            EncounterActive &&
+            hideSpinTokenIconsDuringEncounter)
+        {
+            HideSpinTokenIcons();
+        }
+    }
+
+
+    private void HideSpinTokenIcons()
+    {
+        if (RoundManagerRef == null ||
+            RoundManagerRef.tokenIcons == null)
+        {
+            return;
+        }
+
+
+        foreach (GameObject icon in
+                 RoundManagerRef.tokenIcons)
+        {
+            if (icon == null)
+                continue;
+
+            icon.SetActive(
+                false
+            );
+        }
+    }
+
+
+    private void RestoreSpinTokenIcons()
+    {
+        if (RoundManagerRef == null ||
+            RoundManagerRef.tokenIcons == null)
+        {
+            return;
+        }
+
+
+        for (int i = 0;
+             i < RoundManagerRef.tokenIcons.Length;
+             i++)
+        {
+            GameObject icon =
+                RoundManagerRef.tokenIcons[i];
+
+            if (icon == null)
+                continue;
+
+
+            icon.SetActive(
+                i <
+                RoundManagerRef.TokensRemaining
+            );
+        }
     }
 
 
@@ -588,8 +736,37 @@ public class LimboBossController :
     // NEXT TARGET VISUAL TELEGRAPH
     // =========================================================
 
+    private void EnsurePermanentBlockTargetTelegraph()
+    {
+        if (permanentBlockTargetTelegraph == null)
+        {
+            permanentBlockTargetTelegraph =
+                new SegmentTelegraphPresenter(
+                    generator,
+                    roulette
+                );
+
+            return;
+        }
+
+
+        permanentBlockTargetTelegraph
+            .SetGenerator(
+                generator
+            );
+
+        permanentBlockTargetTelegraph
+            .SetRouletteController(
+                roulette
+            );
+    }
+
+
     private void RefreshPermanentBlockTargetTelegraph()
     {
+        EnsurePermanentBlockTargetTelegraph();
+
+
         bool shouldShow =
             highlightPermanentBlockTarget &&
             EncounterActive &&
@@ -597,14 +774,6 @@ public class LimboBossController :
             !Enemy.IsDead &&
             Enemy.CurrentAction is
                 EnemyActionLimboPermanentBlock;
-
-
-        if (hideTargetHighlightWhileDraggingSticker &&
-            stickerDragInProgress)
-        {
-            shouldShow =
-                false;
-        }
 
 
         if (!shouldShow)
@@ -622,106 +791,22 @@ public class LimboBossController :
         }
 
 
-        if (!TryGetSegmentMesh(
+        permanentBlockTargetTelegraph
+            .Show(
                 targetIndex,
-                out SegmentMesh targetMesh))
-        {
-            ClearPermanentBlockTargetTelegraph();
-            return;
-        }
-
-
-        /*
-         * WheelShifter can rebuild SegmentMesh objects while preserving the
-         * logical segment index. Comparing the component reference guarantees
-         * the pulse moves onto the freshly generated mesh automatically.
-         */
-        bool targetChanged =
-            telegraphedSegmentIndex !=
-                targetIndex ||
-            telegraphedSegmentMesh !=
-                targetMesh;
-
-
-        if (targetChanged)
-        {
-            ClearPermanentBlockTargetTelegraph();
-
-            telegraphedSegmentIndex =
-                targetIndex;
-
-            telegraphedSegmentMesh =
-                targetMesh;
-        }
-
-
-        if (telegraphedSegmentMesh == null)
-            return;
-
-
-        /*
-         * Configure only when the visual target changes (or was previously
-         * hidden). The shader animates itself through _Time, so no per-frame
-         * MaterialPropertyBlock writes are needed for the pulse.
-         */
-        if (targetChanged ||
-            !telegraphedSegmentMesh.IsTelegraphed)
-        {
-            telegraphedSegmentMesh
-                .ConfigureTelegraph(
-                    permanentBlockTargetHighlightColor,
-                    permanentBlockTargetHighlightStrength,
-                    permanentBlockTargetPulseSpeed
-                );
-
-            telegraphedSegmentMesh
-                .SetTelegraphed(
-                    true
-                );
-        }
+                permanentBlockTargetHighlightColor,
+                permanentBlockTargetHighlightStrength,
+                permanentBlockTargetPulseSpeed,
+                hideTargetHighlightWhileDraggingSticker,
+                true
+            );
     }
 
 
     private void ClearPermanentBlockTargetTelegraph()
     {
-        if (telegraphedSegmentMesh != null)
-        {
-            telegraphedSegmentMesh
-                .SetTelegraphed(
-                    false
-                );
-        }
-
-
-        telegraphedSegmentIndex =
-            -1;
-
-        telegraphedSegmentMesh =
-            null;
-    }
-
-
-    private void HandleAnyStickerDragStarted(
-        BaseSticker sticker)
-    {
-        stickerDragInProgress =
-            true;
-
-
-        if (hideTargetHighlightWhileDraggingSticker)
-        {
-            ClearPermanentBlockTargetTelegraph();
-        }
-    }
-
-
-    private void HandleAnyStickerDragEnded(
-        BaseSticker sticker)
-    {
-        stickerDragInProgress =
-            false;
-
-        RefreshPermanentBlockTargetTelegraph();
+        permanentBlockTargetTelegraph?
+            .Hide();
     }
 
 
@@ -932,19 +1017,69 @@ public class LimboBossController :
     // =========================================================
 
     /// <summary>
+    /// Returns the value the supplied Collect + Unlock action would take if it
+    /// executed right now.
+    ///
+    /// Escalation is tracked per Limbo encounter instance so the shared
+    /// ScriptableObject asset is never mutated at runtime.
+    /// </summary>
+    public int GetCurrentCollectValue(
+        EnemyActionLimboCollectUnlock action,
+        int baseMoney,
+        bool escalationEnabled,
+        int increasePerUse)
+    {
+        int safeBase =
+            Mathf.Max(
+                0,
+                baseMoney
+            );
+
+        if (!escalationEnabled ||
+            increasePerUse <= 0 ||
+            action == null)
+        {
+            return safeBase;
+        }
+
+
+        int useCount =
+            collectUseCounts.TryGetValue(
+                action,
+                out int storedCount)
+                ? Mathf.Max(0, storedCount)
+                : 0;
+
+        long calculated =
+            (long)safeBase +
+            (long)useCount *
+            Mathf.Max(
+                0,
+                increasePerUse
+            );
+
+        return
+            calculated >= int.MaxValue
+                ? int.MaxValue
+                : (int)calculated;
+    }
+
+
+    /// <summary>
     /// Queues Collect + Unlock for the post-money phase of this spin.
     ///
     /// Enemy actions normally execute before RouletteController calculates the
     /// Lucky Shot bonus. Limbo is intentionally different: his swipe must see
     /// every dollar the player earned this spin, including that bonus.
     ///
-    /// RoundManager.OnGameplaySpinResolutionCompleted is fired after
-    /// ResolveSpinMoneyAndLuckyShotBonus(), so it gives Limbo a clean, existing
-    /// lifecycle hook without adding any Limbo branch to RouletteController or
-    /// RoundManager.
+    /// Optional escalation is authored on the EnemyAction asset, but its mutable
+    /// use count is stored here on the boss instance.
     /// </summary>
     public void ExecuteCollectUnlock(
-        int requestedMoney)
+        EnemyActionLimboCollectUnlock action,
+        int baseMoney,
+        bool escalationEnabled,
+        int increasePerUse)
     {
         if (Enemy == null ||
             Enemy.IsDead)
@@ -953,19 +1088,78 @@ public class LimboBossController :
         }
 
 
+        int safeIncrease =
+            Mathf.Max(
+                0,
+                increasePerUse
+            );
+
+        int currentValue =
+            GetCurrentCollectValue(
+                action,
+                baseMoney,
+                escalationEnabled,
+                safeIncrease
+            );
+
+        bool applyEscalation =
+            escalationEnabled &&
+            safeIncrease > 0 &&
+            action != null;
+
+        int nextValue =
+            currentValue;
+
+
+        if (applyEscalation)
+        {
+            int currentUseCount =
+                collectUseCounts.TryGetValue(
+                    action,
+                    out int storedCount)
+                    ? Mathf.Max(0, storedCount)
+                    : 0;
+
+            collectUseCounts[action] =
+                currentUseCount + 1;
+
+            nextValue =
+                GetCurrentCollectValue(
+                    action,
+                    baseMoney,
+                    escalationEnabled,
+                    safeIncrease
+                );
+        }
+
+
         collectUnlockPending =
             true;
 
         pendingCollectMoney =
-            Mathf.Max(
-                0,
-                requestedMoney
-            );
+            currentValue;
+
+        pendingCollectEscalation =
+            applyEscalation;
+
+        pendingCollectIncrease =
+            applyEscalation
+                ? safeIncrease
+                : 0;
+
+        pendingNextCollectMoney =
+            nextValue;
 
 
         Debug.Log(
             $"[LIMBO] Collect + Unlock queued for post-money resolution: " +
-            $"up to ${pendingCollectMoney}."
+            $"up to ${pendingCollectMoney}." +
+            (
+                pendingCollectEscalation
+                    ? $" Next Collect = ${pendingNextCollectMoney} " +
+                      $"(+${pendingCollectIncrease})."
+                    : ""
+            )
         );
     }
 
@@ -994,6 +1188,15 @@ public class LimboBossController :
         int requestedCollect =
             pendingCollectMoney;
 
+        bool collectEscalated =
+            pendingCollectEscalation;
+
+        int collectIncrease =
+            pendingCollectIncrease;
+
+        int nextCollectMoney =
+            pendingNextCollectMoney;
+
 
         divideMoneyPending =
             false;
@@ -1008,6 +1211,15 @@ public class LimboBossController :
             false;
 
         pendingCollectMoney =
+            0;
+
+        pendingCollectEscalation =
+            false;
+
+        pendingCollectIncrease =
+            0;
+
+        pendingNextCollectMoney =
             0;
 
 
@@ -1040,14 +1252,20 @@ public class LimboBossController :
         if (resolveCollect)
         {
             ResolveCollectUnlockNow(
-                requestedCollect
+                requestedCollect,
+                collectEscalated,
+                collectIncrease,
+                nextCollectMoney
             );
         }
     }
 
 
     private void ResolveCollectUnlockNow(
-        int requestedMoney)
+        int requestedMoney,
+        bool escalationApplied,
+        int increaseAmount,
+        int nextCollectMoney)
     {
         ClearAllLimboBlocks();
 
@@ -1086,7 +1304,10 @@ public class LimboBossController :
 
         LogCollectUnlock(
             requested,
-            taken
+            taken,
+            escalationApplied,
+            increaseAmount,
+            nextCollectMoney
         );
     }
 
@@ -1624,7 +1845,8 @@ public class LimboBossController :
 
             case LimboBlockEffectType.DivideMoney:
                 text =
-                    $"at the end of the spin, divide your money by {safeValue}";
+                    $"if this blocked segment is the winning segment, " +
+                    $"at the end of the spin divide your money by {safeValue}";
                 break;
 
 
@@ -1718,27 +1940,54 @@ public class LimboBossController :
 
     private void LogCollectUnlock(
         int requested,
-        int taken)
+        int taken,
+        bool escalationApplied,
+        int increaseAmount,
+        int nextCollectMoney)
     {
         if (GameLogManager.Instance != null)
         {
+            string line =
+                GameLogManager.Instance.EnemyText(
+                    Enemy != null
+                        ? Enemy.EnemyName
+                        : "Limbo"
+                ) +
+                " unlocks all segments and collects " +
+                GameLogManager.Instance.MoneyText(
+                    $"-${taken}"
+                );
+
+
+            if (escalationApplied)
+            {
+                line +=
+                    ". Next Collect value increases by " +
+                    GameLogManager.Instance.MoneyText(
+                        $"+${Mathf.Max(0, increaseAmount)}"
+                    ) +
+                    " to " +
+                    GameLogManager.Instance.MoneyText(
+                        $"${Mathf.Max(0, nextCollectMoney)}"
+                    );
+            }
+
+
             GameLogManager.Instance
                 .AddGameplayLine(
-                    GameLogManager.Instance.EnemyText(
-                        Enemy != null
-                            ? Enemy.EnemyName
-                            : "Limbo"
-                    ) +
-                    " unlocks all segments and collects " +
-                    GameLogManager.Instance.MoneyText(
-                        $"-${taken}"
-                    )
+                    line
                 );
         }
 
 
         Debug.Log(
-            $"[LIMBO] Collect Unlock requested ${requested}; actually took ${taken}."
+            $"[LIMBO] Collect Unlock requested ${requested}; actually took ${taken}." +
+            (
+                escalationApplied
+                    ? $" Next Collect = ${Mathf.Max(0, nextCollectMoney)} " +
+                      $"(+${Mathf.Max(0, increaseAmount)})."
+                    : ""
+            )
         );
     }
 
