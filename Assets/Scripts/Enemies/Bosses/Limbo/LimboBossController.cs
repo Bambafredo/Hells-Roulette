@@ -79,6 +79,21 @@ public class LimboBossController :
 
 
     // =========================================================
+    // TELEGRAPHING
+    // =========================================================
+
+    [Header("Limbo - Telegraphing")]
+
+    [Tooltip(
+        "If enabled, Limbo's Permanent Block EA tooltip reveals the exact " +
+        "segment that will be blocked next. Disable this to hide the target " +
+        "while keeping all gameplay behaviour unchanged."
+    )]
+    public bool showPermanentBlockTargetInTooltip =
+        true;
+
+
+    // =========================================================
     // RUNTIME STATE
     // =========================================================
 
@@ -1090,6 +1105,32 @@ public class LimboBossController :
     // =========================================================
     // TOOLTIP / PRESENTATION API
     // =========================================================
+
+    public string GetSegmentTooltipLabel(
+        int segmentIndex)
+    {
+        string raw =
+            $"Segment {segmentIndex + 1}";
+
+
+        if (!TryGetSegmentMesh(
+                segmentIndex,
+                out SegmentMesh mesh))
+        {
+            return raw;
+        }
+
+
+        string colorHex =
+            ColorUtility.ToHtmlStringRGB(
+                mesh.color
+            );
+
+
+        return
+            $"<color=#{colorHex}>{raw}</color>";
+    }
+
 
     public string GetBlockEffectDescription(
         LimboBlockEffectType type,

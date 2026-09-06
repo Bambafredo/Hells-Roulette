@@ -61,24 +61,44 @@ public class EnemyActionLimboPermanentBlock : EnemyAction
                 : BuildFallbackEffectDescription();
 
 
-        string targetText =
-            "Target: unavailable.";
+        string dynamicText;
 
 
-        if (limbo != null &&
-            limbo.TryGetNextPermanentBlockTarget(
-                out int segmentIndex))
+        bool showTarget =
+            limbo != null &&
+            limbo.showPermanentBlockTargetInTooltip;
+
+
+        if (showTarget)
         {
-            targetText =
-                $"Target: Segment {segmentIndex + 1}.";
+            string targetText =
+                "Target: unavailable.";
+
+
+            if (limbo.TryGetNextPermanentBlockTarget(
+                    out int segmentIndex))
+            {
+                targetText =
+                    "Target: " +
+                    limbo.GetSegmentTooltipLabel(
+                        segmentIndex
+                    ) +
+                    ".";
+            }
+
+
+            dynamicText =
+                targetText +
+                " " +
+                effectText +
+                ".";
         }
-
-
-        string dynamicText =
-            targetText +
-            " " +
-            effectText +
-            ".";
+        else
+        {
+            dynamicText =
+                effectText +
+                ".";
+        }
 
 
         if (!string.IsNullOrWhiteSpace(
