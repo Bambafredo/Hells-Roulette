@@ -5645,15 +5645,15 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 934489005}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0.41119033, w: 0.9115495}
-  m_LocalPosition: {x: 1.64, y: 2.47, z: 0}
+  m_LocalRotation: {x: -0, y: -0, z: -0.49252224, w: 0.8702999}
+  m_LocalPosition: {x: 2.151787, y: 1.292251, z: 0}
   m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 25112252}
   - {fileID: 216304755}
-  m_Father: {fileID: 1075813795}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_Father: {fileID: 1971410562}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: -59.013}
 --- !u!114 &934489007
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5667,10 +5667,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   wheelCenter: {fileID: 1971410562}
-  isPlaced: 0
+  isPlaced: 1
   round: {fileID: 996127459}
   controller: {fileID: 1075813796}
   selfMinInterval: 0
+  placementMode: 1
   moneyReward: 1
   spinInteractionMode: 1
   roundManager: {fileID: 0}
@@ -7358,7 +7359,6 @@ Transform:
   - {fileID: 1971410562}
   - {fileID: 316292565}
   - {fileID: 1915987787}
-  - {fileID: 934489006}
   m_Father: {fileID: 1595519883}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1075813796
@@ -15608,6 +15608,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 934489006}
   - {fileID: 917348615}
   - {fileID: 1707119032}
   m_Father: {fileID: 1075813795}

@@ -4,11 +4,32 @@ using UnityEngine;
 
 public class FlagPin : BaseFlagPin
 {
+    public enum PlacementMode
+    {
+        FreePlacement,
+        FixedAuthoredPosition
+    }
+
+
     public enum SpinInteractionMode
     {
         LockMovementDuringSpin,
         AllowMovementPinnedHitsOnly
     }
+
+
+    [Header("Placement Mode")]
+
+    [Tooltip(
+        "Free Placement: keeps the current behaviour; the player places and " +
+        "can move the Flag Pin according to Spin Interaction.\n\n" +
+        "Fixed Authored Position: the Transform authored in the scene is used " +
+        "as the permanent pinned position. The Flag Pin starts placed, is " +
+        "parented to the wheel while preserving that Transform, and cannot " +
+        "be dragged."
+    )]
+    public PlacementMode placementMode =
+        PlacementMode.FreePlacement;
 
 
     [Header("Rewards")]
@@ -50,11 +71,72 @@ public class FlagPin : BaseFlagPin
         if (roundManager == null)
             roundManager = FindObjectOfType<RoundManager>();
 
-        // Guardamos su posición real al empezar
+        // Guardamos su Transform authored real al empezar.
         originalPosition = transform.position;
         originalRotation = transform.rotation;
         originalParent = transform.parent;
+
+        ConfigureInitialPlacementMode();
     }
+
+
+    // =========================================================
+    // PLACEMENT MODE
+    // =========================================================
+
+    private void ConfigureInitialPlacementMode()
+    {
+        if (placementMode !=
+            PlacementMode.FixedAuthoredPosition)
+        {
+            return;
+        }
+
+
+        /*
+         * The scene-authored Transform is the source of truth.
+         *
+         * We preserve world position/rotation exactly, then attach the pin to
+         * the wheel so it naturally follows wheel rotation without needing
+         * any per-frame placement/orientation logic.
+         */
+        if (wheelCenter != null &&
+            transform.parent != wheelCenter)
+        {
+            transform.SetParent(
+                wheelCenter,
+                true
+            );
+        }
+
+
+        isPlaced =
+            true;
+
+        isDragging =
+            false;
+    }
+
+
+    protected override void Update()
+    {
+        if (placementMode ==
+            PlacementMode.FixedAuthoredPosition)
+        {
+            /*
+             * Fixed mode deliberately skips BaseFlagPin.Update().
+             *
+             * BaseFlagPin.Update() contains both drag handling and automatic
+             * radial orientation. Neither should modify an authored fixed
+             * Transform. The pin still receives flapper hits normally.
+             */
+            return;
+        }
+
+
+        base.Update();
+    }
+
 
     public void ResetSpinEarnings()
     {
@@ -75,6 +157,13 @@ public class FlagPin : BaseFlagPin
 
     protected override bool CanBeginDrag()
     {
+        if (placementMode ==
+            PlacementMode.FixedAuthoredPosition)
+        {
+            return false;
+        }
+
+
         if (controller != null &&
             controller.SpinInProgress &&
             spinInteractionMode ==
