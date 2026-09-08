@@ -87,6 +87,15 @@ public class MagnifierManager : MonoBehaviour
     private bool enableStickerDragMagnifier =
         true;
 
+
+    [Tooltip(
+        "Player toggle state when the scene starts. OFF by default: right click " +
+        "toggles the magnifier on, and the choice persists across sticker drags."
+    )]
+    [SerializeField]
+    private bool startMagnifierEnabled =
+        false;
+
     // =========================================================
     // LENS
     // =========================================================
@@ -207,8 +216,17 @@ public class MagnifierManager : MonoBehaviour
     [Header("Circular Mask")]
 
     [Tooltip(
-        "Generates a tiny white circular Sprite at runtime and assigns it to " +
-        "CircleMask, so no external circle asset is required."
+        "Preferred authored sprite for the circular lens mask. Assign a clean " +
+        "circle sprite here (the normal Unity UI circle is ideal). When assigned, " +
+        "it takes priority over the runtime-generated fallback."
+    )]
+    [SerializeField]
+    private Sprite circularMaskSprite;
+
+
+    [Tooltip(
+        "Fallback only. If no authored Circular Mask Sprite is assigned and the " +
+        "CircleMask Image has no sprite, generate a circular sprite at runtime."
     )]
     [SerializeField]
     private bool generateCircularMaskAtRuntime =
@@ -216,13 +234,94 @@ public class MagnifierManager : MonoBehaviour
 
 
     [Tooltip(
-        "Resolution of the generated circle Sprite. This is only a mask, not " +
-        "the magnified image itself, so 128 is plenty."
+        "Resolution of the fallback generated circle Sprite. Higher values make " +
+        "the edge smoother if no authored circle sprite is used."
     )]
-    [Range(32, 256)]
+    [Range(64, 1024)]
     [SerializeField]
     private int generatedCircleTextureSize =
-        128;
+        512;
+
+    // =========================================================
+    // LENS BACKDROP
+    // =========================================================
+
+    [Header("Lens Backdrop")]
+
+    [Tooltip(
+        "Adds a solid UI backdrop behind the RenderTexture, still clipped by the " +
+        "circular mask. This prevents transparent areas of the magnifier camera " +
+        "from revealing the normal game view underneath the lens."
+    )]
+    [SerializeField]
+    private bool enableLensBackdrop =
+        true;
+
+
+    [Tooltip(
+        "When enabled, the backdrop uses Source Camera's background RGB. The " +
+        "opacity is still controlled independently below."
+    )]
+    [SerializeField]
+    private bool useSourceCameraBackdropColor =
+        true;
+
+
+    [Tooltip(
+        "Backdrop color used when Use Source Camera Backdrop Color is disabled."
+    )]
+    [SerializeField]
+    private Color lensBackdropColor =
+        new Color(
+            0.22f,
+            0.22f,
+            0.22f,
+            1f
+        );
+
+
+    [Tooltip(
+        "Opacity of the solid backdrop behind the magnified image. 1 = the normal " +
+        "game view can never show through transparent pixels in the lens."
+    )]
+    [Range(0f, 1f)]
+    [SerializeField]
+    private float lensBackdropOpacity =
+        1f;
+
+    // =========================================================
+    // BORDER
+    // =========================================================
+
+    [Header("Lens Border")]
+
+    [Tooltip("Draws a circular border around the magnifier.")]
+    [SerializeField]
+    private bool enableLensBorder =
+        true;
+
+
+    [Tooltip("Visible border color.")]
+    [SerializeField]
+    private Color lensBorderColor =
+        Color.white;
+
+
+    [Tooltip("Border thickness in Canvas units / pixels at Canvas scale 1.")]
+    [Min(0.5f)]
+    [SerializeField]
+    private float lensBorderThickness =
+        4f;
+
+
+    [Tooltip(
+        "Resolution of the generated border ring. The border is generated at a " +
+        "higher resolution than the old mask so its edge stays clean."
+    )]
+    [Range(128, 1024)]
+    [SerializeField]
+    private int generatedBorderTextureSize =
+        512;
 
     // =========================================================
     // RUNTIME STATE
@@ -235,7 +334,21 @@ public class MagnifierManager : MonoBehaviour
     private Texture2D generatedCircleTexture;
     private Sprite generatedCircleSprite;
 
+    private Image runtimeBackdropImage;
+    private Image runtimeBorderImage;
+
+    private Texture2D generatedBorderTexture;
+    private Sprite generatedBorderSprite;
+
     private bool magnifierVisible =
+        false;
+
+    /*
+     * Persistent player preference for the current run / scene.
+     * This is intentionally NOT owned by InputsManager: InputsManager reports
+     * actions; MagnifierManager owns what the action means for this feature.
+     */
+    private bool magnifierEnabledByPlayer =
         false;
 
     // =========================================================
@@ -257,6 +370,10 @@ public class MagnifierManager : MonoBehaviour
 
 
         ResolveReferences();
+
+
+        magnifierEnabledByPlayer =
+            startMagnifierEnabled;
 
 
         ConfigureMagnifierUI();
@@ -291,6 +408,57 @@ public class MagnifierManager : MonoBehaviour
     }
 
 
+    private void Update()
+    {
+        if (!enableStickerDragMagnifier)
+        {
+            if (magnifierVisible)
+            {
+                SetMagnifierVisible(false);
+            }
+
+            return;
+        }
+
+
+        if (InputsManager.Instance == null ||
+            !InputsManager.Instance.MagnifierTogglePressed)
+        {
+            return;
+        }
+
+
+        magnifierEnabledByPlayer =
+            !magnifierEnabledByPlayer;
+
+
+        bool shouldBeVisible =
+            magnifierEnabledByPlayer &&
+            activeDraggedSticker != null;
+
+
+        SetMagnifierVisible(
+            shouldBeVisible
+        );
+
+
+        if (!shouldBeVisible)
+            return;
+
+
+        /*
+         * Right click can enable the lens in the middle of an existing drag.
+         * Prime its camera / UI immediately so it appears in the correct place
+         * on the same frame instead of waiting for the next LateUpdate.
+         */
+        ResolveReferences();
+        SyncMagnifierCameraSettings();
+        UpdateLensBackdropVisual();
+        UpdateMagnifierCamera();
+        UpdateMagnifierUIPosition();
+    }
+
+
     private void LateUpdate()
     {
         if (!magnifierVisible ||
@@ -317,6 +485,7 @@ public class MagnifierManager : MonoBehaviour
          * frame state instead of relying on URP's automatic secondary-camera
          * scheduling.
          */
+        UpdateLensBackdropVisual();
         UpdateMagnifierCamera();
         RenderMagnifierCamera();
         UpdateMagnifierUIPosition();
@@ -371,6 +540,24 @@ public class MagnifierManager : MonoBehaviour
         }
 
 
+        if (generatedBorderSprite != null)
+        {
+            Destroy(generatedBorderSprite);
+
+            generatedBorderSprite =
+                null;
+        }
+
+
+        if (generatedBorderTexture != null)
+        {
+            Destroy(generatedBorderTexture);
+
+            generatedBorderTexture =
+                null;
+        }
+
+
         if (Instance == this)
         {
             Instance =
@@ -392,8 +579,20 @@ public class MagnifierManager : MonoBehaviour
         }
 
 
+        /*
+         * Track the drag even while the player toggle is OFF.
+         * This is what allows right click to enable the magnifier immediately
+         * in the middle of an already-running sticker drag.
+         */
         activeDraggedSticker =
             sticker;
+
+
+        if (!magnifierEnabledByPlayer)
+        {
+            SetMagnifierVisible(false);
+            return;
+        }
 
 
         ResolveReferences();
@@ -405,6 +604,7 @@ public class MagnifierManager : MonoBehaviour
          * Position immediately on the first drag frame instead of waiting for
          * LateUpdate. This avoids a one-frame flash at the authored UI position.
          */
+        UpdateLensBackdropVisual();
         UpdateMagnifierCamera();
         UpdateMagnifierUIPosition();
     }
@@ -1100,39 +1300,50 @@ public class MagnifierManager : MonoBehaviour
             false;
 
 
-        if (generateCircularMaskAtRuntime)
+        /*
+         * Prefer an authored circle sprite. This avoids the visibly rasterized
+         * edge produced by the old 128 px runtime mask. If no explicit sprite is
+         * supplied we preserve any sprite already authored on CircleMask, then
+         * finally fall back to runtime generation.
+         */
+        if (circularMaskSprite != null)
+        {
+            circularMaskImage.sprite =
+                circularMaskSprite;
+        }
+        else if (circularMaskImage.sprite == null &&
+                 generateCircularMaskAtRuntime)
         {
             CreateGeneratedCircleSprite();
-
 
             if (generatedCircleSprite != null)
             {
                 circularMaskImage.sprite =
                     generatedCircleSprite;
-
-                circularMaskImage.type =
-                    Image.Type.Simple;
-
-                circularMaskImage.preserveAspect =
-                    false;
-
-                circularMaskImage.color =
-                    Color.white;
             }
         }
 
 
+        circularMaskImage.type =
+            Image.Type.Simple;
+
+        circularMaskImage.preserveAspect =
+            false;
+
+        circularMaskImage.color =
+            Color.white;
+
+
         /*
-         * Make both the mask and the RawImage fill MagnifierRoot exactly.
-         * The root itself should be authored square (for example 220 x 220).
+         * The mask fills the root. The border is a transparent ring rendered on
+         * top, so the magnified image keeps the full requested diameter.
          */
-        RectTransform maskRect =
-            circularMaskImage.rectTransform;
-
-
         StretchRectTransform(
-            maskRect
+            circularMaskImage.rectTransform
         );
+
+
+        EnsureLensBackdrop();
 
 
         if (magnifierView != null)
@@ -1143,7 +1354,374 @@ public class MagnifierManager : MonoBehaviour
 
             magnifierView.raycastTarget =
                 false;
+
+            /*
+             * Backdrop must always stay behind the camera image.
+             */
+            magnifierView.transform.SetAsLastSibling();
         }
+
+
+        EnsureLensBorder();
+        UpdateLensBackdropVisual();
+        UpdateLensBorderVisual();
+    }
+
+
+    /// <summary>
+    /// Creates / configures one plain Image behind the RawImage and inside the
+    /// circular mask. The mask clips it automatically, so it becomes a solid
+    /// circular backdrop without needing another sprite.
+    /// </summary>
+    private void EnsureLensBackdrop()
+    {
+        if (circularMaskImage == null)
+            return;
+
+
+        if (runtimeBackdropImage == null)
+        {
+            Transform existing =
+                circularMaskImage.transform.Find(
+                    "MagnifierBackdrop_Runtime"
+                );
+
+
+            if (existing != null)
+            {
+                runtimeBackdropImage =
+                    existing.GetComponent<Image>();
+            }
+        }
+
+
+        if (runtimeBackdropImage == null)
+        {
+            GameObject backdropObject =
+                new GameObject(
+                    "MagnifierBackdrop_Runtime",
+                    typeof(RectTransform),
+                    typeof(CanvasRenderer),
+                    typeof(Image)
+                );
+
+
+            backdropObject.transform.SetParent(
+                circularMaskImage.transform,
+                false
+            );
+
+
+            runtimeBackdropImage =
+                backdropObject.GetComponent<Image>();
+        }
+
+
+        if (runtimeBackdropImage == null)
+            return;
+
+
+        StretchRectTransform(
+            runtimeBackdropImage.rectTransform
+        );
+
+        runtimeBackdropImage.raycastTarget =
+            false;
+
+        runtimeBackdropImage.transform.SetAsFirstSibling();
+    }
+
+
+    private void UpdateLensBackdropVisual()
+    {
+        if (runtimeBackdropImage == null)
+            return;
+
+
+        runtimeBackdropImage.enabled =
+            enableLensBackdrop &&
+            lensBackdropOpacity > 0f;
+
+
+        if (!runtimeBackdropImage.enabled)
+            return;
+
+
+        Color backdrop =
+            lensBackdropColor;
+
+
+        if (useSourceCameraBackdropColor &&
+            sourceCamera != null)
+        {
+            backdrop =
+                sourceCamera.backgroundColor;
+        }
+
+
+        backdrop.a =
+            Mathf.Clamp01(
+                lensBackdropOpacity
+            );
+
+
+        runtimeBackdropImage.color =
+            backdrop;
+    }
+
+
+    /// <summary>
+    /// Creates a dedicated ring Image as a sibling of CircleMask. It renders on
+    /// top of the lens and therefore never gets clipped by the circular Mask.
+    /// </summary>
+    private void EnsureLensBorder()
+    {
+        if (magnifierRoot == null)
+            return;
+
+
+        if (runtimeBorderImage == null)
+        {
+            Transform existing =
+                magnifierRoot.Find(
+                    "MagnifierBorder_Runtime"
+                );
+
+
+            if (existing != null)
+            {
+                runtimeBorderImage =
+                    existing.GetComponent<Image>();
+            }
+        }
+
+
+        if (runtimeBorderImage == null)
+        {
+            GameObject borderObject =
+                new GameObject(
+                    "MagnifierBorder_Runtime",
+                    typeof(RectTransform),
+                    typeof(CanvasRenderer),
+                    typeof(Image)
+                );
+
+
+            borderObject.transform.SetParent(
+                magnifierRoot,
+                false
+            );
+
+
+            runtimeBorderImage =
+                borderObject.GetComponent<Image>();
+        }
+
+
+        if (runtimeBorderImage == null)
+            return;
+
+
+        StretchRectTransform(
+            runtimeBorderImage.rectTransform
+        );
+
+        runtimeBorderImage.raycastTarget =
+            false;
+
+        runtimeBorderImage.transform.SetAsLastSibling();
+
+
+        CreateGeneratedBorderSprite();
+
+        if (generatedBorderSprite != null)
+        {
+            runtimeBorderImage.sprite =
+                generatedBorderSprite;
+
+            runtimeBorderImage.type =
+                Image.Type.Simple;
+
+            runtimeBorderImage.preserveAspect =
+                false;
+        }
+    }
+
+
+    private void UpdateLensBorderVisual()
+    {
+        if (runtimeBorderImage == null)
+            return;
+
+
+        runtimeBorderImage.enabled =
+            enableLensBorder &&
+            lensBorderThickness > 0f;
+
+
+        if (!runtimeBorderImage.enabled)
+            return;
+
+
+        runtimeBorderImage.color =
+            lensBorderColor;
+    }
+
+
+    private void CreateGeneratedBorderSprite()
+    {
+        if (generatedBorderSprite != null)
+            return;
+
+
+        int safeSize =
+            Mathf.Clamp(
+                generatedBorderTextureSize,
+                128,
+                1024
+            );
+
+
+        generatedBorderTexture =
+            new Texture2D(
+                safeSize,
+                safeSize,
+                TextureFormat.RGBA32,
+                false
+            )
+            {
+                name =
+                    "Magnifier_Runtime_BorderRing",
+
+                filterMode =
+                    FilterMode.Bilinear,
+
+                wrapMode =
+                    TextureWrapMode.Clamp
+            };
+
+
+        Color32[] pixels =
+            new Color32[
+                safeSize * safeSize
+            ];
+
+
+        float center =
+            (safeSize - 1) * 0.5f;
+
+        float outerRadius =
+            safeSize * 0.5f - 1.5f;
+
+        float thicknessInTexture =
+            Mathf.Max(
+                1f,
+                Mathf.Max(
+                    0.5f,
+                    lensBorderThickness
+                ) /
+                Mathf.Max(
+                    1f,
+                    lensDiameter
+                ) *
+                safeSize
+            );
+
+        float innerRadius =
+            Mathf.Max(
+                0f,
+                outerRadius -
+                thicknessInTexture
+            );
+
+
+        for (int y = 0;
+             y < safeSize;
+             y++)
+        {
+            for (int x = 0;
+                 x < safeSize;
+                 x++)
+            {
+                float dx =
+                    x - center;
+
+                float dy =
+                    y - center;
+
+                float distance =
+                    Mathf.Sqrt(
+                        dx * dx +
+                        dy * dy
+                    );
+
+
+                float outerAlpha =
+                    Mathf.Clamp01(
+                        outerRadius + 0.75f -
+                        distance
+                    );
+
+                float innerAlpha =
+                    Mathf.Clamp01(
+                        distance -
+                        innerRadius +
+                        0.75f
+                    );
+
+                float alpha01 =
+                    outerAlpha *
+                    innerAlpha;
+
+
+                byte alpha =
+                    (byte)Mathf.RoundToInt(
+                        alpha01 * 255f
+                    );
+
+
+                pixels[
+                    y * safeSize + x
+                ] =
+                    new Color32(
+                        255,
+                        255,
+                        255,
+                        alpha
+                    );
+            }
+        }
+
+
+        generatedBorderTexture.SetPixels32(
+            pixels
+        );
+
+        generatedBorderTexture.Apply(
+            false,
+            false
+        );
+
+
+        generatedBorderSprite =
+            Sprite.Create(
+                generatedBorderTexture,
+                new Rect(
+                    0f,
+                    0f,
+                    safeSize,
+                    safeSize
+                ),
+                new Vector2(
+                    0.5f,
+                    0.5f
+                ),
+                safeSize
+            );
+
+
+        generatedBorderSprite.name =
+            "Magnifier_Runtime_BorderRing_Sprite";
     }
 
 
@@ -1156,8 +1734,8 @@ public class MagnifierManager : MonoBehaviour
         int safeSize =
             Mathf.Clamp(
                 generatedCircleTextureSize,
-                32,
-                256
+                64,
+                1024
             );
 
 

@@ -75,6 +75,22 @@ public class InputsManager : MonoBehaviour
 
 
     // ===========================================================
+    // MAGNIFIER
+    // ===========================================================
+
+    [Header("Magnifier")]
+
+    [Tooltip(
+        "Input action used to toggle the sticker-drag magnifier on / off. " +
+        "Mouse1 is the right mouse button. Keeping this binding here lets " +
+        "gameplay code remain device-agnostic for future gamepad / Steam Deck support."
+    )]
+    [SerializeField]
+    private KeyCode magnifierToggleKey =
+        KeyCode.Mouse1;
+
+
+    // ===========================================================
     // PUBLIC ACTION STATE
     // ===========================================================
 
@@ -159,6 +175,27 @@ public class InputsManager : MonoBehaviour
                     : delta;
 #else
             return 0f;
+#endif
+        }
+    }
+
+
+    /// <summary>
+    /// True only on the frame the authored magnifier-toggle binding is pressed.
+    /// MagnifierManager owns the persistent ON / OFF state; InputsManager only
+    /// reports the player action.
+    /// </summary>
+    public bool MagnifierTogglePressed
+    {
+        get
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            return
+                Input.GetKeyDown(
+                    magnifierToggleKey
+                );
+#else
+            return false;
 #endif
         }
     }
