@@ -5,6 +5,13 @@ using TMPro;
 using UnityEngine.SceneManagement;
 using System;
 
+public enum GameOverReason
+{
+    BloodDepleted = 0,
+    DebtUnpaid = 1,
+    LimboMoneyDepleted = 2
+}
+
 public class RoundManager : MonoBehaviour
 {
     public static RoundManager Instance;
@@ -300,6 +307,35 @@ public class RoundManager : MonoBehaviour
      */
     private bool waitingForSpinResolution = false;
 
+
+    // =========================================================
+    // GAME OVER STATE
+    // =========================================================
+
+    /*
+     * Run-terminal state.
+     *
+     * The first accepted reason wins and is never replaced later in the same
+     * run. This matters when several consequences happen inside one resolution
+     * (for example Blood reaches 0 and another effect also empties money).
+     */
+    [SerializeField]
+    private bool gameOverActive =
+        false;
+
+
+    [SerializeField]
+    private GameOverReason currentGameOverReason =
+        GameOverReason.BloodDepleted;
+
+
+    public bool IsGameOver =>
+        gameOverActive;
+
+
+    public GameOverReason CurrentGameOverReason =>
+        currentGameOverReason;
+
     // =========================================================
     // EVENTS
     // =========================================================
@@ -383,6 +419,9 @@ public class RoundManager : MonoBehaviour
     {
         get
         {
+            if (gameOverActive)
+                return false;
+
             if (tokensRemaining <= 0)
                 return false;
 
@@ -502,6 +541,12 @@ public class RoundManager : MonoBehaviour
 
         waitingForSpinResolution = false;
 
+        gameOverActive =
+            false;
+
+        currentGameOverReason =
+            GameOverReason.BloodDepleted;
+
         UpdateAllUI();
 
         Debug.Log(
@@ -542,6 +587,19 @@ public class RoundManager : MonoBehaviour
 
         externalSpinBlockActive =
             blocked;
+
+
+        /*
+         * Game Over is terminal. A modal that happens to close afterwards must
+         * never restart deferred Debt / Reward flow.
+         */
+        if (gameOverActive)
+        {
+            externalFlowDeferredDebtResolution =
+                false;
+
+            return;
+        }
 
 
         /*
@@ -619,6 +677,24 @@ public class RoundManager : MonoBehaviour
 
 
         /*
+         * A terminal condition may have been reached during sticker/enemy
+         * resolution (most commonly Blood <= 0).
+         *
+         * Do not let Infestation, gameplay free-sticker rewards, Debt or normal
+         * Rewards begin after the run has already ended. RouletteController will
+         * still finish its own end-of-spin summary and publish the completed log
+         * block after this method returns.
+         */
+        if (gameOverActive)
+        {
+            debtPending =
+                false;
+
+            return;
+        }
+
+
+        /*
          * IMPORTANT ORDER:
          *
          * Enemy actions have all already executed at this point.
@@ -631,6 +707,20 @@ public class RoundManager : MonoBehaviour
          */
         OnGameplaySpinResolutionCompleted?
             .Invoke();
+
+
+        /*
+         * Some terminal conditions are intentionally decided inside the
+         * post-gameplay hook itself. Limbo's $0 defeat is one such case because
+         * his Divide Money / Collect effects resolve there, after all spin money.
+         */
+        if (gameOverActive)
+        {
+            debtPending =
+                false;
+
+            return;
+        }
 
 
         /*
@@ -956,7 +1046,9 @@ public class RoundManager : MonoBehaviour
             $"Needed ${currentDebt}, had ${playerMoney}."
         );
 
-        GameOver();
+        RequestGameOver(
+            GameOverReason.DebtUnpaid
+        );
     }
 
     // =========================================================
@@ -1380,26 +1472,63 @@ public class RoundManager : MonoBehaviour
     // GAME OVER
     // =========================================================
 
-    private void GameOver()
+    /// <summary>
+    /// Ends the current run with one explicit reason.
+    ///
+    /// The first accepted reason wins. Requesting Game Over again later in the
+    /// same resolution cannot overwrite the reason already shown to the player.
+    ///
+    /// This method deliberately does NOT reload the scene. GameOverManager owns
+    /// presentation and Retry / Exit; RoundManager only owns terminal run state.
+    /// </summary>
+    public bool RequestGameOver(
+        GameOverReason reason)
     {
+        if (gameOverActive)
+        {
+            return false;
+        }
+
+
+        gameOverActive =
+            true;
+
+        currentGameOverReason =
+            reason;
+
+
+        /*
+         * No unresolved economy should survive a terminal run.
+         *
+         * We do NOT interrupt RouletteController's current resolution here:
+         * it is still allowed to finish Blood/money totals and commit the final
+         * Game Log block before GameOverManager displays the panel.
+         */
+        debtPending =
+            false;
+
+        externalFlowDeferredDebtResolution =
+            false;
+
+
+        /*
+         * Do NOT clear CurrencyManager here. A Blood death can be requested
+         * before RouletteController writes the final spin totals; clearing the
+         * manager would erase that spin's earnings/loss tracking and corrupt the
+         * death log. Retry reloads the whole scene anyway.
+         */
+
+
+        Debug.Log(
+            $"[GAME OVER] Run ended. Reason = {currentGameOverReason}."
+        );
+
+
         OnGameOver?
             .Invoke();
 
-        if (CurrencyManager.Instance != null)
-        {
-            CurrencyManager.Instance
-                .ClearPending();
-        }
 
-        Debug.Log(
-            "[GAME OVER] Resetting run..."
-        );
-
-        SceneManager.LoadScene(
-            SceneManager
-                .GetActiveScene()
-                .buildIndex
-        );
+        return true;
     }
 
     // =========================================================

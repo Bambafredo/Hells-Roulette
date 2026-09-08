@@ -418,6 +418,13 @@ public class LimboBossController :
         }
 
 
+        /*
+         * Limbo replaces normal Debt with his own economic defeat condition.
+         * Entering the encounter already at $0 therefore ends the run too.
+         */
+        TryRequestMoneyDepletedGameOver();
+
+
         Debug.Log(
             "[LIMBO] Boss encounter active. Valid spins will not consume tokens."
         );
@@ -1166,100 +1173,151 @@ public class LimboBossController :
 
     private void HandlePostMoneySpinResolution()
     {
-        if (!divideMoneyPending &&
-            !collectUnlockPending)
-        {
-            return;
-        }
-
-
-        bool resolveDivide =
-            divideMoneyPending;
-
-        int divideSegmentIndex =
-            pendingDivideSegmentIndex;
-
-        int divisor =
-            pendingMoneyDivisor;
-
-        bool resolveCollect =
+        bool hasPendingEconomicResolution =
+            divideMoneyPending ||
             collectUnlockPending;
 
-        int requestedCollect =
-            pendingCollectMoney;
 
-        bool collectEscalated =
-            pendingCollectEscalation;
-
-        int collectIncrease =
-            pendingCollectIncrease;
-
-        int nextCollectMoney =
-            pendingNextCollectMoney;
-
-
-        divideMoneyPending =
-            false;
-
-        pendingDivideSegmentIndex =
-            -1;
-
-        pendingMoneyDivisor =
-            1;
-
-        collectUnlockPending =
-            false;
-
-        pendingCollectMoney =
-            0;
-
-        pendingCollectEscalation =
-            false;
-
-        pendingCollectIncrease =
-            0;
-
-        pendingNextCollectMoney =
-            0;
-
-
-        if (!EncounterActive ||
-            Enemy == null ||
-            Enemy.IsDead)
+        if (hasPendingEconomicResolution)
         {
-            return;
+            bool resolveDivide =
+                divideMoneyPending;
+
+            int divideSegmentIndex =
+                pendingDivideSegmentIndex;
+
+            int divisor =
+                pendingMoneyDivisor;
+
+            bool resolveCollect =
+                collectUnlockPending;
+
+            int requestedCollect =
+                pendingCollectMoney;
+
+            bool collectEscalated =
+                pendingCollectEscalation;
+
+            int collectIncrease =
+                pendingCollectIncrease;
+
+            int nextCollectMoney =
+                pendingNextCollectMoney;
+
+
+            divideMoneyPending =
+                false;
+
+            pendingDivideSegmentIndex =
+                -1;
+
+            pendingMoneyDivisor =
+                1;
+
+            collectUnlockPending =
+                false;
+
+            pendingCollectMoney =
+                0;
+
+            pendingCollectEscalation =
+                false;
+
+            pendingCollectIncrease =
+                0;
+
+            pendingNextCollectMoney =
+                0;
+
+
+            if (!EncounterActive ||
+                Enemy == null ||
+                Enemy.IsDead)
+            {
+                return;
+            }
+
+
+            /*
+             * IMPORTANT ORDER:
+             *
+             * 1. The landed Segment Block resolves first.
+             * 2. Limbo's authored Enemy Action resolves second.
+             *
+             * Therefore, when Divide Money and Collect + Unlock happen on the
+             * same spin, the player first has final money divided, then Limbo
+             * collects.
+             */
+            if (resolveDivide)
+            {
+                ResolveDivideMoneyBlock(
+                    divideSegmentIndex,
+                    divisor
+                );
+            }
+
+
+            if (resolveCollect)
+            {
+                ResolveCollectUnlockNow(
+                    requestedCollect,
+                    collectEscalated,
+                    collectIncrease,
+                    nextCollectMoney
+                );
+            }
         }
 
 
         /*
-         * IMPORTANT ORDER:
+         * Limbo has no normal Debt. His economic loss condition is simply that
+         * the player finishes the post-money resolution at $0.
          *
-         * 1. The landed Segment Block resolves first.
-         * 2. Limbo's authored Enemy Action resolves second.
-         *
-         * Therefore, when Divide Money and Collect + Unlock happen on the same
-         * spin, the player first has final money divided, then Limbo collects.
+         * This check intentionally runs on EVERY completed gameplay spin during
+         * Limbo, not only on spins where Divide Money / Collect happened. That
+         * keeps the rule truthful if another gameplay effect also removes the
+         * player's final dollars while Limbo is active.
          */
-        if (resolveDivide)
+        TryRequestMoneyDepletedGameOver();
+    }
+
+
+    private void TryRequestMoneyDepletedGameOver()
+    {
+        if (!EncounterActive ||
+            Enemy == null ||
+            Enemy.IsDead ||
+            CurrencyManager.Instance == null ||
+            CurrencyManager.Instance.dollars > 0)
         {
-            ResolveDivideMoneyBlock(
-                divideSegmentIndex,
-                divisor
-            );
+            return;
         }
 
 
-        if (resolveCollect)
+        RoundManager targetRoundManager =
+            RoundManagerRef != null
+                ? RoundManagerRef
+                : RoundManager.Instance;
+
+
+        if (targetRoundManager == null)
+            return;
+
+
+        bool accepted =
+            targetRoundManager
+                .RequestGameOver(
+                    GameOverReason.LimboMoneyDepleted
+                );
+
+
+        if (accepted)
         {
-            ResolveCollectUnlockNow(
-                requestedCollect,
-                collectEscalated,
-                collectIncrease,
-                nextCollectMoney
+            Debug.Log(
+                "[LIMBO] Player money reached $0. Limbo economic defeat triggered."
             );
         }
     }
-
 
     private void ResolveCollectUnlockNow(
         int requestedMoney,

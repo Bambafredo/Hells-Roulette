@@ -596,6 +596,17 @@ public class BloodManager : MonoBehaviour
             "💀 Te has desangrado…"
         );
 
-        // Aquí podrías lanzar Game Over, reinicio, etc.
+
+        /*
+         * BloodManager owns Blood, not run flow or Game Over UI.
+         *
+         * RoundManager records the terminal reason. If this happened during a
+         * spin, GameOverManager waits until RouletteController has finished the
+         * final spin log before showing the panel.
+         */
+        RoundManager.Instance?
+            .RequestGameOver(
+                GameOverReason.BloodDepleted
+            );
     }
 }
