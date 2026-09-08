@@ -61,6 +61,20 @@ public class InfestationManager : MonoBehaviour
         false;
 
 
+    /// <summary>
+    /// True from the moment an enemy has queued an Infestation consequence
+    /// until the final Infestation batch has completely finished.
+    ///
+    /// Other post-gameplay modal systems can use this to defer themselves
+    /// without depending on C# event subscription order.
+    /// </summary>
+    public bool HasPendingOrActiveInfestation =>
+        InfestationActive ||
+        completionPending ||
+        pendingLeechesThisResolution > 0 ||
+        pendingInfestationBatches.Count > 0;
+
+
     public int ClaimsRequired
     {
         get;
@@ -783,14 +797,39 @@ public class InfestationManager : MonoBehaviour
         }
 
 
-        RoundManager.Instance?
-            .SetExternalSpinBlock(
-                false
-            );
+        /*
+         * MODAL HANDOFF
+         *
+         * A gameplay effect such as Cupon may also have queued a free-sticker
+         * modal during this same spin. RewardManager deferred it while
+         * Infestation was pending, because both systems reuse Reward_Panel.
+         *
+         * Give RewardManager one chance to take over the ALREADY-HELD external
+         * flow lock before we release it. This keeps the sequence atomic:
+         *
+         * Infestation -> gameplay free sticker -> Debt / Clean Row / Rewards
+         *
+         * No RoundManager special case and no overlapping panels.
+         */
+        bool flowHandedOff =
+            rewardManager != null &&
+            rewardManager
+                .TryResumeQueuedGameplayModalFromExistingFlowLock();
+
+
+        if (!flowHandedOff)
+        {
+            RoundManager.Instance?
+                .SetExternalSpinBlock(
+                    false
+                );
+        }
 
 
         Debug.Log(
-            "[INFESTATION] Completed."
+            flowHandedOff
+                ? "[INFESTATION] Completed. Modal flow handed off to queued gameplay reward."
+                : "[INFESTATION] Completed."
         );
     }
 

@@ -652,7 +652,29 @@ public class RewardManager : MonoBehaviour
         }
 
 
-        BeginGameplayFreeStickerSequence();
+        /*
+         * Infestation has priority over optional gameplay rewards.
+         *
+         * Both systems flush from RoundManager's post-gameplay callback and
+         * reuse the same Reward Panel. The order in which C# event subscribers
+         * happen to run must never decide which modal wins.
+         *
+         * InfestationManager exposes its pending state, so a queued Infestation
+         * blocks this modal even before its panel has physically opened. When
+         * Infestation finishes, it explicitly hands the existing external-flow
+         * lock to RewardManager if a free-sticker request is still queued.
+         */
+        if (InfestationManager.Instance != null &&
+            InfestationManager.Instance
+                .HasPendingOrActiveInfestation)
+        {
+            return;
+        }
+
+
+        BeginGameplayFreeStickerSequence(
+            true
+        );
     }
 
 
@@ -672,7 +694,46 @@ public class RewardManager : MonoBehaviour
     }
 
 
-    private void BeginGameplayFreeStickerSequence()
+    /// <summary>
+    /// Attempts to continue directly from another modal that already owns
+    /// RoundManager's external-flow lock.
+    ///
+    /// This is a modal handoff, not a Cupon-specific API: RewardManager only
+    /// cares whether any gameplay free-sticker request is queued.
+    ///
+    /// Returns true only when this manager actually took over the modal flow.
+    /// The caller must keep the existing external-flow lock held in that case;
+    /// RewardManager will release it when the free-sticker sequence completes.
+    /// </summary>
+    public bool TryResumeQueuedGameplayModalFromExistingFlowLock()
+    {
+        if (gameplayFreeStickerRequests.Count <= 0 ||
+            RewardPhaseActive)
+        {
+            return false;
+        }
+
+
+        BeginGameplayFreeStickerSequence(
+            false
+        );
+
+
+        return
+            GameplayFreeStickerActive;
+    }
+
+
+    /// <summary>
+    /// Starts queued gameplay free-sticker rewards.
+    ///
+    /// acquireExternalFlowLock is true for the normal post-spin entry point.
+    /// It is false only when another shared Reward-Panel modal (currently
+    /// Infestation) transfers its already-held RoundManager flow lock directly
+    /// to this sequence.
+    /// </summary>
+    private void BeginGameplayFreeStickerSequence(
+        bool acquireExternalFlowLock)
     {
         if (gameplayFreeStickerRequests.Count <= 0)
             return;
@@ -684,10 +745,15 @@ public class RewardManager : MonoBehaviour
 
         /*
          * The gameplay free-sticker modal must finish before Debt / Clean Row /
-         * normal Rewards are allowed to continue on a final spin. RoundManager
-         * already owns the generic external-flow lock for exactly this case.
+         * normal Rewards are allowed to continue on a final spin.
+         *
+         * Normally we acquire the generic flow lock here. During an Infestation
+         * handoff, Infestation already owns that same lock and deliberately does
+         * not release it; this sequence becomes responsible for releasing it
+         * when the last queued free sticker closes.
          */
-        if (roundManager != null)
+        if (acquireExternalFlowLock &&
+            roundManager != null)
         {
             roundManager.SetExternalSpinBlock(
                 true
