@@ -1449,6 +1449,40 @@ public class RouletteController : MonoBehaviour
             }
 
 
+            /*
+             * Manual brake Blood is also a spin cost.
+             *
+             * An invalid spin consumes no token and resolves no gameplay, so any
+             * Blood spent braking that physical spin must be returned just like
+             * the refundable Power Spin launch cost above.
+             *
+             * brakeBloodSpentThisSpin records the exact amount actually consumed
+             * during THIS spin, so we refund that exact value rather than trying
+             * to reconstruct it from brake duration / authored cost settings.
+             */
+            if (brakeBloodSpentThisSpin > 0 &&
+                BloodManager.Instance != null)
+            {
+                BloodManager.Instance
+                    .HealBlood(
+                        brakeBloodSpentThisSpin
+                    );
+
+
+                if (GameLogManager.Instance != null)
+                {
+                    GameLogManager.Instance
+                        .AddGameplayLine(
+                            "Manual brake refunded (invalid spin): " +
+                            GameLogManager.Instance
+                                .BloodText(
+                                    $"+{brakeBloodSpentThisSpin} Blood"
+                                )
+                        );
+                }
+            }
+
+
             BloodManager.Instance?
                 .EndSpinDamageProtectionWindow();
 
