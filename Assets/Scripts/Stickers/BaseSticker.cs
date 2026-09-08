@@ -577,6 +577,15 @@ public class BaseSticker : MonoBehaviour
                 (Vector3)mouseWorld +
                 offset;
 
+            /*
+             * Rotation is part of the sticker drag itself.
+             *
+             * InputsManager owns only the global bindings / input state;
+             * BaseSticker remains responsible for deciding what those inputs
+             * mean while THIS sticker is being dragged.
+             */
+            HandleDragRotationInput();
+
             // ---------------------------------------------------
             // MOUSE UP
             // ---------------------------------------------------
@@ -617,6 +626,92 @@ public class BaseSticker : MonoBehaviour
                 }
             }
         }
+
+#endif
+    }
+
+    // ===========================================================
+    // DRAG ROTATION INPUT
+    // ===========================================================
+
+    /// <summary>
+    /// Applies global sticker-rotation controls while this sticker is being
+    /// dragged. Input bindings live in InputsManager so other gameplay systems
+    /// can eventually share the same central input layer without BaseSticker
+    /// knowing concrete keys or devices.
+    /// </summary>
+    private void HandleDragRotationInput()
+    {
+#if UNITY_EDITOR || UNITY_STANDALONE
+
+        if (!isDragging ||
+            stickerRoot == null ||
+            InputsManager.Instance == null)
+        {
+            return;
+        }
+
+        InputsManager inputs =
+            InputsManager.Instance;
+
+        if (!inputs.EnableStickerDragRotation)
+            return;
+
+        float rotationDelta =
+            0f;
+
+        // -------------------------------------------------------
+        // KEYBOARD / DIGITAL INPUT
+        // -------------------------------------------------------
+
+        if (inputs.StickerRotateLeftHeld)
+        {
+            rotationDelta +=
+                inputs.StickerKeyboardRotationSpeed *
+                Time.deltaTime;
+        }
+
+        if (inputs.StickerRotateRightHeld)
+        {
+            rotationDelta -=
+                inputs.StickerKeyboardRotationSpeed *
+                Time.deltaTime;
+        }
+
+        // -------------------------------------------------------
+        // MOUSE WHEEL
+        // -------------------------------------------------------
+
+        float wheelDelta =
+            inputs.StickerMouseWheelDelta;
+
+        if (!Mathf.Approximately(
+                wheelDelta,
+                0f))
+        {
+            rotationDelta +=
+                wheelDelta *
+                inputs.StickerMouseWheelDegreesPerUnit;
+        }
+
+        if (Mathf.Approximately(
+                rotationDelta,
+                0f))
+        {
+            return;
+        }
+
+        /*
+         * Rotate the complete physical sticker root so SpriteRenderer and
+         * Collider2D stay perfectly aligned for placement validation.
+         *
+         * This intentionally mirrors the old Rotator behaviour.
+         */
+        stickerRoot.Rotate(
+            0f,
+            0f,
+            rotationDelta
+        );
 
 #endif
     }
