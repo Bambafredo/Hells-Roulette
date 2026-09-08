@@ -78,12 +78,28 @@ public class InputsManager : MonoBehaviour
     // MAGNIFIER
     // ===========================================================
 
+    public enum MagnifierInputMode
+    {
+        Toggle,
+        Hold
+    }
+
+
     [Header("Magnifier")]
 
     [Tooltip(
-        "Input action used to toggle the sticker-drag magnifier on / off. " +
-        "Mouse1 is the right mouse button. Keeping this binding here lets " +
-        "gameplay code remain device-agnostic for future gamepad / Steam Deck support."
+        "How the magnifier binding behaves. Toggle: each press switches the lens " +
+        "ON / OFF. Hold: the lens is active only while the binding is held."
+    )]
+    [SerializeField]
+    private MagnifierInputMode magnifierInputMode =
+        MagnifierInputMode.Toggle;
+
+
+    [Tooltip(
+        "Input action used by the magnifier. Mouse1 is the right mouse button. " +
+        "Keeping this binding here lets gameplay code remain device-agnostic for " +
+        "future gamepad / Steam Deck support."
     )]
     [SerializeField]
     private KeyCode magnifierToggleKey =
@@ -180,10 +196,13 @@ public class InputsManager : MonoBehaviour
     }
 
 
+    public MagnifierInputMode CurrentMagnifierInputMode =>
+        magnifierInputMode;
+
+
     /// <summary>
-    /// True only on the frame the authored magnifier-toggle binding is pressed.
-    /// MagnifierManager owns the persistent ON / OFF state; InputsManager only
-    /// reports the player action.
+    /// True only on the frame the authored magnifier binding is pressed.
+    /// Toggle-mode consumers use this to flip their persistent feature state.
     /// </summary>
     public bool MagnifierTogglePressed
     {
@@ -192,6 +211,26 @@ public class InputsManager : MonoBehaviour
 #if UNITY_EDITOR || UNITY_STANDALONE
             return
                 Input.GetKeyDown(
+                    magnifierToggleKey
+                );
+#else
+            return false;
+#endif
+        }
+    }
+
+
+    /// <summary>
+    /// True for as long as the authored magnifier binding is physically held.
+    /// Hold-mode consumers use this directly as their active state.
+    /// </summary>
+    public bool MagnifierHeld
+    {
+        get
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            return
+                Input.GetKey(
                     magnifierToggleKey
                 );
 #else

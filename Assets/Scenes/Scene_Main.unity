@@ -6697,6 +6697,8 @@ MonoBehaviour:
   enableStickerMouseWheelRotation: 1
   stickerMouseWheelDegreesPerUnit: 15
   invertStickerMouseWheel: 0
+  magnifierInputMode: 1
+  magnifierToggleKey: 324
 --- !u!114 &996127472
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6716,6 +6718,8 @@ MonoBehaviour:
   magnifierCamera: {fileID: 1368236896}
   sourceCamera: {fileID: 519420031}
   enableStickerDragMagnifier: 1
+  allowMagnifierOutsideStickerDrag: 1
+  startMagnifierEnabled: 0
   zoom: 2
   lensDiameter: 600
   cursorOffsetPixels: {x: 150, y: 350}

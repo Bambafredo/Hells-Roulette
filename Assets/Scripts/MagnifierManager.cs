@@ -4,14 +4,15 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Presentation-only magnifier shown while a BaseSticker is manually dragged.
+/// Presentation-only gameplay magnifier controlled by InputsManager.
 ///
 /// Responsibilities:
 /// - listen to BaseSticker's generic drag lifecycle events;
+/// - optionally remain available even when no sticker is being dragged;
 /// - enable / disable one secondary camera;
 /// - render that camera into a square RenderTexture;
 /// - display the RenderTexture through a CIRCULAR UI Mask;
-/// - follow the pointer with an authored screen-space offset;
+/// - follow the pointer with zero offset normally and an authored offset during drag;
 /// - keep the lens inside the Canvas when requested.
 ///
 /// This class NEVER participates in sticker placement, collision, drag input,
@@ -81,7 +82,7 @@ public class MagnifierManager : MonoBehaviour
     [Header("Activation")]
 
     [Tooltip(
-        "Master switch for the sticker-drag magnifier."
+        "Master switch for the magnifier feature."
     )]
     [SerializeField]
     private bool enableStickerDragMagnifier =
@@ -89,8 +90,18 @@ public class MagnifierManager : MonoBehaviour
 
 
     [Tooltip(
-        "Player toggle state when the scene starts. OFF by default: right click " +
-        "toggles the magnifier on, and the choice persists across sticker drags."
+        "When enabled, the player can use the magnifier even when no sticker is " +
+        "being dragged. Outside drag the lens is centered directly on the pointer " +
+        "with zero authored offset, which makes small stickers easier to target."
+    )]
+    [SerializeField]
+    private bool allowMagnifierOutsideStickerDrag =
+        true;
+
+
+    [Tooltip(
+        "Initial player state for Toggle input mode. OFF by default. In Hold mode " +
+        "the current physical button state always decides whether the lens is active."
     )]
     [SerializeField]
     private bool startMagnifierEnabled =
@@ -124,8 +135,8 @@ public class MagnifierManager : MonoBehaviour
 
 
     [Tooltip(
-        "Screen-space offset from the pointer in pixels. Positive X = right; " +
-        "positive Y = up."
+        "Screen-space offset used WHILE DRAGGING a sticker. Positive X = right; " +
+        "positive Y = up. Outside drag the magnifier always uses zero authored offset."
     )]
     [SerializeField]
     private Vector2 cursorOffsetPixels =
@@ -421,20 +432,68 @@ public class MagnifierManager : MonoBehaviour
         }
 
 
-        if (InputsManager.Instance == null ||
-            !InputsManager.Instance.MagnifierTogglePressed)
+        UpdatePlayerMagnifierStateFromInput();
+        RefreshMagnifierVisibility(false);
+    }
+
+
+    /// <summary>
+    /// Converts the global magnifier binding into this feature's current active
+    /// state. InputsManager owns only the binding / input mode; this manager owns
+    /// the resulting lens state.
+    /// </summary>
+    private void UpdatePlayerMagnifierStateFromInput()
+    {
+        if (InputsManager.Instance == null)
+            return;
+
+
+        if (InputsManager.Instance.CurrentMagnifierInputMode ==
+            InputsManager.MagnifierInputMode.Hold)
         {
+            /*
+             * Hold mode has no persistent toggle state: the lens is active only
+             * for as long as the authored binding is physically held.
+             */
+            magnifierEnabledByPlayer =
+                InputsManager.Instance.MagnifierHeld;
+
             return;
         }
 
 
-        magnifierEnabledByPlayer =
-            !magnifierEnabledByPlayer;
+        /*
+         * Toggle mode preserves the previous behaviour: every press flips the
+         * player's persistent preference for this run / scene.
+         */
+        if (InputsManager.Instance.MagnifierTogglePressed)
+        {
+            magnifierEnabledByPlayer =
+                !magnifierEnabledByPlayer;
+        }
+    }
 
 
+    /// <summary>
+    /// Re-evaluates whether the lens should currently exist on screen.
+    ///
+    /// When use outside drag is disabled, the old drag-only behaviour is kept.
+    /// When it is enabled, the same player input can expose the lens anywhere.
+    /// </summary>
+    private void RefreshMagnifierVisibility(
+        bool refreshPresentationWhenVisible)
+    {
         bool shouldBeVisible =
+            enableStickerDragMagnifier &&
             magnifierEnabledByPlayer &&
-            activeDraggedSticker != null;
+            (
+                allowMagnifierOutsideStickerDrag ||
+                activeDraggedSticker != null
+            );
+
+
+        bool visibilityChanged =
+            magnifierVisible != shouldBeVisible;
 
 
         SetMagnifierVisible(
@@ -442,27 +501,45 @@ public class MagnifierManager : MonoBehaviour
         );
 
 
-        if (!shouldBeVisible)
+        if (!shouldBeVisible ||
+            (!visibilityChanged &&
+             !refreshPresentationWhenVisible))
+        {
             return;
+        }
 
 
-        /*
-         * Right click can enable the lens in the middle of an existing drag.
-         * Prime its camera / UI immediately so it appears in the correct place
-         * on the same frame instead of waiting for the next LateUpdate.
-         */
+        PrimeMagnifierPresentation();
+    }
+
+
+    /// <summary>
+    /// Positions / configures an already-visible lens immediately. This is used
+    /// both when input first reveals it and when drag starts / ends, because the
+    /// UI offset changes at that exact transition.
+    /// </summary>
+    private void PrimeMagnifierPresentation()
+    {
         ResolveReferences();
+
+
+        if (sourceCamera == null ||
+            magnifierCamera == null ||
+            magnifierRoot == null)
+        {
+            return;
+        }
+
+
         SyncMagnifierCameraSettings();
         UpdateLensBackdropVisual();
         UpdateMagnifierCamera();
         UpdateMagnifierUIPosition();
     }
 
-
     private void LateUpdate()
     {
-        if (!magnifierVisible ||
-            activeDraggedSticker == null)
+        if (!magnifierVisible)
         {
             return;
         }
@@ -580,42 +657,27 @@ public class MagnifierManager : MonoBehaviour
 
 
         /*
-         * Track the drag even while the player toggle is OFF.
-         * This is what allows right click to enable the magnifier immediately
-         * in the middle of an already-running sticker drag.
+         * The drag state matters even if the lens is currently hidden: it decides
+         * whether the drag offset is used and whether drag-only configurations are
+         * allowed to show the lens.
          */
         activeDraggedSticker =
             sticker;
 
 
-        if (!magnifierEnabledByPlayer)
-        {
-            SetMagnifierVisible(false);
-            return;
-        }
-
-
-        ResolveReferences();
-        SyncMagnifierCameraSettings();
-        SetMagnifierVisible(true);
-
-
         /*
-         * Position immediately on the first drag frame instead of waiting for
-         * LateUpdate. This avoids a one-frame flash at the authored UI position.
+         * If the lens was already visible before the drag (free magnifier mode),
+         * keep it visible and immediately move it to the authored drag offset.
          */
-        UpdateLensBackdropVisual();
-        UpdateMagnifierCamera();
-        UpdateMagnifierUIPosition();
+        RefreshMagnifierVisibility(true);
     }
-
 
     private void HandleStickerDragEnded(
         BaseSticker sticker)
     {
         /*
-         * Only the sticker that currently owns the lens is allowed to close it.
-         * This is defensive; ordinary gameplay only has one manual drag at once.
+         * Only the sticker that currently owns the drag state is allowed to end
+         * it. This remains defensive even though normal gameplay has one drag.
          */
         if (activeDraggedSticker != null &&
             sticker != null &&
@@ -628,7 +690,12 @@ public class MagnifierManager : MonoBehaviour
         activeDraggedSticker =
             null;
 
-        SetMagnifierVisible(false);
+
+        /*
+         * Free magnifier mode stays visible and snaps back to zero offset.
+         * Drag-only mode hides here exactly as before.
+         */
+        RefreshMagnifierVisibility(true);
     }
 
     // =========================================================
@@ -1021,9 +1088,15 @@ public class MagnifierManager : MonoBehaviour
             return;
 
 
+        Vector2 currentOffsetPixels =
+            activeDraggedSticker != null
+                ? cursorOffsetPixels
+                : Vector2.zero;
+
+
         Vector2 desiredScreenPoint =
             (Vector2)Input.mousePosition +
-            cursorOffsetPixels;
+            currentOffsetPixels;
 
 
         Camera uiCamera =
