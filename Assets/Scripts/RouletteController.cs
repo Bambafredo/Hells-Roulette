@@ -2257,74 +2257,25 @@ public class RouletteController : MonoBehaviour
     /// <summary>
     /// Stable generic ordering for sticker resolution.
     ///
-    /// RouletteController understands only "priority", never specific sticker
-    /// classes. Equal-priority stickers preserve their hierarchy discovery
-    /// order.
+    /// Ordering rules:
+    /// 1. Existing generic SpinResolutionPriority still wins first.
+    /// 2. Equal-priority stickers resolve INSIDE -> OUTSIDE, measured from the
+    ///    wheel centre to the closest point on each sticker's real Collider2D.
+    /// 3. Exact geometric ties use a deterministic instance-id fallback.
+    ///
+    /// Keeping the actual comparison in StickerResolutionOrderUtility means the
+    /// gameplay resolver and the optional visual order overlay share one source
+    /// of truth.
     /// </summary>
     private List<BaseSticker> BuildStableResolutionOrder(
         BaseSticker[] stickers)
     {
-        List<BaseSticker> ordered =
-            new List<BaseSticker>();
-
-
-        if (stickers == null)
-            return ordered;
-
-
-        foreach (BaseSticker sticker in stickers)
-        {
-            if (sticker == null)
-                continue;
-
-
-            int priority =
-                sticker.effect != null
-                    ? sticker.effect
-                        .SpinResolutionPriority
-                    : 0;
-
-
-            int insertIndex =
-                ordered.Count;
-
-
-            for (int i = 0;
-                 i < ordered.Count;
-                 i++)
-            {
-                BaseSticker existing =
-                    ordered[i];
-
-
-                int existingPriority =
-                    existing != null &&
-                    existing.effect != null
-                        ? existing.effect
-                            .SpinResolutionPriority
-                        : 0;
-
-
-                if (priority <
-                    existingPriority)
-                {
-                    insertIndex =
-                        i;
-
-                    break;
-                }
-            }
-
-
-            ordered.Insert(
-                insertIndex,
-                sticker
-            );
-        }
-
-
         return
-            ordered;
+            StickerResolutionOrderUtility
+                .BuildStableResolutionOrder(
+                    stickers,
+                    wheel
+                );
     }
 
 

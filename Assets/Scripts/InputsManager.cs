@@ -107,6 +107,22 @@ public class InputsManager : MonoBehaviour
 
 
     // ===========================================================
+    // RESOLUTION ORDER VIEW
+    // ===========================================================
+
+    [Header("Resolution Order View")]
+
+    [Tooltip(
+        "Shortcut used to toggle the sticker resolution-order overlay. " +
+        "Tab is the default, but the binding can be changed here and later " +
+        "mapped to gamepad / Steam Deck input behind this manager."
+    )]
+    [SerializeField]
+    private KeyCode resolutionOrderToggleKey =
+        KeyCode.Tab;
+
+
+    // ===========================================================
     // PUBLIC ACTION STATE
     // ===========================================================
 
@@ -232,6 +248,27 @@ public class InputsManager : MonoBehaviour
             return
                 Input.GetKey(
                     magnifierToggleKey
+                );
+#else
+            return false;
+#endif
+        }
+    }
+
+
+    /// <summary>
+    /// True only on the frame the authored Resolution Order binding is pressed.
+    /// ResolutionOrderViewManager owns the persistent ON / OFF state; this
+    /// manager only exposes the player action.
+    /// </summary>
+    public bool ResolutionOrderTogglePressed
+    {
+        get
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            return
+                Input.GetKeyDown(
+                    resolutionOrderToggleKey
                 );
 #else
             return false;

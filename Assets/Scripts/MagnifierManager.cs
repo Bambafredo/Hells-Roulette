@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using System;
 
 /// <summary>
 /// Presentation-only gameplay magnifier controlled by InputsManager.
@@ -22,6 +23,19 @@ using UnityEngine.UI;
 public class MagnifierManager : MonoBehaviour
 {
     public static MagnifierManager Instance;
+
+    /// <summary>
+    /// Presentation hook fired immediately before the dedicated magnifier camera
+    /// renders its RenderTexture. Other presentation overlays can temporarily
+    /// hide themselves from the magnifier capture without changing gameplay state.
+    /// </summary>
+    public static event Action OnBeforeMagnifierCameraRender;
+
+    /// <summary>
+    /// Paired hook fired immediately after the dedicated magnifier camera render.
+    /// Subscribers should restore any presentation they hid in the before hook.
+    /// </summary>
+    public static event Action OnAfterMagnifierCameraRender;
 
     // =========================================================
     // REFERENCES
@@ -1063,7 +1077,26 @@ public class MagnifierManager : MonoBehaviour
         }
 
 
-        magnifierCamera.Render();
+        /*
+         * Give presentation-only overlays a tiny capture window in which they can
+         * hide themselves from THIS camera only. They are restored immediately
+         * afterwards, before the normal gameplay Canvas is presented.
+         *
+         * This is deliberately generic: MagnifierManager does not know what a
+         * resolution-order label (or any future overlay) actually is.
+         */
+        try
+        {
+            OnBeforeMagnifierCameraRender?
+                .Invoke();
+
+            magnifierCamera.Render();
+        }
+        finally
+        {
+            OnAfterMagnifierCameraRender?
+                .Invoke();
+        }
     }
 
 
