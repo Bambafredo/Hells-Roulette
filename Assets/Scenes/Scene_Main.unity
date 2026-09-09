@@ -6902,7 +6902,11 @@ MonoBehaviour:
   hideDuringSpin: 1
   previewDraggedSticker: 1
   utilityButtonCollider: {fileID: 0}
+  utilityCanvasButton: {fileID: 1039774774}
   utilityButtonActiveIndicator: {fileID: 0}
+  utilityButtonColorTarget: {fileID: 0}
+  utilityButtonOffColor: {r: 1, g: 1, b: 1, a: 1}
+  utilityButtonOnColor: {r: 0.55, g: 1, b: 0.55, a: 1}
   labelFont: {fileID: 0}
   labelFontSize: 60
   labelColor: {r: 1, g: 1, b: 1, a: 1}

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 
 /// <summary>
@@ -111,10 +112,42 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
 
     [Tooltip(
+        "Normal Canvas Button used for the Order toggle. Assign the Button component " +
+        "from ResolutionOrder_Button here. Leave empty only if you are using the " +
+        "legacy world-space collider button."
+    )]
+    [SerializeField]
+    private Button utilityCanvasButton;
+
+
+    [Tooltip(
         "Optional child / icon that is active only while the order view itself is ON."
     )]
     [SerializeField]
     private GameObject utilityButtonActiveIndicator;
+
+
+    [Tooltip(
+        "Optional UI Graphic used as the button's colour feedback. " +
+        "For a normal Canvas Button, assign its Image / target graphic here."
+    )]
+    [SerializeField]
+    private Graphic utilityButtonColorTarget;
+
+
+    [SerializeField]
+    private Color utilityButtonOffColor =
+        Color.white;
+
+
+    [SerializeField]
+    private Color utilityButtonOnColor =
+        new Color(
+            0.55f,
+            1f,
+            0.55f,
+            1f
+        );
 
 
     // =========================================================
@@ -147,13 +180,14 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
 
     [Tooltip(
-        "Normalized outline thickness. 0 = none, 1 = strong readable outline. " +
-        "The manager maps this to a safe TMP SDF outline internally."
+        "Visual outline strength. 0 = none, 1 = thick/high-contrast. " +
+        "Implemented with dedicated black TMP copies around the white glyph, so " +
+        "it does not depend on TMP material-outline state."
     )]
     [Range(0f, 1f)]
     [SerializeField]
     private float labelOutlineWidth =
-        0.28f;
+        0.65f;
 
 
     [Tooltip(
@@ -182,17 +216,39 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
     private BaseSticker activeDraggedSticker;
 
-    /*
-     * Runtime-only capture state used by the magnifier presentation hooks.
-     * The order labels are hidden only for the secondary-camera Render() call,
-     * then restored immediately for the normal gameplay view.
-     */
-    private bool labelsWereActiveBeforeMagnifierCapture =
-        false;
+    private static readonly Vector2[] OutlineDirections =
+    {
+        new Vector2(-1f,  0f),
+        new Vector2( 1f,  0f),
+        new Vector2( 0f, -1f),
+        new Vector2( 0f,  1f),
+        new Vector2(-0.7071f, -0.7071f),
+        new Vector2(-0.7071f,  0.7071f),
+        new Vector2( 0.7071f, -0.7071f),
+        new Vector2( 0.7071f,  0.7071f)
+    };
 
-    private readonly List<TextMeshProUGUI>
+
+    /*
+     * Each order number uses one front TMP glyph plus eight black TMP copies
+     * around it. This creates a guaranteed 360-degree outline without depending
+     * on TMP material outline state or Unity UI mesh effects.
+     */
+    private sealed class OrderLabelVisual
+    {
+        public RectTransform root;
+        public TextMeshProUGUI front;
+
+        public readonly List<TextMeshProUGUI>
+            outlineCopies =
+                new List<TextMeshProUGUI>();
+    }
+
+
+    private readonly List<OrderLabelVisual>
         labelPool =
-            new List<TextMeshProUGUI>();
+            new List<OrderLabelVisual>();
+
 
     private readonly List<BaseSticker>
         workingSegmentStickers =
@@ -248,6 +304,7 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
         ResolveReferences();
         EnsureLabelsRoot();
+        EnsureLabelsBehindMagnifier();
 
 
         viewEnabled =
@@ -257,12 +314,7 @@ public class ResolutionOrderViewManager : MonoBehaviour
         RefreshRootVisibility();
 
 
-        if (utilityButtonActiveIndicator != null)
-        {
-            utilityButtonActiveIndicator.SetActive(
-                viewEnabled
-            );
-        }
+        RefreshUtilityButtonVisual();
     }
 
 
@@ -273,12 +325,6 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
         BaseSticker.OnAnyStickerDragEnded +=
             HandleStickerDragEnded;
-
-        MagnifierManager.OnBeforeMagnifierCameraRender +=
-            HandleBeforeMagnifierCameraRender;
-
-        MagnifierManager.OnAfterMagnifierCameraRender +=
-            HandleAfterMagnifierCameraRender;
     }
 
 
@@ -290,18 +336,9 @@ public class ResolutionOrderViewManager : MonoBehaviour
         BaseSticker.OnAnyStickerDragEnded -=
             HandleStickerDragEnded;
 
-        MagnifierManager.OnBeforeMagnifierCameraRender -=
-            HandleBeforeMagnifierCameraRender;
-
-        MagnifierManager.OnAfterMagnifierCameraRender -=
-            HandleAfterMagnifierCameraRender;
-
 
         activeDraggedSticker =
             null;
-
-        labelsWereActiveBeforeMagnifierCapture =
-            false;
 
 
         HideAllLabels();
@@ -339,6 +376,7 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
         ResolveReferences();
         EnsureLabelsRoot();
+        EnsureLabelsBehindMagnifier();
 
 
         if (targetCanvas == null ||
@@ -403,59 +441,6 @@ public class ResolutionOrderViewManager : MonoBehaviour
         activeDraggedSticker =
             null;
     }
-
-    // =========================================================
-    // MAGNIFIER CAPTURE EXCLUSION
-    // =========================================================
-
-    private void HandleBeforeMagnifierCameraRender()
-    {
-        if (labelsRoot == null)
-        {
-            labelsWereActiveBeforeMagnifierCapture =
-                false;
-
-            return;
-        }
-
-
-        labelsWereActiveBeforeMagnifierCapture =
-            labelsRoot.gameObject.activeSelf;
-
-
-        if (labelsWereActiveBeforeMagnifierCapture)
-        {
-            /*
-             * Hide ONLY for MagnifierCamera.Render(). MagnifierManager fires the
-             * matching After event synchronously immediately after that render,
-             * so the player still sees the labels in the normal gameplay view.
-             *
-             * This is more reliable than layer tricks because the order labels
-             * are runtime Canvas graphics and the project can use different
-             * Canvas render modes / camera culling masks.
-             */
-            labelsRoot.gameObject.SetActive(
-                false
-            );
-        }
-    }
-
-
-    private void HandleAfterMagnifierCameraRender()
-    {
-        if (labelsRoot != null &&
-            labelsWereActiveBeforeMagnifierCapture)
-        {
-            labelsRoot.gameObject.SetActive(
-                true
-            );
-        }
-
-
-        labelsWereActiveBeforeMagnifierCapture =
-            false;
-    }
-
 
     // =========================================================
     // OPTIONAL WORLD-SPACE UTILITY BUTTON
@@ -528,12 +513,7 @@ public class ResolutionOrderViewManager : MonoBehaviour
         RefreshRootVisibility();
 
 
-        if (utilityButtonActiveIndicator != null)
-        {
-            utilityButtonActiveIndicator.SetActive(
-                viewEnabled
-            );
-        }
+        RefreshUtilityButtonVisual();
 
 
         if (!enabled)
@@ -640,7 +620,10 @@ public class ResolutionOrderViewManager : MonoBehaviour
     private void EnsureLabelsRoot()
     {
         if (labelsRoot != null)
+        {
+            EnsureLabelsBehindMagnifier();
             return;
+        }
 
 
         if (targetCanvas == null)
@@ -667,7 +650,55 @@ public class ResolutionOrderViewManager : MonoBehaviour
         StretchRectTransform(
             labelsRoot
         );
+
+        EnsureLabelsBehindMagnifier();
     }
+
+
+    /// <summary>
+    /// Screen-space Canvas graphics are drawn by sibling order, not camera layers.
+    ///
+    /// The runtime LabelsRoot is created after the authored MagnifierRoot, so it
+    /// was being drawn ON TOP of the lens. That is why the numbers looked like
+    /// part of the magnifier even when UI layers were excluded from the camera.
+    ///
+    /// Keep the labels below MagnifierRoot in the Canvas hierarchy.
+    /// </summary>
+    private void EnsureLabelsBehindMagnifier()
+    {
+        if (labelsRoot == null ||
+            MagnifierManager.Instance == null)
+        {
+            return;
+        }
+
+
+        RectTransform magnifierRoot =
+            MagnifierManager.Instance.MagnifierRoot;
+
+
+        if (magnifierRoot == null ||
+            magnifierRoot.parent != labelsRoot.parent)
+        {
+            return;
+        }
+
+
+        int magnifierIndex =
+            magnifierRoot.GetSiblingIndex();
+
+        int labelsIndex =
+            labelsRoot.GetSiblingIndex();
+
+
+        if (labelsIndex > magnifierIndex)
+        {
+            labelsRoot.SetSiblingIndex(
+                magnifierIndex
+            );
+        }
+    }
+
 
     // =========================================================
     // ORDER CALCULATION / DISPLAY
@@ -771,7 +802,7 @@ public class ResolutionOrderViewManager : MonoBehaviour
                     continue;
 
 
-                TextMeshProUGUI label =
+                OrderLabelVisual label =
                     GetLabel(
                         usedLabels
                     );
@@ -793,10 +824,13 @@ public class ResolutionOrderViewManager : MonoBehaviour
              i < labelPool.Count;
              i++)
         {
-            if (labelPool[i] != null)
+            OrderLabelVisual visual =
+                labelPool[i];
+
+            if (visual != null &&
+                visual.root != null)
             {
-                labelPool[i]
-                    .gameObject
+                visual.root.gameObject
                     .SetActive(false);
             }
         }
@@ -826,50 +860,76 @@ public class ResolutionOrderViewManager : MonoBehaviour
     }
 
 
-    private TextMeshProUGUI GetLabel(
+    private OrderLabelVisual GetLabel(
         int index)
     {
         while (labelPool.Count <=
                index)
         {
-            GameObject labelObject =
+            GameObject rootObject =
                 new GameObject(
                     $"ResolutionOrder_{labelPool.Count + 1}",
-                    typeof(RectTransform),
-                    typeof(CanvasRenderer),
-                    typeof(TextMeshProUGUI)
+                    typeof(RectTransform)
                 );
 
 
-            labelObject.transform.SetParent(
+            rootObject.transform.SetParent(
                 labelsRoot,
                 false
             );
 
 
-            TextMeshProUGUI label =
-                labelObject
-                    .GetComponent<TextMeshProUGUI>();
+            RectTransform root =
+                rootObject.GetComponent<RectTransform>();
 
 
-            label.raycastTarget =
-                false;
+            OrderLabelVisual visual =
+                new OrderLabelVisual
+                {
+                    root = root
+                };
+
+
+            /*
+             * Create the eight black copies first so the white number is rendered
+             * above them.
+             */
+            for (int i = 0;
+                 i < 8;
+                 i++)
+            {
+                visual.outlineCopies.Add(
+                    CreateLabelText(
+                        root,
+                        $"Outline_{i}"
+                    )
+                );
+            }
+
+
+            visual.front =
+                CreateLabelText(
+                    root,
+                    "Number"
+                );
 
 
             labelPool.Add(
-                label
+                visual
             );
         }
 
 
-        TextMeshProUGUI result =
+        OrderLabelVisual result =
             labelPool[index];
 
 
         if (result != null &&
-            !result.gameObject.activeSelf)
+            result.root != null &&
+            !result.root.gameObject.activeSelf)
         {
-            result.gameObject.SetActive(true);
+            result.root.gameObject
+                .SetActive(true);
         }
 
 
@@ -877,28 +937,182 @@ public class ResolutionOrderViewManager : MonoBehaviour
     }
 
 
+    private TextMeshProUGUI CreateLabelText(
+        RectTransform parent,
+        string objectName)
+    {
+        if (parent == null)
+            return null;
+
+
+        GameObject textObject =
+            new GameObject(
+                objectName,
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(TextMeshProUGUI)
+            );
+
+
+        textObject.transform.SetParent(
+            parent,
+            false
+        );
+
+
+        TextMeshProUGUI text =
+            textObject.GetComponent<TextMeshProUGUI>();
+
+
+        if (text != null)
+        {
+            text.raycastTarget =
+                false;
+
+            text.enableAutoSizing =
+                false;
+        }
+
+
+        return text;
+    }
+
+
     private void ConfigureLabel(
-        TextMeshProUGUI label,
+        OrderLabelVisual visual,
         int order,
         BaseSticker sticker)
     {
-        if (label == null ||
+        if (visual == null ||
+            visual.root == null ||
+            visual.front == null ||
             sticker == null)
         {
             return;
         }
 
 
-        RectTransform labelRect =
-            label.rectTransform;
-
-
-        labelRect.SetSizeWithCurrentAnchors(
+        visual.root.SetSizeWithCurrentAnchors(
             RectTransform.Axis.Horizontal,
             labelSize
         );
 
-        labelRect.SetSizeWithCurrentAnchors(
+        visual.root.SetSizeWithCurrentAnchors(
+            RectTransform.Axis.Vertical,
+            labelSize
+        );
+
+
+        string orderText =
+            order.ToString();
+
+
+        float outlineDistance =
+            Mathf.Lerp(
+                0f,
+                4f,
+                Mathf.Clamp01(
+                    labelOutlineWidth
+                )
+            );
+
+
+        for (int i = 0;
+             i < visual.outlineCopies.Count;
+             i++)
+        {
+            TextMeshProUGUI outline =
+                visual.outlineCopies[i];
+
+            if (outline == null)
+                continue;
+
+
+            bool showOutline =
+                outlineDistance >
+                0.001f;
+
+
+            outline.gameObject.SetActive(
+                showOutline
+            );
+
+
+            if (!showOutline)
+                continue;
+
+
+            ConfigureLabelText(
+                outline,
+                orderText,
+                labelOutlineColor
+            );
+
+
+            outline.rectTransform
+                .anchoredPosition =
+                    OutlineDirections[i] *
+                    outlineDistance;
+        }
+
+
+        ConfigureLabelText(
+            visual.front,
+            orderText,
+            labelColor
+        );
+
+
+        visual.front.rectTransform
+            .anchoredPosition =
+                Vector2.zero;
+
+
+        PositionLabelAtMeasuredPoint(
+            visual.root,
+            sticker
+        );
+    }
+
+
+    private void ConfigureLabelText(
+        TextMeshProUGUI text,
+        string content,
+        Color color)
+    {
+        if (text == null)
+            return;
+
+
+        RectTransform rect =
+            text.rectTransform;
+
+
+        rect.anchorMin =
+            new Vector2(
+                0.5f,
+                0.5f
+            );
+
+        rect.anchorMax =
+            new Vector2(
+                0.5f,
+                0.5f
+            );
+
+        rect.pivot =
+            new Vector2(
+                0.5f,
+                0.5f
+            );
+
+
+        rect.SetSizeWithCurrentAnchors(
+            RectTransform.Axis.Horizontal,
+            labelSize
+        );
+
+        rect.SetSizeWithCurrentAnchors(
             RectTransform.Axis.Vertical,
             labelSize
         );
@@ -906,92 +1120,34 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
         if (labelFont != null)
         {
-            label.font =
+            text.font =
                 labelFont;
         }
 
 
-        label.text =
-            order.ToString();
+        text.text =
+            content;
 
-        label.fontSize =
+        text.fontSize =
             labelFontSize;
 
-        label.fontStyle =
+        text.fontStyle =
             FontStyles.Bold;
 
-        label.alignment =
+        text.alignment =
             TextAlignmentOptions.Center;
 
-        label.color =
-            labelColor;
+        text.color =
+            color;
 
         /*
-         * TMP's convenient outline properties can fail to visibly update on
-         * TextMeshProUGUI objects created entirely at runtime, depending on the
-         * font material instance Unity/TMP has resolved for that frame.
-         *
-         * Force an instance material and write the SDF shader properties
-         * directly. The Inspector value remains normalized 0..1; internally it
-         * maps to a conservative 0..0.35 SDF outline so the glyph itself is not
-         * swallowed at the maximum slider value.
+         * The black duplicate glyphs are now the single outline authority.
          */
-        float effectiveOutlineWidth =
-            Mathf.Clamp01(
-                labelOutlineWidth
-            ) * 0.35f;
+        text.outlineWidth =
+            0f;
 
-
-        label.outlineColor =
-            labelOutlineColor;
-
-        label.outlineWidth =
-            effectiveOutlineWidth;
-
-
-        Material labelMaterial =
-            label.fontMaterial;
-
-
-        if (labelMaterial != null)
-        {
-            if (labelMaterial.HasProperty(
-                    ShaderUtilities.ID_OutlineColor))
-            {
-                labelMaterial.SetColor(
-                    ShaderUtilities.ID_OutlineColor,
-                    labelOutlineColor
-                );
-            }
-
-
-            if (labelMaterial.HasProperty(
-                    ShaderUtilities.ID_OutlineWidth))
-            {
-                labelMaterial.SetFloat(
-                    ShaderUtilities.ID_OutlineWidth,
-                    effectiveOutlineWidth
-                );
-            }
-        }
-
-
-        /*
-         * Outline changes alter TMP's required mesh padding. Recalculate it now
-         * so a thick outline is not clipped by the glyph's previous bounds.
-         */
-        label.UpdateMeshPadding();
-        label.SetVerticesDirty();
-
-
-        label.raycastTarget =
+        text.raycastTarget =
             false;
-
-
-        PositionLabelAtMeasuredPoint(
-            labelRect,
-            sticker
-        );
     }
 
 
@@ -1079,15 +1235,100 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
     private void HideAllLabels()
     {
-        foreach (TextMeshProUGUI label in
+        foreach (OrderLabelVisual visual in
                  labelPool)
         {
-            if (label == null)
+            if (visual == null ||
+                visual.root == null)
+            {
                 continue;
+            }
 
 
-            label.gameObject
+            visual.root.gameObject
                 .SetActive(false);
+        }
+    }
+
+
+    // =========================================================
+    // UTILITY BUTTON VISUAL
+    // =========================================================
+
+    private void RefreshUtilityButtonVisual()
+    {
+        if (utilityButtonActiveIndicator != null)
+        {
+            utilityButtonActiveIndicator.SetActive(
+                viewEnabled
+            );
+        }
+
+
+        Color stateColor =
+            viewEnabled
+                ? utilityButtonOnColor
+                : utilityButtonOffColor;
+
+
+        Graphic resolvedTarget =
+            utilityButtonColorTarget;
+
+
+        /*
+         * Normal Canvas Button support.
+         *
+         * Color Tint buttons overwrite targetGraphic.color during hover/press.
+         * Update their ColorBlock AND the current graphic so the state change is
+         * immediate and remains correct after pointer transitions.
+         */
+        if (utilityCanvasButton != null)
+        {
+            if (resolvedTarget == null)
+            {
+                resolvedTarget =
+                    utilityCanvasButton.targetGraphic;
+            }
+
+
+            if (utilityCanvasButton.transition ==
+                Selectable.Transition.ColorTint)
+            {
+                ColorBlock colors =
+                    utilityCanvasButton.colors;
+
+
+                colors.normalColor =
+                    stateColor;
+
+                colors.selectedColor =
+                    stateColor;
+
+                colors.highlightedColor =
+                    Color.Lerp(
+                        stateColor,
+                        Color.white,
+                        0.15f
+                    );
+
+                colors.pressedColor =
+                    Color.Lerp(
+                        stateColor,
+                        Color.black,
+                        0.18f
+                    );
+
+
+                utilityCanvasButton.colors =
+                    colors;
+            }
+        }
+
+
+        if (resolvedTarget != null)
+        {
+            resolvedTarget.color =
+                stateColor;
         }
     }
 
