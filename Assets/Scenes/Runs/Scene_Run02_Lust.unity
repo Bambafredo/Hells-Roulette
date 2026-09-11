@@ -6658,8 +6658,11 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 40ebd899d1dee314db2d55897a6cc1e0, type: 3}
   - {fileID: 577474978131120927, guid: 46a8ce007cc0c36498aae087d3dae18f, type: 3}
   bloodPriceMultiplier: 2
+  enableSharedPricing: 1
+  sharedCoinPriceSequence: 060000000a0000001000000018000000
+  sharedBloodPriceSequence: 080000000e000000160000001e000000
   enableFirstPurchaseDiscount: 1
-  firstPurchaseDiscountTarget: 0
+  firstPurchaseDiscountTarget: 2
   firstPurchaseDiscountPercent: 100
   rerollBloodCost: 5
   enableFibonacciRerollMultiplier: 0

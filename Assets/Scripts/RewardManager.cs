@@ -211,6 +211,51 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
+    // SHARED PRICING
+    // =========================================================
+
+    [Header("Shared Pricing")]
+
+    [Tooltip(
+        "Optional alternative purchase model. When enabled, all stickers use " +
+        "the same authored price sequence instead of their individual SO price. " +
+        "Disable this to preserve the legacy per-sticker pricing used by Run 01."
+    )]
+    public bool enableSharedPricing =
+        false;
+
+
+    [Tooltip(
+        "Coin price sequence used when Shared Pricing is enabled. " +
+        "Each paid purchase advances one step. After the final entry, " +
+        "the last value is reused as the maximum price."
+    )]
+    public int[] sharedCoinPriceSequence =
+        new int[]
+        {
+            5,
+            8,
+            12,
+            15
+        };
+
+
+    [Tooltip(
+        "Blood price sequence used when Shared Pricing is enabled. " +
+        "Each paid purchase advances one step. After the final entry, " +
+        "the last value is reused as the maximum price."
+    )]
+    public int[] sharedBloodPriceSequence =
+        new int[]
+        {
+            3,
+            5,
+            7,
+            9
+        };
+
+
+    // =========================================================
     // FIRST PURCHASE DISCOUNT
     // =========================================================
 
@@ -1674,34 +1719,55 @@ public class RewardManager : MonoBehaviour
         }
 
 
-        int baseCost =
-            Mathf.Max(
-                0,
-                sticker.effect.basePurchaseCost
-            );
+        int price;
 
 
         // -----------------------------------------------------
-        // NORMAL GLOBAL PROGRESSION
+        // OPTIONAL SHARED PRICING
         // -----------------------------------------------------
 
-        int price =
-            baseCost *
-            CurrentPurchaseMultiplier;
-
-
-        // -----------------------------------------------------
-        // BLOOD BALANCE MULTIPLIER
-        // -----------------------------------------------------
-
-        if (CurrentPurchaseCurrency ==
-            PurchaseCurrency.Blood)
+        if (enableSharedPricing)
         {
-            price *=
+            /*
+             * Shared Pricing ignores StickerEffect.basePurchaseCost.
+             *
+             * Every sticker has the same price at a given purchase step.
+             * Coin and Blood use separate authored sequences.
+             *
+             * MultiplierPurchasesThisPhase already tracks purchases that advance
+             * normal price progression. A 100% First Purchase Discount does NOT
+             * advance it, so the first paid sticker still uses sequence[0].
+             */
+            price =
+                GetSharedPurchasePrice();
+        }
+        else
+        {
+            // -------------------------------------------------
+            // LEGACY PER-STICKER PRICING
+            // -------------------------------------------------
+
+            int baseCost =
                 Mathf.Max(
-                    1,
-                    bloodPriceMultiplier
+                    0,
+                    sticker.effect.basePurchaseCost
                 );
+
+
+            price =
+                baseCost *
+                CurrentPurchaseMultiplier;
+
+
+            if (CurrentPurchaseCurrency ==
+                PurchaseCurrency.Blood)
+            {
+                price *=
+                    Mathf.Max(
+                        1,
+                        bloodPriceMultiplier
+                    );
+            }
         }
 
 
@@ -1723,6 +1789,43 @@ public class RewardManager : MonoBehaviour
             Mathf.Max(
                 0,
                 price
+            );
+    }
+
+
+    private int GetSharedPurchasePrice()
+    {
+        int[] sequence =
+            CurrentPurchaseCurrency ==
+                PurchaseCurrency.Blood
+                ? sharedBloodPriceSequence
+                : sharedCoinPriceSequence;
+
+
+        if (sequence == null ||
+            sequence.Length <= 0)
+        {
+            Debug.LogWarning(
+                "[REWARD] Shared Pricing is enabled but the active currency " +
+                "price sequence is empty. Purchase price defaults to 0."
+            );
+
+            return 0;
+        }
+
+
+        int index =
+            Mathf.Clamp(
+                MultiplierPurchasesThisPhase,
+                0,
+                sequence.Length - 1
+            );
+
+
+        return
+            Mathf.Max(
+                0,
+                sequence[index]
             );
     }
 
