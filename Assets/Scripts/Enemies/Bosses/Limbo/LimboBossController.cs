@@ -504,8 +504,35 @@ public class LimboBossController :
             1;
 
 
+        /*
+         * Defeating Limbo is the current Early Alpha victory condition.
+         *
+         * This is deliberately presentation-only / non-terminal:
+         * GameOverManager temporarily blocks normal gameplay, shows the shared
+         * end screen as YOU WIN, and can release that block again when the
+         * player chooses Endless.
+         */
+        GameOverManager endScreen =
+            GameOverManager.Instance != null
+                ? GameOverManager.Instance
+                : FindObjectOfType<GameOverManager>();
+
+
+        if (endScreen != null)
+        {
+            endScreen.RequestVictory();
+        }
+        else
+        {
+            Debug.LogWarning(
+                "[LIMBO] Defeated, but GameOverManager was not found. " +
+                "Victory screen cannot be shown."
+            );
+        }
+
+
         Debug.Log(
-            "[LIMBO] Defeated. Boss Segment Blocks cleared; normal encounter flow resumes."
+            "[LIMBO] Defeated. Boss Segment Blocks cleared; victory screen requested."
         );
     }
 
