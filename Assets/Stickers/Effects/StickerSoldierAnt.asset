@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f5bc07a76931ea4f8efbeb918557c3c, type: 3}
+  m_Name: StickerSoldierAnt
+  m_EditorClassIdentifier: 
+  stickerName: Soldier Ant
+  icon: {fileID: 21300000, guid: ad3aca84c3dc11640ae717eef57f696c, type: 3}
+  basePurchaseCost: 6
+  maxUses: 0
+  consumeUseOnWinningActivation: 1
+  consumeUseOnNonWinningActivation: 0
+  consumeUseOnAlbumActivation: 0
+  dollarReward: 0
+  logDescription: 
+  winningSegmentTooltip: 'Deal {baseDamage} damage to the leftmost enemy +{bonusDamage}
+    for each other sticker in this segment. Current total: {totalDamage}.'
+  losingSegmentTooltip: 
+  albumTooltip: 
+  destroyedTooltip: 
+  baseDamage: 0
+  damagePerOtherSticker: 2
