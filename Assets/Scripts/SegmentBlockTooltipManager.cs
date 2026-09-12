@@ -195,6 +195,20 @@ public class SegmentBlockTooltipManager : MonoBehaviour
     }
 
 
+    /*
+     * A tooltip panel is a separate GameObject, so disabling this manager alone
+     * does not automatically hide a tooltip that was already visible.
+     *
+     * Always clear presentation when the component is disabled. This keeps
+     * Game Over / Victory and any future modal that disables tooltip managers
+     * from leaving stale tooltip UI on screen.
+     */
+    private void OnDisable()
+    {
+        HideTooltip();
+    }
+
+
     private void Update()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
