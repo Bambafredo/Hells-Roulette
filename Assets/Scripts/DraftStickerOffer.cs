@@ -111,8 +111,19 @@ public class DraftStickerOffer : MonoBehaviour
             sticker.currentSegment != null;
 
 
-        // Valid draft destination: Album ONLY.
-        if (placedInAlbum)
+        /*
+         * A draft pick becomes player-owned as soon as BaseSticker has finished
+         * in either of the two normal valid player destinations:
+         *
+         * 1. Album
+         * 2. Roulette
+         *
+         * BaseSticker has already validated the physical placement before this
+         * LateUpdate runs, so DraftStickerOffer only needs to accept the result
+         * instead of imposing an Album-only rule on top of it.
+         */
+        if (placedInAlbum ||
+            placedOnWheel)
         {
             bool accepted =
                 manager.TryClaimOffer(
@@ -127,8 +138,14 @@ public class DraftStickerOffer : MonoBehaviour
                     true;
 
 
+                string destination =
+                    placedOnWheel
+                        ? "Roulette"
+                        : "Album";
+
+
                 Debug.Log(
-                    $"[DRAFT OFFER] '{GetStickerName()}' claimed into Album."
+                    $"[DRAFT OFFER] '{GetStickerName()}' claimed into {destination}."
                 );
 
 
@@ -141,23 +158,6 @@ public class DraftStickerOffer : MonoBehaviour
 
                 return;
             }
-
-
-            ReturnToDraftSlot();
-            return;
-        }
-
-
-        /*
-         * Roulette placement is valid for BaseSticker itself, but not for the
-         * starting draft. Explicitly return it to its draft slot.
-         */
-        if (placedOnWheel)
-        {
-            Debug.Log(
-                $"[DRAFT OFFER] '{GetStickerName()}' must be placed in Album. " +
-                $"Returning to draft slot."
-            );
 
 
             ReturnToDraftSlot();
