@@ -77,12 +77,27 @@ public class StickerWashingMachine : StickerEffect
          *
          * The actual shrinking happens immediately afterwards.
          */
+        /*
+         * If Washing Machine is the only functional sticker in the Album,
+         * there is nothing to shrink, so this activation must NOT consume a use.
+         *
+         * As soon as at least one valid OTHER Album sticker exists, normal
+         * Album-use consumption applies exactly as authored in the SO.
+         */
+        bool shouldConsumeUse =
+            targets.Count > 0
+                ? ShouldConsumeUseOnActivation(
+                    StickerSpinLocation.Album
+                )
+                : false;
+
+
         RegisterActivation(
             owner,
             StickerSpinLocation.Album,
             description,
             0,
-            null
+            shouldConsumeUse
         );
 
 

@@ -15,7 +15,7 @@ MonoBehaviour:
   stickerName: Washing Machine
   icon: {fileID: 21300000, guid: d4fe76e4d26699545af1478994aad3e1, type: 3}
   basePurchaseCost: 12
-  maxUses: 2
+  maxUses: 3
   consumeUseOnWinningActivation: 0
   consumeUseOnNonWinningActivation: 0
   consumeUseOnAlbumActivation: 1
@@ -24,4 +24,5 @@ MonoBehaviour:
   winningSegmentTooltip: 
   losingSegmentTooltip: 
   albumTooltip: Shrink all other Album stickers by {shrinkPercent}%
+  destroyedTooltip: 
   shrinkPercentPerActivation: 10
