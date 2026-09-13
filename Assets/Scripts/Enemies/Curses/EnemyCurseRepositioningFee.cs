@@ -31,6 +31,18 @@ public class EnemyCurseRepositioningFee : EnemyCurse
         CostResource.Blood;
 
 
+    [Header("Safe Phases")]
+
+    [Tooltip(
+        "If enabled, Repositioning Fee is temporarily disabled while the " +
+        "Infestation Panel is open AND the player has no spins remaining. " +
+        "Infestations that happen while spins still remain are still penalized."
+    )]
+    [SerializeField]
+    private bool disableDuringFinalInfestation =
+        true;
+
+
     // =========================================================
     // RUNTIME REGISTRATIONS
     // =========================================================
@@ -110,10 +122,7 @@ public class EnemyCurseRepositioningFee : EnemyCurse
     private bool CanChargeRepositioningFee()
     {
         /*
-         * Reward Phase is a safe setup zone.
-         *
-         * This includes every stage owned by RewardManager while the reward
-         * flow is active, not only the standard shop stage.
+         * Reward Phase is always a safe setup zone.
          */
         if (RewardManager.Instance != null &&
             RewardManager.Instance.RewardPhaseActive)
@@ -123,7 +132,7 @@ public class EnemyCurseRepositioningFee : EnemyCurse
 
 
         /*
-         * Starting Draft is also a safe setup zone.
+         * Starting Draft is always a safe setup zone.
          *
          * DraftManager currently has no singleton, so cache the scene instance
          * instead of changing its architecture just for this Curse.
@@ -137,6 +146,32 @@ public class EnemyCurseRepositioningFee : EnemyCurse
 
         if (draftManager != null &&
             draftManager.DraftActive)
+        {
+            return false;
+        }
+
+
+        /*
+         * OPTIONAL DESIGN EXCEPTION:
+         *
+         * If the Infestation Panel is open after the final spin has already
+         * been consumed, the round is effectively over. With this option
+         * enabled, the player may reorganize stickers from that panel without
+         * continuing to lose Blood / Money.
+         *
+         * IMPORTANT:
+         * - Infestation panel + spins remaining -> Curse stays active.
+         * - No spins remaining but no active Infestation panel -> Curse active.
+         * - Only BOTH conditions together suppress the Curse.
+         *
+         * This is configurable because future panel-hiding / enemy-view
+         * behaviour may make a different design preferable.
+         */
+        if (disableDuringFinalInfestation &&
+            InfestationManager.Instance != null &&
+            InfestationManager.Instance.InfestationActive &&
+            RoundManager.Instance != null &&
+            RoundManager.Instance.TokensRemaining <= 0)
         {
             return false;
         }
@@ -213,11 +248,11 @@ public class EnemyCurseRepositioningFee : EnemyCurse
 
 
         /*
-         * Reward / Draft panels are safe zones.
+         * Safe phase: do not even remember the origin.
          *
-         * Do not even remember the origin here. That guarantees that a drag
-         * performed while either panel is active cannot become a pending Curse
-         * trigger later.
+         * This guarantees that a drag started during Reward, Draft or an
+         * optionally-safe final Infestation cannot become a pending Curse
+         * trigger after that phase closes.
          */
         if (!CanChargeRepositioningFee())
         {
@@ -295,8 +330,8 @@ public class EnemyCurseRepositioningFee : EnemyCurse
 
 
         /*
-         * Check panel state again in case one opened between drag start and
-         * drag end.
+         * Check safe-phase state again in case a panel opened between drag
+         * start and drag end.
          */
         if (!CanChargeRepositioningFee())
             return;
@@ -332,6 +367,7 @@ public class EnemyCurseRepositioningFee : EnemyCurse
          * Album -> Album
          * Any movement during Reward Phase
          * Any movement during Draft
+         * Any movement during a safe final Infestation, when enabled
          */
         if (!movedToDifferentSegment &&
             !movedToAlbum)
@@ -356,8 +392,8 @@ public class EnemyCurseRepositioningFee : EnemyCurse
         bool movedToAlbum)
     {
         /*
-         * Final safety check. The Curse must never charge while a setup panel
-         * owns the flow.
+         * Final safety check. Applying the cost must never sneak through if
+         * gameplay entered one of the safe phases during the drag.
          */
         if (!CanChargeRepositioningFee())
             return;
