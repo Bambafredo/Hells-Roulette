@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2665516105a85364ea5d43be064f8b40, type: 3}
+  m_Name: EnemyAction_Dominate_Infestation
+  m_EditorClassIdentifier: 
+  actionName: Infested domination
+  icon: {fileID: 21300000, guid: b849c663b600c2744abd936b77029654, type: 3}
+  tooltipDescription: 'Marks 3 segments.
+
+    {trigger}, {failure}.'
+  markedSegmentRule: 1
+  failureEffect: 0
+  bloodDamage: 5
+  infestationPool:
+  - {fileID: 577474978131120927, guid: e85cc73f61086cc40993acb2eb4caed2, type: 3}
+  highlightColor: {r: 1, g: 1, b: 1, a: 1}
+  highlightStrength: 0.5
+  pulseSpeed: 0.6
+  hideWhileDraggingSticker: 1

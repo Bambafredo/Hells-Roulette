@@ -71,7 +71,7 @@ public class InfestationManager : MonoBehaviour
     public bool HasPendingOrActiveInfestation =>
         InfestationActive ||
         completionPending ||
-        pendingLeechesThisResolution > 0 ||
+        pendingInfestationsThisResolution.Count > 0 ||
         pendingInfestationBatches.Count > 0;
 
 
@@ -98,31 +98,28 @@ public class InfestationManager : MonoBehaviour
     /*
      * Enemy actions do NOT open the modal immediately.
      *
-     * Every Gain Leech request produced during the same spin is accumulated
-     * here. RoundManager then gives us one callback after ALL enemy actions
-     * have resolved but before Debt / Rewards begin.
+     * Every infestation request produced during the same spin is accumulated
+     * here as the EXACT prefab that must be granted. RoundManager then gives
+     * us one callback after ALL enemy actions have resolved but before
+     * Debt / Rewards begin.
      *
-     * Example:
-     * Enemy A -> Gain 1 Leech
-     * Enemy B -> Gain 1 Leech
-     *
-     * pendingLeechesThisResolution = 2
-     * -> one Infestation panel with 2 Leeches.
+     * Keeping prefab identity here makes the system future-proof for multiple
+     * infestation types while preserving the old RequestInfestation(int)
+     * Leech API unchanged.
      */
-    private int pendingLeechesThisResolution =
-        0;
+    private readonly List<GameObject>
+        pendingInfestationsThisResolution =
+            new List<GameObject>();
 
 
     /*
      * The panel physically supports up to three slots.
-     * If several enemy actions total more than three Leeches in one spin,
-     * overflow is split into the minimum number of batches:
-     *
-     * 5 Leeches -> 3, then 2.
+     * If one spin creates more infestations than the panel can display, they
+     * are split into the minimum number of prefab batches.
      */
-    private readonly Queue<int>
+    private readonly Queue<List<GameObject>>
         pendingInfestationBatches =
-            new Queue<int>();
+            new Queue<List<GameObject>>();
 
 
     private RoundManager subscribedRoundManager;
@@ -273,18 +270,12 @@ public class InfestationManager : MonoBehaviour
     // =========================================================
 
     /// <summary>
-    /// Records a forced Leech consequence from one enemy action.
-    ///
-    /// All requests created by the same spin are aggregated before the modal
-    /// opens. EnemyAction assets never control UI directly.
+    /// Backwards-compatible Leech API used by existing enemy actions.
+    /// Each requested Leech is converted into an exact prefab request.
     /// </summary>
     public bool RequestInfestation(
         int leechCount)
     {
-        ResolveReferences();
-        EnsureRoundManagerSubscription();
-
-
         int safeCount =
             Mathf.Clamp(
                 leechCount,
@@ -293,8 +284,40 @@ public class InfestationManager : MonoBehaviour
             );
 
 
+        return
+            RequestInfestation(
+                leechStickerPrefab,
+                safeCount
+            );
+    }
+
+
+    /// <summary>
+    /// Generic infestation request.
+    ///
+    /// Records one or more copies of the supplied infestation prefab. Requests
+    /// produced by all enemies during the same spin are aggregated before the
+    /// modal opens, exactly like the original Leech-only system.
+    /// </summary>
+    public bool RequestInfestation(
+        GameObject infestationPrefab,
+        int count = 1)
+    {
+        ResolveReferences();
+        EnsureRoundManagerSubscription();
+
+
+        int safeCount =
+            Mathf.Clamp(
+                count,
+                1,
+                3
+            );
+
+
         if (!ValidateSetup(
-                safeCount))
+                safeCount,
+                infestationPrefab))
         {
             return false;
         }
@@ -303,29 +326,30 @@ public class InfestationManager : MonoBehaviour
         /*
          * IMPORTANT:
          * Do not open Reward_Panel from inside an individual enemy callback.
-         *
          * BaseEnemy instances execute sequentially through the same OnSpinEnd
-         * event. Opening immediately means the first enemy creates a modal
-         * before the remaining enemies have had their turn.
-         *
-         * We only record the consequence here.
+         * event, so we only record the consequence here.
          */
-        pendingLeechesThisResolution +=
-            safeCount;
+        for (int i = 0;
+             i < safeCount;
+             i++)
+        {
+            pendingInfestationsThisResolution.Add(
+                infestationPrefab
+            );
+        }
 
 
         Debug.Log(
-            $"[INFESTATION] Queued {safeCount} Leech(es) for this " +
-            $"gameplay resolution. Pending total = " +
-            $"{pendingLeechesThisResolution}."
+            $"[INFESTATION] Queued {safeCount} infestation(s) of " +
+            $"'{infestationPrefab.name}' for this gameplay resolution. " +
+            $"Pending total = {pendingInfestationsThisResolution.Count}."
         );
 
 
         /*
-         * Normal gameplay always has RoundManager and will flush through
-         * OnGameplaySpinResolutionCompleted.
-         *
-         * This fallback keeps direct/debug execution usable in stripped scenes.
+         * Normal gameplay flushes through
+         * OnGameplaySpinResolutionCompleted. Keep the old stripped-scene
+         * fallback for direct/debug execution.
          */
         if (subscribedRoundManager == null)
         {
@@ -349,16 +373,17 @@ public class InfestationManager : MonoBehaviour
 
     private void FlushPendingInfestationRequests()
     {
-        if (pendingLeechesThisResolution <= 0)
+        if (pendingInfestationsThisResolution.Count <= 0)
             return;
 
 
-        int totalLeeches =
-            pendingLeechesThisResolution;
+        List<GameObject> pending =
+            new List<GameObject>(
+                pendingInfestationsThisResolution
+            );
 
 
-        pendingLeechesThisResolution =
-            0;
+        pendingInfestationsThisResolution.Clear();
 
 
         int batchCapacity =
@@ -375,16 +400,8 @@ public class InfestationManager : MonoBehaviour
         }
 
 
-        /*
-         * Combine every request from this spin first, THEN split only if the
-         * physical three-slot panel cannot display the whole result.
-         *
-         * 1 + 1 -> one batch of 2
-         * 1 + 2 -> one batch of 3
-         * 2 + 2 -> batches 3 + 1
-         */
         QueueBatches(
-            totalLeeches,
+            pending,
             batchCapacity
         );
 
@@ -396,40 +413,66 @@ public class InfestationManager : MonoBehaviour
 
 
         Debug.Log(
-            $"[INFESTATION] Aggregated {totalLeeches} Leech(es) from the " +
+            $"[INFESTATION] Aggregated {pending.Count} infestation(s) from the " +
             "completed enemy phase."
         );
     }
 
 
     private void QueueBatches(
-        int totalLeeches,
+        List<GameObject> prefabs,
         int batchCapacity)
     {
-        int remaining =
+        if (prefabs == null ||
+            prefabs.Count <= 0)
+        {
+            return;
+        }
+
+
+        int safeCapacity =
             Mathf.Max(
-                0,
-                totalLeeches
+                1,
+                batchCapacity
             );
 
 
-        while (remaining > 0)
+        int index =
+            0;
+
+
+        while (index < prefabs.Count)
         {
-            int batch =
-                Mathf.Min(
-                    batchCapacity,
-                    remaining
-                );
+            List<GameObject> batch =
+                new List<GameObject>();
 
 
-            pendingInfestationBatches
-                .Enqueue(
-                    batch
-                );
+            for (int i = 0;
+                 i < safeCapacity &&
+                 index < prefabs.Count;
+                 i++,
+                 index++)
+            {
+                GameObject prefab =
+                    prefabs[index];
 
 
-            remaining -=
-                batch;
+                if (prefab != null)
+                {
+                    batch.Add(
+                        prefab
+                    );
+                }
+            }
+
+
+            if (batch.Count > 0)
+            {
+                pendingInfestationBatches
+                    .Enqueue(
+                        batch
+                    );
+            }
         }
     }
 
@@ -443,13 +486,13 @@ public class InfestationManager : MonoBehaviour
         }
 
 
-        int nextCount =
+        List<GameObject> nextBatch =
             pendingInfestationBatches
                 .Dequeue();
 
 
         BeginInfestationBatch(
-            nextCount
+            nextBatch
         );
     }
 
@@ -459,8 +502,15 @@ public class InfestationManager : MonoBehaviour
     // =========================================================
 
     private void BeginInfestationBatch(
-        int leechCount)
+        List<GameObject> infestationPrefabs)
     {
+        if (infestationPrefabs == null ||
+            infestationPrefabs.Count <= 0)
+        {
+            return;
+        }
+
+
         completionPending =
             false;
 
@@ -519,18 +569,18 @@ public class InfestationManager : MonoBehaviour
 
 
         ShowInfestationOnlyView(
-            leechCount
+            infestationPrefabs.Count
         );
 
 
         currentOffers =
             new GameObject[
-                leechCount
+                infestationPrefabs.Count
             ];
 
 
         for (int i = 0;
-             i < leechCount;
+             i < infestationPrefabs.Count;
              i++)
         {
             Transform slot =
@@ -541,7 +591,7 @@ public class InfestationManager : MonoBehaviour
 
             GameObject offer =
                 SpawnInfestationOffer(
-                    leechStickerPrefab,
+                    infestationPrefabs[i],
                     slot
                 );
 
@@ -561,7 +611,7 @@ public class InfestationManager : MonoBehaviour
 
 
         Debug.Log(
-            $"[INFESTATION] Opened with {ClaimsRequired} Leech(es)."
+            $"[INFESTATION] Opened with {ClaimsRequired} infestation(s)."
         );
     }
 
@@ -640,13 +690,13 @@ public class InfestationManager : MonoBehaviour
 
         if (pendingInfestationBatches.Count > 0)
         {
-            int nextCount =
+            List<GameObject> nextBatch =
                 pendingInfestationBatches
                     .Dequeue();
 
 
             BeginInfestationBatch(
-                nextCount
+                nextBatch
             );
 
 
@@ -658,14 +708,15 @@ public class InfestationManager : MonoBehaviour
          * Defensive: if a request somehow arrived while the modal was already
          * open, fold it in before releasing gameplay.
          */
-        if (pendingLeechesThisResolution > 0)
+        if (pendingInfestationsThisResolution.Count > 0)
         {
-            int pending =
-                pendingLeechesThisResolution;
+            List<GameObject> pending =
+                new List<GameObject>(
+                    pendingInfestationsThisResolution
+                );
 
 
-            pendingLeechesThisResolution =
-                0;
+            pendingInfestationsThisResolution.Clear();
 
 
             QueueBatches(
@@ -676,13 +727,13 @@ public class InfestationManager : MonoBehaviour
 
             if (pendingInfestationBatches.Count > 0)
             {
-                int nextCount =
+                List<GameObject> nextBatch =
                     pendingInfestationBatches
                         .Dequeue();
 
 
                 BeginInfestationBatch(
-                    nextCount
+                    nextBatch
                 );
 
 
@@ -1147,7 +1198,8 @@ public class InfestationManager : MonoBehaviour
 
 
     private bool ValidateSetup(
-        int requestedCount)
+        int requestedCount,
+        GameObject infestationPrefab)
     {
         if (rewardManager == null ||
             rewardManager.rewardPanel == null)
@@ -1170,10 +1222,10 @@ public class InfestationManager : MonoBehaviour
         }
 
 
-        if (leechStickerPrefab == null)
+        if (infestationPrefab == null)
         {
             Debug.LogError(
-                "[INFESTATION] Leech Sticker Prefab reference missing."
+                "[INFESTATION] Requested infestation prefab is missing."
             );
 
             return false;
@@ -1187,7 +1239,7 @@ public class InfestationManager : MonoBehaviour
             if (GetSlot(i) == null)
             {
                 Debug.LogError(
-                    $"[INFESTATION] Missing slot for Leech #{i + 1}."
+                    $"[INFESTATION] Missing slot for infestation #{i + 1}."
                 );
 
                 return false;
