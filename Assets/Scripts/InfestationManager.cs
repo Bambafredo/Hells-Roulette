@@ -324,6 +324,25 @@ public class InfestationManager : MonoBehaviour
 
 
         /*
+         * A malformed prefab must never be allowed into a forced modal.
+         * If it has no BaseSticker, the resulting offer could never be claimed
+         * and the player would be stuck behind the external gameplay lock.
+         */
+        if (infestationPrefab
+                .GetComponentInChildren<BaseSticker>(
+                    true
+                ) == null)
+        {
+            Debug.LogError(
+                $"[INFESTATION] Prefab '{infestationPrefab.name}' has no " +
+                "BaseSticker and cannot be used as an Infestation."
+            );
+
+            return false;
+        }
+
+
+        /*
          * IMPORTANT:
          * Do not open Reward_Panel from inside an individual enemy callback.
          * BaseEnemy instances execute sequentially through the same OnSpinEnd
@@ -607,11 +626,46 @@ public class InfestationManager : MonoBehaviour
         }
 
 
+        /*
+         * Safety net: a forced modal with zero claimable offers must never stay
+         * open. This should be unreachable after validation above, but protects
+         * the run from bad prefab/setup data instead of hard-locking gameplay.
+         */
+        if (ClaimsRequired <= 0)
+        {
+            Debug.LogError(
+                "[INFESTATION] Batch produced no claimable offers. " +
+                "Skipping it instead of locking gameplay."
+            );
+
+            ClearCurrentOffers();
+
+            if (pendingInfestationBatches.Count > 0)
+            {
+                List<GameObject> nextBatch =
+                    pendingInfestationBatches
+                        .Dequeue();
+
+
+                BeginInfestationBatch(
+                    nextBatch
+                );
+
+                return;
+            }
+
+
+            ScheduleInfestationCompletion();
+            return;
+        }
+
+
         UpdateSkipVisibility();
 
 
         Debug.Log(
-            $"[INFESTATION] Opened with {ClaimsRequired} infestation(s)."
+            $"[INFESTATION] Opened ONE shared panel with " +
+            $"{ClaimsRequired} infestation(s)."
         );
     }
 
@@ -1051,6 +1105,20 @@ public class InfestationManager : MonoBehaviour
         if (prefab == null ||
             slot == null)
         {
+            return null;
+        }
+
+
+        if (prefab
+                .GetComponentInChildren<BaseSticker>(
+                    true
+                ) == null)
+        {
+            Debug.LogError(
+                $"[INFESTATION] Prefab '{prefab.name}' has no BaseSticker. " +
+                "Offer was not spawned."
+            );
+
             return null;
         }
 
