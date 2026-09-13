@@ -21,7 +21,7 @@ MonoBehaviour:
   failureEffect: 0
   bloodDamage: 5
   infestationPool:
-  - {fileID: 577474978131120927, guid: e85cc73f61086cc40993acb2eb4caed2, type: 3}
+  - {fileID: 577474978131120927, guid: 9ccc735e4e40fd549b420c361798dcff, type: 3}
   highlightColor: {r: 1, g: 1, b: 1, a: 1}
   highlightStrength: 0.4
   markDensity: 16

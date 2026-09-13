@@ -131,6 +131,29 @@ public class RoundManager : MonoBehaviour
             new Dictionary<BaseEnemy, int>();
 
 
+    [Header("Active Sticker Interest")]
+
+    [SerializeField]
+    private int activeStickerInterestPercent = 0;
+
+    [SerializeField]
+    private int currentStickerInterestAmount = 0;
+
+    [SerializeField]
+    private int currentActiveInterestAmount = 0;
+
+    /*
+     * Keyed by physical sticker instance so:
+     * - multiple Ladybugs stack additively;
+     * - one physical sticker can never register twice;
+     * - moving / destroying one Ladybug removes only its own contribution;
+     * - registrations survive round transitions while the sticker stays in Album.
+     */
+    private readonly Dictionary<BaseSticker, int>
+        activeStickerInterestSources =
+            new Dictionary<BaseSticker, int>();
+
+
     [SerializeField]
     private bool debtPending = false;
 
@@ -385,15 +408,25 @@ public class RoundManager : MonoBehaviour
     public int CurrentEnemyCurseDebtAmount =>
         currentEnemyCurseDebtAmount;
 
+    public int ActiveStickerInterestPercent =>
+        activeStickerInterestPercent;
+
+    public int CurrentStickerInterestAmount =>
+        currentStickerInterestAmount;
+
+    public int CurrentActiveInterestAmount =>
+        currentActiveInterestAmount;
+
     /*
      * This is the number shown by the existing Extra Debt TMP.
      *
-     * Ascension penalty + all currently active enemy curses stack
-     * additively into one readable percentage.
+     * Ascension penalty + active enemy Debt curses + Album sticker interest
+     * stack additively into one readable percentage.
      */
     public int CurrentTotalDebtExtraPercent =>
         enemyDebtPenaltyPercent +
-        activeEnemyCurseDebtPercent;
+        activeEnemyCurseDebtPercent +
+        activeStickerInterestPercent;
 
     public bool DebtPending =>
         debtPending;
@@ -1185,8 +1218,8 @@ public class RoundManager : MonoBehaviour
 
     private void RefreshEnemyCurseDebtContribution()
     {
-        int previousAmount =
-            currentEnemyCurseDebtAmount;
+        int previousActiveInterestAmount =
+            currentActiveInterestAmount;
 
 
         activeEnemyCurseDebtPercent =
@@ -1201,6 +1234,21 @@ public class RoundManager : MonoBehaviour
 
 
         /*
+         * Enemy Debt curses and Album sticker Interest are the SAME Interest
+         * pool for debt calculation. Sum percentages FIRST, then round ONCE.
+         *
+         * Example: Tax Collector +5% + Ladybug +5% = 10% Interest, not two
+         * separately-rounded 5% amounts.
+         */
+        currentActiveInterestAmount =
+            CalculatePercentAmount(
+                currentBaseDebt,
+                activeEnemyCurseDebtPercent +
+                activeStickerInterestPercent
+            );
+
+
+        /*
          * Apply only the DELTA.
          *
          * This preserves any other direct debt modifications that may have
@@ -1208,8 +1256,8 @@ public class RoundManager : MonoBehaviour
          * scratch.
          */
         int amountDelta =
-            currentEnemyCurseDebtAmount -
-            previousAmount;
+            currentActiveInterestAmount -
+            previousActiveInterestAmount;
 
 
         currentDebt =
@@ -1271,6 +1319,236 @@ public class RoundManager : MonoBehaviour
 
         currentEnemyCurseDebtAmount =
             0;
+
+        currentActiveInterestAmount =
+            CalculatePercentAmount(
+                currentBaseDebt,
+                activeStickerInterestPercent
+            );
+    }
+
+
+    // =========================================================
+    // STICKER INTEREST
+    // =========================================================
+
+    /// <summary>
+    /// Registers one physical Album sticker as an Interest source for the
+    /// current / upcoming round. Re-registering the same sticker updates its
+    /// percentage instead of stacking it twice.
+    /// </summary>
+    public void RegisterStickerInterest(
+        BaseSticker source,
+        int percent)
+    {
+        if (source == null ||
+            percent <= 0)
+        {
+            return;
+        }
+
+
+        if (activeStickerInterestSources.TryGetValue(
+                source,
+                out int existingPercent) &&
+            existingPercent == percent)
+        {
+            return;
+        }
+
+
+        activeStickerInterestSources[source] =
+            percent;
+
+
+        RefreshStickerInterestContribution(
+            ShouldApplyStickerInterestToCurrentDebt()
+        );
+
+
+        Debug.Log(
+            $"[STICKER INTEREST] {GetStickerDisplayName(source)} adds " +
+            $"+{percent}% Interest. " +
+            $"Active sticker Interest = {activeStickerInterestPercent}%."
+        );
+    }
+
+
+    /// <summary>
+    /// Removes one physical sticker's Interest contribution.
+    /// </summary>
+    public void UnregisterStickerInterest(
+        BaseSticker source)
+    {
+        if (source == null)
+            return;
+
+
+        if (!activeStickerInterestSources.Remove(
+                source))
+        {
+            return;
+        }
+
+
+        RefreshStickerInterestContribution(
+            ShouldApplyStickerInterestToCurrentDebt()
+        );
+
+
+        Debug.Log(
+            $"[STICKER INTEREST] {GetStickerDisplayName(source)} removed. " +
+            $"Active sticker Interest = {activeStickerInterestPercent}%."
+        );
+    }
+
+
+    private void RefreshStickerInterestContribution(
+        bool applyDeltaToCurrentDebt)
+    {
+        int previousActiveInterestAmount =
+            currentActiveInterestAmount;
+
+
+        activeStickerInterestPercent =
+            CalculateActiveStickerInterestPercent();
+
+
+        currentStickerInterestAmount =
+            CalculatePercentAmount(
+                currentBaseDebt,
+                activeStickerInterestPercent
+            );
+
+
+        /*
+         * Ladybug and Tax Collector feed the SAME Interest pool.
+         * Percentages are combined before converting them to dollars so the
+         * final result follows one rounding pass.
+         */
+        currentActiveInterestAmount =
+            CalculatePercentAmount(
+                currentBaseDebt,
+                activeEnemyCurseDebtPercent +
+                activeStickerInterestPercent
+            );
+
+
+        /*
+         * The percentage display represents the CURRENT active Interest sources,
+         * even during Rewards.
+         *
+         * Reward edits configure the upcoming round, so the already-paid Debt
+         * total must stay frozen there, but the visible Interest percentage must
+         * still react immediately when Ladybugs enter or leave the Album.
+         */
+        UpdateEnemyDebtPenaltyUI();
+
+
+        /*
+         * During normal gameplay / starting Draft, changing Album composition
+         * changes this round's debt immediately.
+         *
+         * During end-of-round Rewards the previous debt has already been paid.
+         * We still update the registrations so SetDebtForRound() can apply the
+         * correct Interest to the NEXT round, but we deliberately do not mutate
+         * the already-settled debt total.
+         */
+        if (applyDeltaToCurrentDebt)
+        {
+            int amountDelta =
+                currentActiveInterestAmount -
+                previousActiveInterestAmount;
+
+
+            currentDebt =
+                Mathf.Max(
+                    0,
+                    currentDebt +
+                    amountDelta
+                );
+
+
+            UpdateDebtUI();
+
+
+            OnDebtChanged?
+                .Invoke(
+                    currentDebt
+                );
+        }
+    }
+
+
+    private int CalculateActiveStickerInterestPercent()
+    {
+        int total =
+            0;
+
+
+        foreach (
+            KeyValuePair<BaseSticker, int> entry
+            in activeStickerInterestSources)
+        {
+            if (entry.Key == null ||
+                entry.Value <= 0)
+            {
+                continue;
+            }
+
+
+            total +=
+                entry.Value;
+        }
+
+
+        return
+            Mathf.Max(
+                0,
+                total
+            );
+    }
+
+
+    private bool ShouldApplyStickerInterestToCurrentDebt()
+    {
+        /*
+         * Once Rewards are active, this round's Debt has already been paid.
+         * Album edits there configure the next round instead.
+         */
+        if (waitingForRewardCompletion)
+            return false;
+
+
+        if (RewardManager.Instance != null &&
+            RewardManager.Instance.RewardPhaseActive)
+        {
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    private string GetStickerDisplayName(
+        BaseSticker sticker)
+    {
+        if (sticker != null &&
+            sticker.effect != null &&
+            !string.IsNullOrWhiteSpace(
+                sticker.effect.stickerName
+            ))
+        {
+            return
+                sticker.effect.stickerName;
+        }
+
+
+        return
+            sticker != null
+                ? sticker.name
+                : "Sticker";
     }
 
 
@@ -1377,8 +1655,11 @@ public class RoundManager : MonoBehaviour
             $"Base debt = ${currentBaseDebt}, " +
             $"Ascension extra = {enemyDebtPenaltyPercent}% " +
             $"(+${currentEnemyDebtPenaltyAmount}), " +
-            $"Curse extra = {activeEnemyCurseDebtPercent}% " +
-            $"(+${currentEnemyCurseDebtAmount}), " +
+            $"Enemy curse Interest = {activeEnemyCurseDebtPercent}%, " +
+            $"Sticker Interest = {activeStickerInterestPercent}%, " +
+            $"Combined active Interest = " +
+            $"{activeEnemyCurseDebtPercent + activeStickerInterestPercent}% " +
+            $"(+${currentActiveInterestAmount}), " +
             $"Total debt = ${currentDebt}"
         );
     }
@@ -1461,10 +1742,39 @@ public class RoundManager : MonoBehaviour
             );
 
 
+        /*
+         * Album-based sticker Interest survives round transitions while the
+         * physical sticker remains registered in the Album. The percentage is
+         * NOT cumulative across rounds: every round recalculates the amount
+         * from that round's fresh base Debt.
+         */
+        activeStickerInterestPercent =
+            CalculateActiveStickerInterestPercent();
+
+
+        currentStickerInterestAmount =
+            CalculatePercentAmount(
+                currentBaseDebt,
+                activeStickerInterestPercent
+            );
+
+
+        /*
+         * Tax Collector + Ladybug are one Interest pool.
+         * Add percentages first, then round once.
+         */
+        currentActiveInterestAmount =
+            CalculatePercentAmount(
+                currentBaseDebt,
+                activeEnemyCurseDebtPercent +
+                activeStickerInterestPercent
+            );
+
+
         currentDebt =
             currentBaseDebt +
             currentEnemyDebtPenaltyAmount +
-            currentEnemyCurseDebtAmount;
+            currentActiveInterestAmount;
     }
 
 

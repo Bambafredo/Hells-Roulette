@@ -6527,6 +6527,9 @@ MonoBehaviour:
   enemyDebtPenaltyPercent: 0
   activeEnemyCurseDebtPercent: 0
   currentEnemyCurseDebtAmount: 0
+  activeStickerInterestPercent: 0
+  currentStickerInterestAmount: 0
+  currentActiveInterestAmount: 0
   debtPending: 0
   waitingForRewardCompletion: 0
   roundText: {fileID: 1455258518}
