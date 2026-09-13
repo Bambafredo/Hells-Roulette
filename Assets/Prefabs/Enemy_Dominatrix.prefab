@@ -433,8 +433,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 85a848469f7e2cb4e8f9adf7035f1fc8, type: 2}
   - {fileID: 11400000, guid: 6906ff97e769e2d4db58f5da8e5c50dd, type: 2}
   - {fileID: 11400000, guid: 6906ff97e769e2d4db58f5da8e5c50dd, type: 2}
-  curse: {fileID: 0}
-  curseValue: 0
+  curse: {fileID: 11400000, guid: b324f098912fe7a4eb70e2e418ff55fc, type: 2}
+  curseValue: 2
   additionalCurses: []
   hpText: {fileID: 4695612484063555935}
   sprite: {fileID: 8621462763584552993}

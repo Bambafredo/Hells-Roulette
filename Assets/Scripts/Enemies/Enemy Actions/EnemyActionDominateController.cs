@@ -48,6 +48,7 @@ public class EnemyActionDominateController :
     private BaseEnemy enemy;
     private RouletteController roulette;
     private WheelGenerator generator;
+    private DraftManager draftManager;
 
 
     private EnemyActionDominate activeAction;
@@ -689,6 +690,21 @@ public class EnemyActionDominateController :
         owner.ResolveReferences();
 
 
+        /*
+         * Dominate keeps its logical target set alive while modal setup/reward
+         * screens are open, but its telegraph must not be visible there.
+         *
+         * IMPORTANT: we only clear presentation. We do NOT leave the shared
+         * Dominate group or choose new indices, so the exact same three targets
+         * reappear once gameplay resumes.
+         */
+        if (owner.IsDominatePresentationSuppressed())
+        {
+            ClearSharedMarks();
+            return;
+        }
+
+
         WheelGenerator targetGenerator =
             owner.generator;
 
@@ -796,6 +812,7 @@ public class EnemyActionDominateController :
             enemy == null ||
             enemy.IsDead ||
             !enemy.CombatActive ||
+            IsDominatePresentationSuppressed() ||
             !markedSegmentIndices.Contains(
                 segmentIndex
             ))
@@ -835,6 +852,45 @@ public class EnemyActionDominateController :
             null;
 
         markedSegmentIndices.Clear();
+    }
+
+
+    // =========================================================
+    // PRESENTATION GATING
+    // =========================================================
+
+    private bool IsDominatePresentationSuppressed()
+    {
+        /*
+         * End-of-round rewards / shop are a safe setup phase.
+         */
+        if (RewardManager.Instance != null &&
+            RewardManager.Instance.RewardPhaseActive)
+        {
+            return true;
+        }
+
+
+        /*
+         * DraftManager deliberately has no singleton in the current
+         * architecture, so cache the scene instance instead of introducing
+         * new global state just for Dominate.
+         */
+        if (draftManager == null)
+        {
+            draftManager =
+                FindObjectOfType<DraftManager>();
+        }
+
+
+        if (draftManager != null &&
+            draftManager.DraftActive)
+        {
+            return true;
+        }
+
+
+        return false;
     }
 
 

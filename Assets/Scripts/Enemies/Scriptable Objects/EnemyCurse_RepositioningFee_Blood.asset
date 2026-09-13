@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a686fbde2b64b146ae7e047e5a35ed4, type: 3}
+  m_Name: EnemyCurse_RepositioningFee_Blood
+  m_EditorClassIdentifier: 
+  curseName: Bloody Roulette
+  icon: {fileID: 21300000, guid: 9120fc15250513444ae052d0984577a3, type: 3}
+  tooltipDescription: 'Moving a sticker from one wheel segment to another, or back
+    to the Album, costs {cost}. '
+  costResource: 0
