@@ -14,7 +14,9 @@ using UnityEngine;
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(BaseEnemy))]
-public class EnemyActionDominateController : MonoBehaviour
+public class EnemyActionDominateController :
+    MonoBehaviour,
+    ISegmentMarkTooltipProvider
 {
     private const int MarkedSegmentCount =
         3;
@@ -56,9 +58,18 @@ public class EnemyActionDominateController : MonoBehaviour
             new List<int>();
 
 
-    private readonly List<SegmentTelegraphPresenter>
-        telegraphs =
-            new List<SegmentTelegraphPresenter>();
+    /*
+     * The currently visible Dominate marks are group-level presentation.
+     *
+     * Several simultaneous Dominators share the same three logical targets, so
+     * only one controller needs to write the visual overlay to SegmentMesh.
+     */
+    private static readonly List<SegmentMesh>
+        sharedMarkedMeshes =
+            new List<SegmentMesh>();
+
+    private static EnemyActionDominateController
+        sharedVisualOwner;
 
 
     // =========================================================
@@ -69,6 +80,14 @@ public class EnemyActionDominateController : MonoBehaviour
     {
         enemy =
             GetComponent<BaseEnemy>();
+    }
+
+
+    private void OnEnable()
+    {
+        SegmentMarkTooltipRegistry.Register(
+            this
+        );
     }
 
 
@@ -113,20 +132,30 @@ public class EnemyActionDominateController : MonoBehaviour
         }
 
 
-        RefreshTelegraphs();
+        if (sharedVisualOwner == this)
+        {
+            RefreshSharedMarks();
+        }
     }
 
 
     private void OnDisable()
     {
         ClearCurrentDominate();
+
+        SegmentMarkTooltipRegistry.Unregister(
+            this
+        );
     }
 
 
     private void OnDestroy()
     {
         LeaveSharedDominateTargets();
-        DisposeTelegraphs();
+
+        SegmentMarkTooltipRegistry.Unregister(
+            this
+        );
     }
 
 
@@ -137,9 +166,6 @@ public class EnemyActionDominateController : MonoBehaviour
     private void BeginDominate(
         EnemyActionDominate action)
     {
-        ClearTelegraphsOnly();
-
-
         activeAction =
             action;
 
@@ -147,7 +173,10 @@ public class EnemyActionDominateController : MonoBehaviour
         JoinSharedDominateTargets();
 
 
-        RefreshTelegraphs();
+        if (sharedVisualOwner == this)
+        {
+            RefreshSharedMarks();
+        }
 
 
         Debug.Log(
@@ -341,7 +370,89 @@ public class EnemyActionDominateController : MonoBehaviour
                 $"[DOMINATE] Could not grant infestation " +
                 $"'{infestationPrefab.name}'."
             );
+
+            return;
         }
+
+
+        /*
+         * Blood Damage already reaches GameLog through BaseEnemy's normal attack
+         * pipeline. Random Infestation is a different consequence, so log it
+         * explicitly once the InfestationManager has accepted the request.
+         *
+         * Do this here rather than inside InfestationManager because only the
+         * Enemy Action knows WHICH enemy caused the infestation.
+         */
+        LogInfestation(
+            infestationPrefab
+        );
+    }
+
+
+    private void LogInfestation(
+        GameObject infestationPrefab)
+    {
+        if (GameLogManager.Instance == null)
+            return;
+
+
+        string enemyName =
+            enemy != null &&
+            !string.IsNullOrWhiteSpace(
+                enemy.EnemyName
+            )
+                ? enemy.EnemyName
+                : "Enemy";
+
+
+        string infestationName =
+            GetInfestationDisplayName(
+                infestationPrefab
+            );
+
+
+        GameLogManager.Instance
+            .AddGameplayLine(
+                GameLogManager.Instance
+                    .EnemyText(
+                        enemyName
+                    ) +
+                " infests you with " +
+                GameLogManager.Instance
+                    .StickerText(
+                        infestationName
+                    )
+            );
+    }
+
+
+    private string GetInfestationDisplayName(
+        GameObject infestationPrefab)
+    {
+        if (infestationPrefab == null)
+            return "Infestation";
+
+
+        BaseSticker sticker =
+            infestationPrefab
+                .GetComponentInChildren<BaseSticker>(
+                    true
+                );
+
+
+        if (sticker != null &&
+            sticker.effect != null &&
+            !string.IsNullOrWhiteSpace(
+                sticker.effect.stickerName
+            ))
+        {
+            return
+                sticker.effect.stickerName;
+        }
+
+
+        return
+            infestationPrefab.name;
     }
 
 
@@ -352,8 +463,9 @@ public class EnemyActionDominateController : MonoBehaviour
     private void JoinSharedDominateTargets()
     {
         /*
-         * If this controller was already registered, remove it before joining
-         * again. This keeps repeated/consecutive Dominate actions clean.
+         * Rejoining can happen when the same enemy moves directly from one
+         * Dominate asset to another. Remove first so the shared group state is
+         * recalculated cleanly.
          */
         activeDominateControllers.Remove(
             this
@@ -361,8 +473,8 @@ public class EnemyActionDominateController : MonoBehaviour
 
 
         /*
-         * The first currently-active Dominate enemy creates the group targets.
-         * Every additional Dominate enemy simply copies those same indices.
+         * The first currently-active Dominator creates the target set. Every
+         * additional Dominator copies exactly those same logical indices.
          */
         if (activeDominateControllers.Count <= 0 ||
             sharedMarkedSegmentIndices.Count <= 0)
@@ -376,6 +488,16 @@ public class EnemyActionDominateController : MonoBehaviour
         );
 
 
+        if (sharedVisualOwner == null ||
+            !activeDominateControllers.Contains(
+                sharedVisualOwner
+            ))
+        {
+            sharedVisualOwner =
+                this;
+        }
+
+
         markedSegmentIndices.Clear();
 
         markedSegmentIndices.AddRange(
@@ -383,26 +505,100 @@ public class EnemyActionDominateController : MonoBehaviour
         );
 
 
-        EnsureTelegraphCount(
-            markedSegmentIndices.Count
-        );
+        WarnIfSharedRulesConflict();
     }
 
 
     private void LeaveSharedDominateTargets()
     {
-        activeDominateControllers.Remove(
-            this
-        );
+        bool wasActive =
+            activeDominateControllers.Remove(
+                this
+            );
 
 
-        /*
-         * No Dominate action is currently being advertised anymore.
-         * The next Dominate group must roll a fresh set of three segments.
-         */
+        if (!wasActive &&
+            sharedVisualOwner != this)
+        {
+            return;
+        }
+
+
+        if (sharedVisualOwner == this)
+        {
+            sharedVisualOwner =
+                null;
+
+
+            foreach (
+                EnemyActionDominateController controller
+                in activeDominateControllers)
+            {
+                if (controller == null ||
+                    controller.activeAction == null)
+                {
+                    continue;
+                }
+
+
+                sharedVisualOwner =
+                    controller;
+
+                break;
+            }
+        }
+
+
         if (activeDominateControllers.Count <= 0)
         {
+            ClearSharedMarks();
+
             sharedMarkedSegmentIndices.Clear();
+
+            sharedVisualOwner =
+                null;
+
+            return;
+        }
+
+
+        RefreshSharedMarks();
+    }
+
+
+    private void WarnIfSharedRulesConflict()
+    {
+        if (activeAction == null)
+            return;
+
+
+        foreach (
+            EnemyActionDominateController controller
+            in activeDominateControllers)
+        {
+            if (controller == null ||
+                controller == this ||
+                controller.activeAction == null)
+            {
+                continue;
+            }
+
+
+            if (controller.activeAction.markedSegmentRule ==
+                activeAction.markedSegmentRule)
+            {
+                continue;
+            }
+
+
+            Debug.LogWarning(
+                "[DOMINATE] Simultaneous Dominate actions use different " +
+                "Marked Segment Rules. They still share the same three targets, " +
+                "but the visible pattern follows the first active Dominate. " +
+                "The segment tooltip still lists every distinct consequence."
+            );
+
+            return;
         }
     }
 
@@ -473,123 +669,172 @@ public class EnemyActionDominateController : MonoBehaviour
 
 
     // =========================================================
-    // TELEGRAPH
+    // TEMPORARY SEGMENT MARK PRESENTATION
     // =========================================================
 
-    private void EnsureTelegraphCount(
-        int count)
+    private static void RefreshSharedMarks()
     {
-        while (telegraphs.Count <
-               count)
+        EnemyActionDominateController owner =
+            sharedVisualOwner;
+
+
+        if (owner == null ||
+            owner.activeAction == null)
         {
-            telegraphs.Add(
-                new SegmentTelegraphPresenter(
-                    generator,
-                    roulette
-                )
-            );
-        }
-
-
-        for (int i = 0;
-             i < telegraphs.Count;
-             i++)
-        {
-            telegraphs[i]
-                .SetGenerator(
-                    generator
-                );
-
-            telegraphs[i]
-                .SetRouletteController(
-                    roulette
-                );
-        }
-    }
-
-
-    private void RefreshTelegraphs()
-    {
-        if (activeAction == null)
-        {
-            ClearTelegraphsOnly();
+            ClearSharedMarks();
             return;
         }
 
 
-        EnsureTelegraphCount(
-            markedSegmentIndices.Count
-        );
+        owner.ResolveReferences();
 
 
-        for (int i = 0;
-             i < telegraphs.Count;
-             i++)
+        WheelGenerator targetGenerator =
+            owner.generator;
+
+
+        if (targetGenerator == null ||
+            targetGenerator.segments == null)
         {
-            if (i >=
-                markedSegmentIndices.Count)
+            return;
+        }
+
+
+        /*
+         * WheelShifter can rebuild every SegmentMesh. Clear any still-alive old
+         * references, then rebind the SAME logical Dominate indices to the
+         * current wheel meshes.
+         */
+        ClearSharedMarks();
+
+
+        foreach (int segmentIndex in
+                 sharedMarkedSegmentIndices)
+        {
+            if (segmentIndex < 0 ||
+                segmentIndex >=
+                    targetGenerator.segments.Count)
             {
-                telegraphs[i].Hide();
                 continue;
             }
 
 
-            telegraphs[i].Show(
-                markedSegmentIndices[i],
-                activeAction.highlightColor,
-                activeAction.highlightStrength,
-                activeAction.pulseSpeed,
-                activeAction.hideWhileDraggingSticker,
+            WheelSegmentData data =
+                targetGenerator
+                    .segments[segmentIndex];
+
+
+            SegmentMesh mesh =
+                data != null
+                    ? data.meshComponent
+                    : null;
+
+
+            if (mesh == null)
+                continue;
+
+
+            mesh.ConfigureMark(
+                owner.activeAction.highlightColor,
+                owner.activeAction.highlightStrength,
+                owner.activeAction.markDensity,
+                owner.activeAction.markWidth,
+                owner.activeAction.GetActiveMarkPattern()
+            );
+
+
+            mesh.SetMarked(
                 true
             );
 
 
-            /*
-             * Refresh every frame so WheelShifter / regenerated SegmentMesh
-             * objects are rebound exactly like Limbo's telegraph.
-             */
-            telegraphs[i].Refresh();
+            sharedMarkedMeshes.Add(
+                mesh
+            );
         }
     }
 
 
-    private void ClearTelegraphsOnly()
+    private static void ClearSharedMarks()
     {
-        foreach (
-            SegmentTelegraphPresenter telegraph
-            in telegraphs)
+        foreach (SegmentMesh mesh in
+                 sharedMarkedMeshes)
         {
-            telegraph?.Hide();
+            if (mesh == null)
+                continue;
+
+
+            /*
+             * ONLY the temporary mark layer is disabled here.
+             *
+             * We never call SetBlocked(false), so Segment Block and Limbo's
+             * permanent/special blocked patterns are untouched.
+             */
+            mesh.SetMarked(
+                false
+            );
         }
+
+
+        sharedMarkedMeshes.Clear();
+    }
+
+
+    // =========================================================
+    // SEGMENT MARK TOOLTIP
+    // =========================================================
+
+    public bool TryGetSegmentMarkTooltip(
+        int segmentIndex,
+        out SegmentMarkTooltipData data)
+    {
+        data =
+            default;
+
+
+        if (activeAction == null ||
+            enemy == null ||
+            enemy.IsDead ||
+            !enemy.CombatActive ||
+            !markedSegmentIndices.Contains(
+                segmentIndex
+            ))
+        {
+            return false;
+        }
+
+
+        data =
+            new SegmentMarkTooltipData(
+                "Dominate",
+                activeAction.GetMarkedSegmentDescription(),
+                activeAction.GetMarkedSegmentStatus()
+            );
+
+
+        return true;
     }
 
 
     private void ClearCurrentDominate()
     {
-        ClearTelegraphsOnly();
+        bool wasActive =
+            activeAction != null ||
+            activeDominateControllers.Contains(
+                this
+            );
 
 
-        LeaveSharedDominateTargets();
+        if (wasActive)
+        {
+            LeaveSharedDominateTargets();
+        }
 
 
         activeAction =
             null;
 
         markedSegmentIndices.Clear();
-    }
-
-
-    private void DisposeTelegraphs()
-    {
-        foreach (
-            SegmentTelegraphPresenter telegraph
-            in telegraphs)
-        {
-            telegraph?.Dispose();
-        }
-
-
-        telegraphs.Clear();
     }
 
 

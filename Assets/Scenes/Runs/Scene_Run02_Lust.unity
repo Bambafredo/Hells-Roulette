@@ -6777,6 +6777,8 @@ MonoBehaviour:
   textPadding: {x: 16, y: 12}
   blockedTitleColor: {r: 1, g: 0.2, b: 0.2, a: 1}
   unlockCountdownColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  markTitleColor: {r: 0.85, g: 0.35, b: 1, a: 1}
+  markStatusColor: {r: 1, g: 0.85, b: 0.25, a: 1}
   blockedTitle: Segment blocked
   blockedDescription: Stickers in blocked segments do not activate and can't be moved
     until unlocked.

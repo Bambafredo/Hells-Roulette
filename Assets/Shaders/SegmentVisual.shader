@@ -26,6 +26,14 @@ Shader "HellRoulette/SegmentVisual"
         _TelegraphColor ("Telegraph Color", Color) = (1,1,1,1)
         _TelegraphStrength ("Telegraph Strength", Range(0,1)) = 0.18
         _TelegraphPulseSpeed ("Telegraph Pulse Speed", Float) = 1.2
+
+        [Header(Temporary Segment Mark)]
+        _Marked ("Marked", Float) = 0
+        _MarkColor ("Mark Color", Color) = (0.65,0.1,0.9,1)
+        _MarkOpacity ("Mark Opacity", Range(0,1)) = 0.55
+        _MarkDensity ("Mark Density", Float) = 8
+        _MarkWidth ("Mark Width", Range(0.01,0.45)) = 0.12
+        _MarkPatternType ("Mark Pattern Type", Float) = 0
     }
 
     SubShader
@@ -89,6 +97,13 @@ Shader "HellRoulette/SegmentVisual"
                 half4 _TelegraphColor;
                 float _TelegraphStrength;
                 float _TelegraphPulseSpeed;
+
+                float _Marked;
+                half4 _MarkColor;
+                float _MarkOpacity;
+                float _MarkDensity;
+                float _MarkWidth;
+                float _MarkPatternType;
             CBUFFER_END
 
             Varyings Vert(Attributes input)
@@ -417,6 +432,108 @@ Shader "HellRoulette/SegmentVisual"
                             stripeAmount
                         );
                 }
+
+                // ---------------------------------------------------------
+                // TEMPORARY SEGMENT MARK
+                // ---------------------------------------------------------
+                //
+                // This is an ADDITIONAL presentation layer.
+                //
+                // It is rendered after the existing blocked presentation so a
+                // normal Segment Block / Limbo special block keeps its pattern
+                // while effects such as Dominate can be superimposed on top.
+                //
+                // 0 = chevrons
+                // 1 = checker
+                // 2 = vertical bars
+                // 3 = rings
+                // ---------------------------------------------------------
+
+                if (_Marked >= 0.5)
+                {
+                    float density =
+                        max(
+                            0.01,
+                            _MarkDensity
+                        );
+
+                    float2 centered =
+                        input.uv - 0.5;
+
+                    float markPattern =
+                        0.0;
+
+                    if (_MarkPatternType < 0.5)
+                    {
+                        /*
+                         * V-shaped repeating bands.
+                         */
+                        float chevronCoord =
+                            (
+                                abs(centered.x) +
+                                centered.y
+                            ) *
+                            density;
+
+                        markPattern =
+                            ProceduralStripe(
+                                chevronCoord,
+                                _MarkWidth
+                            );
+                    }
+                    else if (_MarkPatternType < 1.5)
+                    {
+                        float2 cell =
+                            floor(
+                                input.uv *
+                                density
+                            );
+
+                        markPattern =
+                            fmod(
+                                cell.x +
+                                cell.y,
+                                2.0
+                            );
+                    }
+                    else if (_MarkPatternType < 2.5)
+                    {
+                        markPattern =
+                            ProceduralStripe(
+                                input.uv.x *
+                                density,
+                                _MarkWidth
+                            );
+                    }
+                    else
+                    {
+                        float radiusFromCenter =
+                            length(
+                                centered
+                            );
+
+                        markPattern =
+                            ProceduralStripe(
+                                radiusFromCenter *
+                                density,
+                                _MarkWidth
+                            );
+                    }
+
+                    float markAmount =
+                        saturate(
+                            markPattern *
+                            _MarkOpacity
+                        );
+
+                    result.rgb =
+                        lerp(
+                            result.rgb,
+                            _MarkColor.rgb,
+                            markAmount
+                        );
+                }
+
 
                 return result;
             }

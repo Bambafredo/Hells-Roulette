@@ -62,33 +62,114 @@ public class EnemyActionDominate : EnemyAction
 
 
     // =========================================================
-    // TELEGRAPH
+    // SEGMENT MARK PRESENTATION
     // =========================================================
 
-    [Header("Dominate Telegraph")]
+    [Header("Dominate Segment Mark")]
 
     [Tooltip(
-        "Color the three marked segments pulse towards."
+        "Color used by Dominate's temporary pattern. " +
+        "This mark is a separate visual layer and can coexist with Segment Block."
     )]
     public Color highlightColor =
-        Color.white;
+        new Color(
+            0.7f,
+            0.2f,
+            0.95f,
+            1f
+        );
 
 
     [Range(0f, 1f)]
+    [Tooltip(
+        "Opacity / strength of Dominate's temporary pattern."
+    )]
     public float highlightStrength =
-        0.18f;
+        0.55f;
 
 
     [Min(0.01f)]
-    public float pulseSpeed =
-        1.2f;
+    [Tooltip(
+        "Density of the procedural Dominate pattern."
+    )]
+    public float markDensity =
+        8f;
+
+
+    [Range(0.01f, 0.45f)]
+    [Tooltip(
+        "Thickness of Dominate's procedural pattern."
+    )]
+    public float markWidth =
+        0.12f;
 
 
     [Tooltip(
-        "Temporarily hide Dominate's safe-segment pulses while a sticker is dragged."
+        "Pattern used when the marked segments are the ones the player SHOULD land on."
     )]
-    public bool hideWhileDraggingSticker =
-        true;
+    public SegmentMesh.MarkPatternType mustLandPattern =
+        SegmentMesh.MarkPatternType.Chevrons;
+
+
+    [Tooltip(
+        "Pattern used when the marked segments are the ones the player must AVOID."
+    )]
+    public SegmentMesh.MarkPatternType mustAvoidPattern =
+        SegmentMesh.MarkPatternType.Checker;
+
+
+    public SegmentMesh.MarkPatternType GetActiveMarkPattern()
+    {
+        return
+            markedSegmentRule ==
+                MarkedSegmentRule.MustAvoidMarked
+                ? mustAvoidPattern
+                : mustLandPattern;
+    }
+
+
+    public string GetMarkedSegmentDescription()
+    {
+        /*
+         * Segment tooltip copy should tell the player WHAT TO DO first.
+         *
+         * Avoid repeating "landing here triggers / avoids Dominate" and then
+         * saying AVOID / LAND HERE again on the next line. The pattern already
+         * tells the player that this segment is special; the tooltip now gives
+         * one direct instruction plus one explicit consequence.
+         */
+        switch (markedSegmentRule)
+        {
+            case MarkedSegmentRule.MustAvoidMarked:
+                return
+                    "Avoid this segment.";
+
+            case MarkedSegmentRule.MustLandOnMarked:
+            default:
+                return
+                    "Land on any marked segment.";
+        }
+    }
+
+
+    public string GetMarkedSegmentStatus()
+    {
+        string consequence =
+            GetFailureDescription();
+
+
+        switch (markedSegmentRule)
+        {
+            case MarkedSegmentRule.MustAvoidMarked:
+                return
+                    $"Landing here: {consequence}.";
+
+            case MarkedSegmentRule.MustLandOnMarked:
+            default:
+                return
+                    $"Missing all marked segments: {consequence}.";
+        }
+    }
 
 
     // =========================================================

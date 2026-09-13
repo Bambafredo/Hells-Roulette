@@ -20,6 +20,27 @@ public class SegmentMesh : MonoBehaviour
         Dots = 3
     }
 
+
+    // =========================================================
+    // TEMPORARY SEGMENT MARK PATTERN TYPE
+    // =========================================================
+
+    /*
+     * Temporary marks are presentation-only overlays used by effects that
+     * attach a rule to a segment for the current action/spin.
+     *
+     * IMPORTANT:
+     * This is deliberately separate from BlockedPatternType. Segment Block and
+     * Limbo keep their existing blocked presentation/state completely intact.
+     */
+    public enum MarkPatternType
+    {
+        Chevrons = 0,
+        Checker = 1,
+        VerticalBars = 2,
+        Rings = 3
+    }
+
     [Min(3)]
     public int resolution = 16;
 
@@ -106,6 +127,37 @@ public class SegmentMesh : MonoBehaviour
         1.2f;
 
 
+    /*
+     * Generic temporary segment mark.
+     *
+     * This NEVER changes blocked state, block duration, placement validity,
+     * sticker activation or colliders. It is simply an additional visual layer
+     * that can coexist with the current Segment Block / Limbo presentation.
+     */
+    private bool marked =
+        false;
+
+    private Color markColor =
+        new Color(
+            0.65f,
+            0.1f,
+            0.9f,
+            1f
+        );
+
+    private float markOpacity =
+        0.55f;
+
+    private float markDensity =
+        8f;
+
+    private float markWidth =
+        0.12f;
+
+    private MarkPatternType markPatternType =
+        MarkPatternType.Chevrons;
+
+
     private MaterialPropertyBlock propertyBlock;
 
 
@@ -118,6 +170,9 @@ public class SegmentMesh : MonoBehaviour
 
     public bool IsTelegraphed =>
         telegraphed;
+
+    public bool IsMarked =>
+        marked;
 
 
     // =========================================================
@@ -221,6 +276,36 @@ public class SegmentMesh : MonoBehaviour
     private static readonly int TelegraphPulseSpeedId =
         Shader.PropertyToID(
             "_TelegraphPulseSpeed"
+        );
+
+    private static readonly int MarkedId =
+        Shader.PropertyToID(
+            "_Marked"
+        );
+
+    private static readonly int MarkColorId =
+        Shader.PropertyToID(
+            "_MarkColor"
+        );
+
+    private static readonly int MarkOpacityId =
+        Shader.PropertyToID(
+            "_MarkOpacity"
+        );
+
+    private static readonly int MarkDensityId =
+        Shader.PropertyToID(
+            "_MarkDensity"
+        );
+
+    private static readonly int MarkWidthId =
+        Shader.PropertyToID(
+            "_MarkWidth"
+        );
+
+    private static readonly int MarkPatternTypeId =
+        Shader.PropertyToID(
+            "_MarkPatternType"
         );
 
 
@@ -401,6 +486,61 @@ public class SegmentMesh : MonoBehaviour
         bool value)
     {
         telegraphed =
+            value;
+
+        ApplyVisualState();
+    }
+
+
+    /// <summary>
+    /// Configures the presentation of a temporary segment mark.
+    ///
+    /// This method is intentionally independent from ConfigureBlockedVisual /
+    /// ConfigureBlockedPattern so a marked segment can ALSO be a normal Segment
+    /// Block or a Limbo special block.
+    /// </summary>
+    public void ConfigureMark(
+        Color patternColor,
+        float opacity,
+        float density,
+        float width,
+        MarkPatternType patternType)
+    {
+        markColor =
+            patternColor;
+
+        markOpacity =
+            Mathf.Clamp01(
+                opacity
+            );
+
+        markDensity =
+            Mathf.Max(
+                0.01f,
+                density
+            );
+
+        markWidth =
+            Mathf.Clamp(
+                width,
+                0.01f,
+                0.45f
+            );
+
+        markPatternType =
+            patternType;
+
+        ApplyVisualState();
+    }
+
+
+    /// <summary>
+    /// Enables / disables ONLY the temporary mark overlay.
+    /// </summary>
+    public void SetMarked(
+        bool value)
+    {
+        marked =
             value;
 
         ApplyVisualState();
@@ -732,6 +872,39 @@ public class SegmentMesh : MonoBehaviour
         propertyBlock.SetFloat(
             TelegraphPulseSpeedId,
             telegraphPulseSpeed
+        );
+
+
+        propertyBlock.SetFloat(
+            MarkedId,
+            marked
+                ? 1f
+                : 0f
+        );
+
+        propertyBlock.SetColor(
+            MarkColorId,
+            markColor
+        );
+
+        propertyBlock.SetFloat(
+            MarkOpacityId,
+            markOpacity
+        );
+
+        propertyBlock.SetFloat(
+            MarkDensityId,
+            markDensity
+        );
+
+        propertyBlock.SetFloat(
+            MarkWidthId,
+            markWidth
+        );
+
+        propertyBlock.SetFloat(
+            MarkPatternTypeId,
+            (float)markPatternType
         );
 
 

@@ -22,6 +22,8 @@ MonoBehaviour:
   bloodDamage: 6
   infestationPool: []
   highlightColor: {r: 1, g: 1, b: 1, a: 1}
-  highlightStrength: 0.5
-  pulseSpeed: 0.6
-  hideWhileDraggingSticker: 1
+  highlightStrength: 0.4
+  markDensity: 16
+  markWidth: 0.12
+  mustLandPattern: 0
+  mustAvoidPattern: 1

@@ -124,6 +124,27 @@ public class SegmentBlockTooltipManager : MonoBehaviour
         );
 
 
+    [Tooltip(
+        "Color used by temporary segment-mark headings such as Dominate."
+    )]
+    public Color markTitleColor =
+        new Color(
+            0.85f,
+            0.35f,
+            1f
+        );
+
+    [Tooltip(
+        "Color used by temporary segment-mark status / consequence text."
+    )]
+    public Color markStatusColor =
+        new Color(
+            1f,
+            0.85f,
+            0.25f
+        );
+
+
     // =========================================================
     // TEXT
     // =========================================================
@@ -155,6 +176,10 @@ public class SegmentBlockTooltipManager : MonoBehaviour
 
     private string currentTooltipText =
         "";
+
+    private readonly List<SegmentMarkTooltipData>
+        tempMarkTooltips =
+            new List<SegmentMarkTooltipData>();
 
 
     // =========================================================
@@ -256,7 +281,7 @@ public class SegmentBlockTooltipManager : MonoBehaviour
 
 
         int segmentIndex =
-            FindHoveredBlockedSegment(
+            FindHoveredRelevantSegment(
                 mouseWorld
             );
 
@@ -268,14 +293,33 @@ public class SegmentBlockTooltipManager : MonoBehaviour
         }
 
 
+        bool isBlocked =
+            generator.IsSegmentBlocked(
+                segmentIndex
+            );
+
         int remaining =
-            generator
-                .GetSegmentBlockRemainingSpins(
+            isBlocked
+                ? generator.GetSegmentBlockRemainingSpins(
                     segmentIndex
-                );
+                )
+                : 0;
 
 
-        if (remaining <= 0)
+        tempMarkTooltips.Clear();
+
+        SegmentMarkTooltipRegistry.CollectTooltips(
+            segmentIndex,
+            tempMarkTooltips
+        );
+
+
+        bool hasMark =
+            tempMarkTooltips.Count > 0;
+
+
+        if (!isBlocked &&
+            !hasMark)
         {
             HideTooltip();
             return;
@@ -285,8 +329,18 @@ public class SegmentBlockTooltipManager : MonoBehaviour
         string tooltip =
             BuildTooltip(
                 segmentIndex,
-                remaining
+                remaining,
+                isBlocked,
+                tempMarkTooltips
             );
+
+
+        if (string.IsNullOrWhiteSpace(
+                tooltip))
+        {
+            HideTooltip();
+            return;
+        }
 
 
         ShowTooltip(
@@ -426,7 +480,7 @@ public class SegmentBlockTooltipManager : MonoBehaviour
     // HOVER
     // =========================================================
 
-    private int FindHoveredBlockedSegment(
+    private int FindHoveredRelevantSegment(
         Vector2 mouseWorld)
     {
         Collider2D[] hits =
@@ -456,8 +510,7 @@ public class SegmentBlockTooltipManager : MonoBehaviour
                 hit.GetComponent<SegmentMesh>();
 
 
-            if (segmentMesh == null ||
-                !segmentMesh.IsBlocked)
+            if (segmentMesh == null)
             {
                 continue;
             }
@@ -469,8 +522,30 @@ public class SegmentBlockTooltipManager : MonoBehaviour
                 );
 
 
-            if (index >= 0 &&
-                generator.IsSegmentBlocked(index))
+            if (index < 0)
+                continue;
+
+
+            bool isBlocked =
+                generator.IsSegmentBlocked(
+                    index
+                );
+
+
+            tempMarkTooltips.Clear();
+
+            SegmentMarkTooltipRegistry.CollectTooltips(
+                index,
+                tempMarkTooltips
+            );
+
+
+            bool hasMark =
+                tempMarkTooltips.Count > 0;
+
+
+            if (isBlocked ||
+                hasMark)
             {
                 return
                     index;
@@ -559,6 +634,71 @@ public class SegmentBlockTooltipManager : MonoBehaviour
 
     private string BuildTooltip(
         int segmentIndex,
+        int turnsRemaining,
+        bool isBlocked,
+        List<SegmentMarkTooltipData> markTooltips)
+    {
+        string result =
+            "";
+
+
+        // -----------------------------------------------------
+        // EXISTING SEGMENT BLOCK / LIMBO SECTION
+        // -----------------------------------------------------
+
+        if (isBlocked)
+        {
+            result =
+                BuildBlockedSection(
+                    segmentIndex,
+                    turnsRemaining
+                );
+        }
+
+
+        // -----------------------------------------------------
+        // TEMPORARY SEGMENT MARK SECTIONS
+        // -----------------------------------------------------
+
+        if (markTooltips != null)
+        {
+            for (int i = 0;
+                 i < markTooltips.Count;
+                 i++)
+            {
+                string markSection =
+                    BuildMarkedSection(
+                        markTooltips[i]
+                    );
+
+
+                if (string.IsNullOrWhiteSpace(
+                        markSection))
+                {
+                    continue;
+                }
+
+
+                if (!string.IsNullOrWhiteSpace(
+                        result))
+                {
+                    result +=
+                        "\n\n";
+                }
+
+
+                result +=
+                    markSection;
+            }
+        }
+
+
+        return result;
+    }
+
+
+    private string BuildBlockedSection(
+        int segmentIndex,
         int turnsRemaining)
     {
         if (SegmentBlockTooltipOverrideRegistry.TryGetOverride(
@@ -570,6 +710,8 @@ public class SegmentBlockTooltipManager : MonoBehaviour
                     overrideData
                 );
         }
+
+
         string titleHex =
             ColorUtility.ToHtmlStringRGB(
                 blockedTitleColor
@@ -593,6 +735,65 @@ public class SegmentBlockTooltipManager : MonoBehaviour
             blockedDescription +
             "\n" +
             $"<color=#{unlockHex}>Unlocks in {turnsRemaining} {turnWord}</color>";
+    }
+
+
+    private string BuildMarkedSection(
+        SegmentMarkTooltipData data)
+    {
+        string titleHex =
+            ColorUtility.ToHtmlStringRGB(
+                markTitleColor
+            );
+
+
+        string statusHex =
+            ColorUtility.ToHtmlStringRGB(
+                markStatusColor
+            );
+
+
+        string title =
+            string.IsNullOrWhiteSpace(
+                data.title
+            )
+                ? "Marked segment"
+                : data.title;
+
+
+        string description =
+            data.description ??
+            "";
+
+
+        string status =
+            data.status ??
+            "";
+
+
+        string result =
+            $"<color=#{titleHex}>{title}</color>";
+
+
+        if (!string.IsNullOrWhiteSpace(
+                description))
+        {
+            result +=
+                "\n" +
+                description;
+        }
+
+
+        if (!string.IsNullOrWhiteSpace(
+                status))
+        {
+            result +=
+                "\n" +
+                $"<color=#{statusHex}>{status}</color>";
+        }
+
+
+        return result;
     }
 
 
