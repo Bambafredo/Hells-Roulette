@@ -34,14 +34,17 @@ public class EnemyPanelManager : MonoBehaviour
     // TARGETING
     // =========================================================
 
+    /// <summary>
+    /// Returns the leftmost enemy that is currently eligible for a
+    /// SINGLE-TARGET attack.
+    ///
+    /// During Power Spins this skips enemies protected by a Curse whose
+    /// BlocksPowerSpinSingleTargeting rule is active. Therefore a left-to-right
+    /// attack naturally "passes through" an Untouchable enemy and reaches the
+    /// next valid enemy instead.
+    /// </summary>
     public BaseEnemy GetLeftmostAliveEnemy()
     {
-        /*
-         * New corridor mode.
-         *
-         * Only enemies that have physically reached CurrentRow and whose
-         * CombatActive flag is true can be targeted.
-         */
         if (corridorController != null &&
             corridorController.CurrentRow != null)
         {
@@ -52,10 +55,6 @@ public class EnemyPanelManager : MonoBehaviour
         }
 
 
-        /*
-         * Legacy fallback so existing scenes/prefabs do not break if the
-         * corridor reference has not been assigned yet.
-         */
         if (enemySlots == null)
             return null;
 
@@ -72,12 +71,25 @@ public class EnemyPanelManager : MonoBehaviour
                 );
 
 
-            if (enemy != null &&
-                enemy.gameObject.activeInHierarchy &&
-                !enemy.IsDead)
+            if (!IsLivingCombatEnemy(
+                    enemy))
             {
-                return enemy;
+                continue;
             }
+
+
+            if (IsPowerSpinProtectedSingleTarget(
+                    enemy))
+            {
+                LogUntouchablePassThrough(
+                    enemy
+                );
+
+                continue;
+            }
+
+
+            return enemy;
         }
 
 
@@ -85,13 +97,15 @@ public class EnemyPanelManager : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Returns every living combat-active enemy in CurrentRow.
+    ///
+    /// IMPORTANT: this is deliberately UNFILTERED by single-target immunity.
+    /// Area/all-enemy effects such as Rat Poison or Catapult(All Enemies) use
+    /// this method and therefore still damage Untouchable enemies.
+    /// </summary>
     public BaseEnemy[] GetAllAliveEnemies()
     {
-        /*
-         * Corridor mode: return every living, combat-active enemy in
-         * CurrentRow. This is generic targeting infrastructure for any effect
-         * that needs to hit the whole active enemy row.
-         */
         if (corridorController != null &&
             corridorController.CurrentRow != null)
         {
@@ -104,26 +118,26 @@ public class EnemyPanelManager : MonoBehaviour
             List<BaseEnemy> alive =
                 new List<BaseEnemy>();
 
+
             foreach (BaseEnemy enemy in rowEnemies)
             {
-                if (enemy == null ||
-                    enemy.IsDead ||
-                    !enemy.CombatActive ||
-                    !enemy.gameObject.activeInHierarchy)
+                if (!IsLivingCombatEnemy(
+                        enemy))
                 {
                     continue;
                 }
 
-                alive.Add(enemy);
+
+                alive.Add(
+                    enemy
+                );
             }
+
 
             return alive.ToArray();
         }
 
 
-        /*
-         * Legacy fallback: inspect authored enemy slots.
-         */
         if (enemySlots == null)
             return new BaseEnemy[0];
 
@@ -144,11 +158,12 @@ public class EnemyPanelManager : MonoBehaviour
                 );
 
 
-            if (enemy != null &&
-                enemy.gameObject.activeInHierarchy &&
-                !enemy.IsDead)
+            if (IsLivingCombatEnemy(
+                    enemy))
             {
-                fallbackAlive.Add(enemy);
+                fallbackAlive.Add(
+                    enemy
+                );
             }
         }
 
@@ -157,37 +172,209 @@ public class EnemyPanelManager : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Returns every enemy that can currently be chosen by a SINGLE-TARGET
+    /// effect.
+    ///
+    /// This exists primarily for non-directional target selection such as Stone.
+    /// During a Power Spin, Untouchable enemies are removed from the random pool.
+    /// During Manual / Lucky Shot spins it is identical to GetAllAliveEnemies().
+    /// </summary>
+    public BaseEnemy[] GetAllSingleTargetEligibleEnemies()
+    {
+        BaseEnemy[] alive =
+            GetAllAliveEnemies();
+
+
+        if (alive == null ||
+            alive.Length <= 0)
+        {
+            return new BaseEnemy[0];
+        }
+
+
+        List<BaseEnemy> eligible =
+            new List<BaseEnemy>();
+
+
+        foreach (BaseEnemy enemy in alive)
+        {
+            if (!IsEligibleSingleTargetEnemy(
+                    enemy))
+            {
+                continue;
+            }
+
+
+            eligible.Add(
+                enemy
+            );
+        }
+
+
+        return eligible.ToArray();
+    }
+
+
+    /// <summary>
+    /// Returns the rightmost enemy that is currently eligible for a
+    /// SINGLE-TARGET attack.
+    /// </summary>
     public BaseEnemy GetRightmostAliveEnemy()
     {
         if (corridorController != null &&
             corridorController.CurrentRow != null)
         {
-            return GetRightmostAliveEnemyInRow(
-                corridorController.CurrentRow
-            );
+            return
+                GetRightmostAliveEnemyInRow(
+                    corridorController.CurrentRow
+                );
         }
+
 
         if (enemySlots == null)
             return null;
 
-        for (int i = enemySlots.Length - 1; i >= 0; i--)
+
+        for (int i = enemySlots.Length - 1;
+             i >= 0;
+             i--)
         {
-            Transform slot = enemySlots[i];
+            Transform slot =
+                enemySlots[i];
+
+
             if (slot == null)
                 continue;
 
-            BaseEnemy enemy =
-                slot.GetComponentInChildren<BaseEnemy>(true);
 
-            if (enemy != null &&
-                enemy.gameObject.activeInHierarchy &&
-                !enemy.IsDead)
+            BaseEnemy enemy =
+                slot.GetComponentInChildren<BaseEnemy>(
+                    true
+                );
+
+
+            if (!IsLivingCombatEnemy(
+                    enemy))
             {
-                return enemy;
+                continue;
             }
+
+
+            if (IsPowerSpinProtectedSingleTarget(
+                    enemy))
+            {
+                LogUntouchablePassThrough(
+                    enemy
+                );
+
+                continue;
+            }
+
+
+            return enemy;
         }
 
+
         return null;
+    }
+
+
+    // =========================================================
+    // TARGET ELIGIBILITY
+    // =========================================================
+
+    private bool IsLivingCombatEnemy(
+        BaseEnemy enemy)
+    {
+        return
+            enemy != null &&
+            !enemy.IsDead &&
+            enemy.CombatActive &&
+            enemy.gameObject.activeInHierarchy;
+    }
+
+
+    private bool IsEligibleSingleTargetEnemy(
+        BaseEnemy enemy)
+    {
+        if (!IsLivingCombatEnemy(
+                enemy))
+        {
+            return false;
+        }
+
+
+        return
+            !IsPowerSpinProtectedSingleTarget(
+                enemy
+            );
+    }
+
+
+    private bool IsPowerSpinProtectedSingleTarget(
+        BaseEnemy enemy)
+    {
+        return
+            enemy != null &&
+            IsResolvingPowerSpin() &&
+            enemy.BlocksPowerSpinSingleTargeting;
+    }
+
+
+    private void LogUntouchablePassThrough(
+        BaseEnemy enemy)
+    {
+        if (enemy == null ||
+            GameLogManager.Instance == null)
+        {
+            return;
+        }
+
+
+        string enemyName =
+            string.IsNullOrWhiteSpace(
+                enemy.EnemyName
+            )
+                ? "Enemy"
+                : enemy.EnemyName;
+
+
+        GameLogManager.Instance
+            .AddGameplayLine(
+                "Attack passes through " +
+                GameLogManager.Instance
+                    .EnemyText(
+                        enemyName
+                    ) +
+                " (Untouchable)"
+            );
+    }
+
+
+    private bool IsResolvingPowerSpin()
+    {
+        RouletteController roulette =
+            RouletteController.Instance != null
+                ? RouletteController.Instance
+                : Object.FindObjectOfType<RouletteController>();
+
+
+        if (roulette == null)
+            return false;
+
+
+        /*
+         * SpinInProgress deliberately remains true through the COMPLETE valid
+         * spin-resolution pass, including sticker effects. This prevents the
+         * previous Power Spin from influencing targeting later in Rewards or
+         * other non-spin flows merely because CurrentSpinMethod still remembers
+         * the last launch method.
+         */
+        return
+            roulette.SpinInProgress &&
+            roulette.CurrentSpinMethod ==
+                RouletteController.SpinMethod.Power;
     }
 
 
@@ -208,32 +395,49 @@ public class EnemyPanelManager : MonoBehaviour
             );
 
 
-        BaseEnemy leftmost =
-            null;
+        List<BaseEnemy> ordered =
+            new List<BaseEnemy>();
 
 
         foreach (BaseEnemy enemy in enemies)
         {
-            if (enemy == null ||
-                enemy.IsDead ||
-                !enemy.CombatActive ||
-                !enemy.gameObject.activeInHierarchy)
+            if (IsLivingCombatEnemy(
+                    enemy))
             {
-                continue;
-            }
-
-
-            if (leftmost == null ||
-                enemy.transform.position.x <
-                leftmost.transform.position.x)
-            {
-                leftmost =
-                    enemy;
+                ordered.Add(
+                    enemy
+                );
             }
         }
 
 
-        return leftmost;
+        ordered.Sort(
+            (a, b) =>
+                a.transform.position.x
+                    .CompareTo(
+                        b.transform.position.x
+                    )
+        );
+
+
+        foreach (BaseEnemy enemy in ordered)
+        {
+            if (IsPowerSpinProtectedSingleTarget(
+                    enemy))
+            {
+                LogUntouchablePassThrough(
+                    enemy
+                );
+
+                continue;
+            }
+
+
+            return enemy;
+        }
+
+
+        return null;
     }
 
 
@@ -243,28 +447,55 @@ public class EnemyPanelManager : MonoBehaviour
         if (row == null)
             return null;
 
-        BaseEnemy[] enemies =
-            row.GetComponentsInChildren<BaseEnemy>(true);
 
-        BaseEnemy rightmost = null;
+        BaseEnemy[] enemies =
+            row.GetComponentsInChildren<BaseEnemy>(
+                true
+            );
+
+
+        List<BaseEnemy> ordered =
+            new List<BaseEnemy>();
+
 
         foreach (BaseEnemy enemy in enemies)
         {
-            if (enemy == null ||
-                enemy.IsDead ||
-                !enemy.CombatActive ||
-                !enemy.gameObject.activeInHierarchy)
+            if (IsLivingCombatEnemy(
+                    enemy))
             {
-                continue;
-            }
-
-            if (rightmost == null ||
-                enemy.transform.position.x > rightmost.transform.position.x)
-            {
-                rightmost = enemy;
+                ordered.Add(
+                    enemy
+                );
             }
         }
 
-        return rightmost;
+
+        ordered.Sort(
+            (a, b) =>
+                b.transform.position.x
+                    .CompareTo(
+                        a.transform.position.x
+                    )
+        );
+
+
+        foreach (BaseEnemy enemy in ordered)
+        {
+            if (IsPowerSpinProtectedSingleTarget(
+                    enemy))
+            {
+                LogUntouchablePassThrough(
+                    enemy
+                );
+
+                continue;
+            }
+
+
+            return enemy;
+        }
+
+
+        return null;
     }
 }

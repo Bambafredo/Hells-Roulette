@@ -55,8 +55,17 @@ public class StickerStone : StickerEffect
         }
 
 
+        /*
+         * Stone is single-target even though its target is random.
+         *
+         * During a Power Spin, EnemyPanelManager therefore excludes enemies
+         * protected from Power-Spin single-targeting (for example Untouchable)
+         * from this random pool. AoE effects still use GetAllAliveEnemies() and
+         * remain unaffected.
+         */
         BaseEnemy[] targets =
-            enemyPanel.GetAllAliveEnemies();
+            enemyPanel
+                .GetAllSingleTargetEligibleEnemies();
 
 
         if (targets == null ||

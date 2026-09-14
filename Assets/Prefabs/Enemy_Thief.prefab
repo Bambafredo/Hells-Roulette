@@ -426,14 +426,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enemyName: Thief
-  maxHP: 1
+  maxHP: 2
   rowPlacementPriority: 0
-  actionSequenceOrderMode: 1
+  actionSequenceOrderMode: 0
   actionSequence:
   - {fileID: 11400000, guid: 1b0d369592f3f0141a911c6e159b11aa, type: 2}
   - {fileID: 11400000, guid: 1b0d369592f3f0141a911c6e159b11aa, type: 2}
   - {fileID: 11400000, guid: af7709d804dfbcd4daeabad5a4a9227c, type: 2}
-  curse: {fileID: 0}
+  curse: {fileID: 11400000, guid: 114218ef400c5bc4ba7daa4cdf8239aa, type: 2}
   curseValue: 2
   additionalCurses: []
   hpText: {fileID: 4695612484063555935}

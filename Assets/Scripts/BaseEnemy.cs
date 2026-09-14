@@ -234,6 +234,70 @@ public class BaseEnemy : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// True when one of this enemy's CURRENTLY ACTIVE Curses prevents it from
+    /// being selected by single-target attacks during a Power Spin.
+    ///
+    /// This deliberately checks the runtime activation flags instead of merely
+    /// inspecting assigned assets. Enemies outside CurrentRow, dead enemies and
+    /// inactive additional Curse slots therefore never affect targeting.
+    /// </summary>
+    public bool BlocksPowerSpinSingleTargeting
+    {
+        get
+        {
+            if (!combatActive ||
+                isDead)
+            {
+                return false;
+            }
+
+
+            if (curseActive &&
+                curse != null &&
+                curse.BlocksPowerSpinSingleTargeting)
+            {
+                return true;
+            }
+
+
+            EnsureAdditionalCurseRuntimeState();
+
+
+            if (additionalCurses == null)
+                return false;
+
+
+            for (int i = 0;
+                 i < additionalCurses.Length;
+                 i++)
+            {
+                if (i < 0 ||
+                    i >= additionalCurseActiveStates.Length ||
+                    !additionalCurseActiveStates[i])
+                {
+                    continue;
+                }
+
+
+                AdditionalCurseSlot slot =
+                    additionalCurses[i];
+
+
+                if (slot != null &&
+                    slot.curse != null &&
+                    slot.curse.BlocksPowerSpinSingleTargeting)
+                {
+                    return true;
+                }
+            }
+
+
+            return false;
+        }
+    }
+
+
     // =========================================================
     // UNITY
     // =========================================================

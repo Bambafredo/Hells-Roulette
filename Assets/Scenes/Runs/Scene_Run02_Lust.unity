@@ -10706,6 +10706,10 @@ MonoBehaviour:
     weightSchedule:
     - fromRound: 1
       weight: 1
+  - enemyPrefab: {fileID: 7377409930441240661, guid: 331390e0567aa7a40b2462b1c6af17e6, type: 3}
+    weightSchedule:
+    - fromRound: 1
+      weight: 1
   presetPool: []
   specialEncounterPool: []
 --- !u!1 &1403957980

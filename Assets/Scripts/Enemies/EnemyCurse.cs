@@ -52,6 +52,19 @@ public abstract class EnemyCurse : ScriptableObject
     }
 
 
+    /// <summary>
+    /// Generic targeting rule used by single-target sticker attacks.
+    ///
+    /// Most Curses leave this false. A Curse such as Untouchable can opt in
+    /// without EnemyPanelManager needing to know about a concrete Curse type.
+    /// BaseEnemy only exposes this rule while the Curse is actually active.
+    /// </summary>
+    public virtual bool BlocksPowerSpinSingleTargeting
+    {
+        get { return false; }
+    }
+
+
     // =========================================================
     // TOOLTIP
     // =========================================================
