@@ -15,6 +15,13 @@ public class EnemyActionDominate : EnemyAction
     }
 
 
+    public enum BloodEffectMode
+    {
+        LoseBlood,
+        DealDamage
+    }
+
+
     public enum MarkedSegmentRule
     {
         MustLandOnMarked,
@@ -45,7 +52,16 @@ public class EnemyActionDominate : EnemyAction
 
 
     [Tooltip(
-        "Used only when Failure Effect = Blood Damage."
+        "Used only when Failure Effect = Blood Damage. " +
+        "Lose Blood bypasses Shield / damage blockers. " +
+        "Deal Damage uses the normal damage pipeline and can be blocked."
+    )]
+    public BloodEffectMode bloodEffectMode =
+        BloodEffectMode.LoseBlood;
+
+
+    [Tooltip(
+        "Amount of Blood lost or damage dealt when Failure Effect = Blood Damage."
     )]
     [Min(0)]
     public int bloodDamage =
@@ -245,8 +261,19 @@ public class EnemyActionDominate : EnemyAction
         switch (failureEffect)
         {
             case FailureEffect.BloodDamage:
+
+                int amount =
+                    Mathf.Max(
+                        0,
+                        bloodDamage
+                    );
+
+
                 return
-                    $"lose {Mathf.Max(0, bloodDamage)} Blood";
+                    bloodEffectMode ==
+                        BloodEffectMode.DealDamage
+                        ? $"take {amount} damage"
+                        : $"lose {amount} Blood";
 
 
             case FailureEffect.RandomInfestation:

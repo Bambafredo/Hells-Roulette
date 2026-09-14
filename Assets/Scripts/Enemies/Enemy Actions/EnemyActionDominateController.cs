@@ -268,30 +268,9 @@ public class EnemyActionDominateController :
         {
             case EnemyActionDominate.FailureEffect.BloodDamage:
 
-                int damage =
-                    Mathf.Max(
-                        0,
-                        action.bloodDamage
-                    );
-
-
-                if (damage > 0)
-                {
-                    /*
-                     * Use BaseEnemy's normal Blood attack path so Shield /
-                     * reactive mitigation, log ordering and feedback remain
-                     * consistent with the rest of the game.
-                     */
-                    enemy.PerformBloodAttack(
-                        damage
-                    );
-                }
-
-
-                Debug.Log(
-                    $"[DOMINATE] {enemy.EnemyName}: landed on Segment " +
-                    $"{landedSegment + 1}. Marked rule failed. " +
-                    $"Blood Damage consequence = {damage}."
+                ResolveBloodFailure(
+                    action,
+                    landedSegment
                 );
 
                 break;
@@ -313,6 +292,183 @@ public class EnemyActionDominateController :
 
                 break;
         }
+    }
+
+
+    // =========================================================
+    // BLOOD FAILURE
+    // =========================================================
+
+    private void ResolveBloodFailure(
+        EnemyActionDominate action,
+        int landedSegment)
+    {
+        if (action == null)
+            return;
+
+
+        int amount =
+            Mathf.Max(
+                0,
+                action.bloodDamage
+            );
+
+
+        if (amount <= 0)
+        {
+            Debug.Log(
+                $"[DOMINATE] {enemy.EnemyName}: landed on Segment " +
+                $"{landedSegment + 1}. Marked rule failed, but Blood amount is 0."
+            );
+
+            return;
+        }
+
+
+        switch (action.bloodEffectMode)
+        {
+            // -------------------------------------------------
+            // DIRECT BLOOD LOSS
+            // -------------------------------------------------
+
+            case EnemyActionDominate.BloodEffectMode.LoseBlood:
+
+                ResolveDirectBloodLoss(
+                    amount
+                );
+
+
+                Debug.Log(
+                    $"[DOMINATE] {enemy.EnemyName}: landed on Segment " +
+                    $"{landedSegment + 1}. Marked rule failed. " +
+                    $"Direct Blood loss = {amount}."
+                );
+
+                break;
+
+
+            // -------------------------------------------------
+            // BLOCKABLE DAMAGE
+            // -------------------------------------------------
+
+            case EnemyActionDominate.BloodEffectMode.DealDamage:
+            default:
+
+                /*
+                 * Use BaseEnemy's normal attack pipeline.
+                 *
+                 * This intentionally goes through BloodManager.TakeDamage(), so
+                 * Shield and any future registered damage blockers can mitigate
+                 * the consequence exactly like a normal enemy attack.
+                 */
+                enemy.PerformBloodAttack(
+                    amount
+                );
+
+
+                Debug.Log(
+                    $"[DOMINATE] {enemy.EnemyName}: landed on Segment " +
+                    $"{landedSegment + 1}. Marked rule failed. " +
+                    $"Blockable damage = {amount}."
+                );
+
+                break;
+        }
+    }
+
+
+    private void ResolveDirectBloodLoss(
+        int amount)
+    {
+        if (amount <= 0)
+            return;
+
+
+        if (BloodManager.Instance == null)
+        {
+            Debug.LogWarning(
+                "[DOMINATE] Cannot apply direct Blood loss because " +
+                "BloodManager is missing."
+            );
+
+            return;
+        }
+
+
+        int before =
+            Mathf.Max(
+                0,
+                BloodManager.Instance.currentBlood
+            );
+
+
+        /*
+         * Direct Blood loss is NOT damage.
+         *
+         * ConsumeBlood() deliberately bypasses Shield and every other damage
+         * blocker while still using BloodManager's normal Blood-loss / game-over
+         * bookkeeping.
+         */
+        BloodManager.Instance
+            .ConsumeBlood(
+                amount
+            );
+
+
+        int after =
+            Mathf.Max(
+                0,
+                BloodManager.Instance.currentBlood
+            );
+
+
+        int actualBloodLost =
+            Mathf.Max(
+                0,
+                before - after
+            );
+
+
+        LogDirectBloodLoss(
+            actualBloodLost
+        );
+    }
+
+
+    private void LogDirectBloodLoss(
+        int actualBloodLost)
+    {
+        if (GameLogManager.Instance == null)
+            return;
+
+
+        string enemyName =
+            enemy != null &&
+            !string.IsNullOrWhiteSpace(
+                enemy.EnemyName
+            )
+                ? enemy.EnemyName
+                : "Enemy";
+
+
+        string bloodText =
+            GameLogManager.Instance
+                .BloodText(
+                    actualBloodLost > 0
+                        ? $"-{actualBloodLost} Blood"
+                        : "0 Blood"
+                );
+
+
+        GameLogManager.Instance
+            .AddGameplayLine(
+                GameLogManager.Instance
+                    .EnemyText(
+                        enemyName
+                    ) +
+                " Dominate: " +
+                bloodText
+            );
     }
 
 
@@ -691,12 +847,8 @@ public class EnemyActionDominateController :
 
 
         /*
-         * Dominate keeps its logical target set alive while modal setup/reward
-         * screens are open, but its telegraph must not be visible there.
-         *
-         * IMPORTANT: we only clear presentation. We do NOT leave the shared
-         * Dominate group or choose new indices, so the exact same three targets
-         * reappear once gameplay resumes.
+         * Reward / Draft are setup phases. Keep the logical target set alive,
+         * but hide Dominate's presentation until gameplay resumes.
          */
         if (owner.IsDominatePresentationSuppressed())
         {
@@ -861,9 +1013,6 @@ public class EnemyActionDominateController :
 
     private bool IsDominatePresentationSuppressed()
     {
-        /*
-         * End-of-round rewards / shop are a safe setup phase.
-         */
         if (RewardManager.Instance != null &&
             RewardManager.Instance.RewardPhaseActive)
         {
@@ -871,11 +1020,6 @@ public class EnemyActionDominateController :
         }
 
 
-        /*
-         * DraftManager deliberately has no singleton in the current
-         * architecture, so cache the scene instance instead of introducing
-         * new global state just for Dominate.
-         */
         if (draftManager == null)
         {
             draftManager =
