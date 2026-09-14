@@ -32,6 +32,73 @@ public class BaseSticker : MonoBehaviour
     public static event Action<BaseSticker>
         OnAnyStickerDragEnded;
 
+
+    // ===========================================================
+    // USE CONSUMPTION MODIFIERS
+    // ===========================================================
+
+    /// <summary>
+    /// Generic hook for systems that increase how many uses a limited sticker
+    /// consumes when it would normally spend a use.
+    ///
+    /// The incoming integer is the amount currently requested. Every listener
+    /// may increase that amount. BaseSticker always clamps the final result to
+    /// this physical sticker's remaining uses.
+    ///
+    /// This keeps concrete systems such as enemy Curses out of BaseSticker.
+    /// </summary>
+    public static event Func<BaseSticker, int, int>
+        OnModifyUseConsumption;
+
+
+    public struct UseConsumptionEvent
+    {
+        public BaseSticker sticker;
+        public int requestedUses;
+        public int consumedUses;
+        public int remainingUsesBefore;
+        public int remainingUsesAfter;
+        public bool logRemainingUses;
+
+
+        public UseConsumptionEvent(
+            BaseSticker sticker,
+            int requestedUses,
+            int consumedUses,
+            int remainingUsesBefore,
+            int remainingUsesAfter,
+            bool logRemainingUses)
+        {
+            this.sticker =
+                sticker;
+
+            this.requestedUses =
+                requestedUses;
+
+            this.consumedUses =
+                consumedUses;
+
+            this.remainingUsesBefore =
+                remainingUsesBefore;
+
+            this.remainingUsesAfter =
+                remainingUsesAfter;
+
+            this.logRemainingUses =
+                logRemainingUses;
+        }
+    }
+
+
+    /// <summary>
+    /// Fired AFTER a limited-use sticker has actually consumed uses.
+    ///
+    /// This is presentation / observation only. Gameplay modifiers must use
+    /// OnModifyUseConsumption instead.
+    /// </summary>
+    public static event Action<UseConsumptionEvent>
+        OnUseConsumptionResolved;
+
     [Header("Sticker Config")]
     public StickerEffect effect;
     public Transform wheelCenter;
@@ -1760,10 +1827,45 @@ public class BaseSticker : MonoBehaviour
             return;
         }
 
+        int requestedUses =
+            1;
+
+
+        int remainingUsesBefore =
+            remainingUses;
+
+
+        int usesToConsume =
+            ResolveUseConsumptionAmount(
+                requestedUses
+            );
+
+
         remainingUses =
             Mathf.Max(
                 0,
-                remainingUses - 1
+                remainingUses - usesToConsume
+            );
+
+
+        int actualUsesConsumed =
+            Mathf.Max(
+                0,
+                remainingUsesBefore -
+                remainingUses
+            );
+
+
+        OnUseConsumptionResolved?
+            .Invoke(
+                new UseConsumptionEvent(
+                    this,
+                    requestedUses,
+                    actualUsesConsumed,
+                    remainingUsesBefore,
+                    remainingUses,
+                    logRemainingUses
+                )
             );
 
 
@@ -1785,6 +1887,72 @@ public class BaseSticker : MonoBehaviour
             consumed = true;
             DestroyStickerInstance();
         }
+    }
+
+
+    private int ResolveUseConsumptionAmount(
+        int requestedUses)
+    {
+        int resolvedUses =
+            Mathf.Max(
+                0,
+                requestedUses
+            );
+
+
+        Func<BaseSticker, int, int> modifiers =
+            OnModifyUseConsumption;
+
+
+        if (modifiers != null)
+        {
+            foreach (
+                Func<BaseSticker, int, int> modifier
+                in modifiers.GetInvocationList())
+            {
+                if (modifier == null)
+                    continue;
+
+
+                try
+                {
+                    int modifiedUses =
+                        modifier(
+                            this,
+                            resolvedUses
+                        );
+
+
+                    /*
+                     * The hook is deliberately increase-only. A Curse or other
+                     * modifier may make a sticker spend MORE uses, but it must
+                     * never accidentally make an activation free.
+                     */
+                    resolvedUses =
+                        Mathf.Max(
+                            resolvedUses,
+                            modifiedUses
+                        );
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(
+                        exception
+                    );
+                }
+            }
+        }
+
+
+        return
+            Mathf.Clamp(
+                resolvedUses,
+                0,
+                Mathf.Max(
+                    0,
+                    remainingUses
+                )
+            );
     }
 
 

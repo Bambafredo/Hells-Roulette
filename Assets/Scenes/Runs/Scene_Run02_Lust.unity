@@ -10702,13 +10702,29 @@ MonoBehaviour:
     weightSchedule:
     - fromRound: 1
       weight: 1
-  - enemyPrefab: {fileID: 7377409930441240661, guid: b9a7c428f1c7bbb41b45af558b7864a7, type: 3}
+  - enemyPrefab: {fileID: 7377409930441240661, guid: 8dd64ac380bfa04439b2131caeae82a6, type: 3}
     weightSchedule:
     - fromRound: 1
       weight: 1
-  - enemyPrefab: {fileID: 7377409930441240661, guid: 331390e0567aa7a40b2462b1c6af17e6, type: 3}
+    - fromRound: 6
+      weight: 0
+  - enemyPrefab: {fileID: 7377409930441240661, guid: 09226c6373a2c8645943b1a420c75f78, type: 3}
     weightSchedule:
     - fromRound: 1
+      weight: 1
+    - fromRound: 4
+      weight: 0
+  - enemyPrefab: {fileID: 7377409930441240661, guid: b9a7c428f1c7bbb41b45af558b7864a7, type: 3}
+    weightSchedule:
+    - fromRound: 3
+      weight: 1
+  - enemyPrefab: {fileID: 7377409930441240661, guid: 331390e0567aa7a40b2462b1c6af17e6, type: 3}
+    weightSchedule:
+    - fromRound: 5
+      weight: 1
+  - enemyPrefab: {fileID: 7377409930441240661, guid: 9ac71f69cd3dc114481700ac64e0265f, type: 3}
+    weightSchedule:
+    - fromRound: 6
       weight: 1
   presetPool: []
   specialEncounterPool: []

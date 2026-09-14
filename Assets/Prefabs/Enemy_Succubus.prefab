@@ -59,8 +59,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.85, y: 0.85, z: 0.85}
-  m_ConstrainProportionsScale: 1
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 7781717469365967970}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -105,7 +105,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 21300000, guid: 8cdfbf3cd2a9b114cbbe6031e02787af, type: 3}
+  m_Sprite: {fileID: 21300000, guid: b61d9db450ef64b41bbe063413bf02aa, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -386,8 +386,9 @@ GameObject:
   m_Component:
   - component: {fileID: 1355188969536696064}
   - component: {fileID: 7265420577131008082}
+  - component: {fileID: 279940912682771310}
   m_Layer: 3
-  m_Name: Enemy_Infested
+  m_Name: Enemy_Succubus
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -424,21 +425,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 84d28e295ccd56a469f32288a07ea3a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enemyName: Infested
-  maxHP: 3
-  rowPlacementPriority: 3
+  enemyName: Succubus
+  maxHP: 5
+  rowPlacementPriority: 2
   actionSequenceOrderMode: 0
   actionSequence:
   - {fileID: 11400000, guid: 1b0d369592f3f0141a911c6e159b11aa, type: 2}
-  - {fileID: 11400000, guid: 1b0d369592f3f0141a911c6e159b11aa, type: 2}
-  - {fileID: 11400000, guid: 59d377a5ea1277549a01e996c2ef0adb, type: 2}
-  curse: {fileID: 0}
+  - {fileID: 11400000, guid: 9d3baaae28a5d0948aef9ee00543b26d, type: 2}
+  - {fileID: 11400000, guid: 372a6189d1de1ff4eaa7ef79efa95aa9, type: 2}
+  curse: {fileID: 11400000, guid: 11eb71712448ea24dac5eb478a038920, type: 2}
   curseValue: 0
   additionalCurses: []
   hpText: {fileID: 4695612484063555935}
   sprite: {fileID: 8621462763584552993}
   actionIconRenderer: {fileID: 784439632769026815}
   curseIconRenderer: {fileID: 4402338551793481420}
+--- !u!114 &279940912682771310
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7377409930441240661}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d061f184970cbd74a93a03ed16d41fbf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &9009554841982820289
 GameObject:
   m_ObjectHideFlags: 0

@@ -132,41 +132,17 @@ public class StickerShield : StickerEffect
          * the damage source (enemy / Rat Poison / future source) has not yet
          * written its own log line.
          *
-         * Consume the use NOW so gameplay state is correct, but defer Shield's
-         * visual feedback. The damage source will flush it immediately after
-         * logging itself.
+         * Queue Shield's ACTIVATION feedback first, then consume the use, then
+         * queue the normal "uses remaining" line.
+         *
+         * This ordering also gives generic use-consumption observers such as
+         * Burnout a clean place in the middle:
+         *
+         * Damage source
+         * Shield blocks...
+         * Burnout exhausts Shield...
+         * Shield uses remaining...
          */
-        bool shouldLogUsesRemaining =
-            false;
-
-        int usesRemainingAfterActivation =
-            owner.RemainingUses;
-
-
-        if (blockEvent.firstPreventionForBlocker)
-        {
-            bool shouldConsumeUse =
-                ShouldConsumeUseOnActivation(
-                    location
-                );
-
-
-            if (shouldConsumeUse &&
-                HasLimitedUses)
-            {
-                owner.ConsumeUseAfterActivation(
-                    false
-                );
-
-                shouldLogUsesRemaining =
-                    true;
-
-                usesRemainingAfterActivation =
-                    owner.RemainingUses;
-            }
-        }
-
-
         string safeStickerName =
             string.IsNullOrWhiteSpace(
                 stickerName
@@ -189,21 +165,51 @@ public class StickerShield : StickerEffect
                     LogDeferredPrevention(
                         safeStickerName,
                         preventedDamage,
-                        remainingCapacity,
-                        shouldLogUsesRemaining,
-                        usesRemainingAfterActivation
+                        remainingCapacity
                     );
                 }
             );
+
+
+        if (blockEvent.firstPreventionForBlocker)
+        {
+            bool shouldConsumeUse =
+                ShouldConsumeUseOnActivation(
+                    location
+                );
+
+
+            if (shouldConsumeUse &&
+                HasLimitedUses)
+            {
+                owner.ConsumeUseAfterActivation(
+                    false
+                );
+
+
+                int usesRemainingAfterActivation =
+                    owner.RemainingUses;
+
+
+                BloodManager.Instance?
+                    .QueueDeferredDamageFeedback(
+                        () =>
+                        {
+                            LogDeferredUsesRemaining(
+                                safeStickerName,
+                                usesRemainingAfterActivation
+                            );
+                        }
+                    );
+            }
+        }
     }
 
 
     private void LogDeferredPrevention(
         string safeStickerName,
         int preventedDamage,
-        int remainingCapacity,
-        bool logUsesRemaining,
-        int usesRemaining)
+        int remainingCapacity)
     {
         if (GameLogManager.Instance == null)
             return;
@@ -235,19 +241,25 @@ public class StickerShield : StickerEffect
                 remainingText +
                 " remaining this spin)"
             );
+    }
 
 
-        if (logUsesRemaining)
-        {
-            GameLogManager.Instance
-                .AddGameplayLine(
-                    GameLogManager.Instance
-                        .StickerText(
-                            safeStickerName
-                        ) +
-                    $" uses remaining: {usesRemaining}"
-                );
-        }
+    private void LogDeferredUsesRemaining(
+        string safeStickerName,
+        int usesRemaining)
+    {
+        if (GameLogManager.Instance == null)
+            return;
+
+
+        GameLogManager.Instance
+            .AddGameplayLine(
+                GameLogManager.Instance
+                    .StickerText(
+                        safeStickerName
+                    ) +
+                $" uses remaining: {usesRemaining}"
+            );
     }
 
 
