@@ -7,7 +7,7 @@ using UnityEngine;
 ///
 /// Added automatically by EnemyCurseUntouchable when the Curse becomes active.
 /// It does not own targeting logic; it only provides the temporary visual
-/// feedback while a Power Spin is being charged / resolved.
+/// feedback while Untouchable's configured trigger spin is active.
 /// </summary>
 [DisallowMultipleComponent]
 public class EnemyUntouchablePowerSpinFeedback : MonoBehaviour
@@ -31,7 +31,7 @@ public class EnemyUntouchablePowerSpinFeedback : MonoBehaviour
     /*
      * BaseEnemy's hit flash temporarily changes sprite.color.
      *
-     * If the Power Spin ends while that coroutine is still alive, its delayed
+     * If the phasing window ends while that coroutine is still alive, its delayed
      * restore could otherwise put the faded/darkened color back AFTER we have
      * restored the normal enemy color.
      *
@@ -80,10 +80,14 @@ public class EnemyUntouchablePowerSpinFeedback : MonoBehaviour
         );
 
 
+        EnemyCurseUntouchable activeSource =
+            GetActivePresentationSource();
+
+
         bool shouldShowFeedback =
             enemy.CombatActive &&
             !enemy.IsDead &&
-            IsPowerSpinFeedbackWindowActive();
+            activeSource != null;
 
 
         if (shouldShowFeedback)
@@ -95,7 +99,8 @@ public class EnemyUntouchablePowerSpinFeedback : MonoBehaviour
             if (!feedbackApplied)
             {
                 ApplyFeedback(
-                    renderer
+                    renderer,
+                    activeSource
                 );
             }
 
@@ -221,13 +226,20 @@ public class EnemyUntouchablePowerSpinFeedback : MonoBehaviour
     // FEEDBACK WINDOW
     // =========================================================
 
-    private bool IsPowerSpinFeedbackWindowActive()
+    private bool IsTriggerWindowActive(
+        EnemyCurseUntouchable source)
     {
+        if (source == null)
+            return false;
+
+
         /*
-         * Start immediately when the player successfully begins charging the
-         * Power Switch.
+         * Power Spin feedback begins immediately when the player successfully
+         * starts charging the Power Switch, before the physical spin launches.
          */
-        if (PowerSpinController.Instance != null &&
+        if (source.Trigger ==
+                EnemyCurseUntouchable.PhasingTrigger.PowerSpin &&
+            PowerSpinController.Instance != null &&
             PowerSpinController.Instance.IsCharging)
         {
             return true;
@@ -238,19 +250,32 @@ public class EnemyUntouchablePowerSpinFeedback : MonoBehaviour
             RouletteController.Instance;
 
 
-        if (roulette == null)
+        if (roulette == null ||
+            !roulette.SpinInProgress)
+        {
             return false;
+        }
 
 
         /*
          * SpinInProgress stays true through the entire sticker/enemy resolution
-         * pass, so the visual feedback remains active until the Power Spin is
+         * pass, so feedback remains active until the triggering spin is
          * genuinely finished.
          */
-        return
-            roulette.SpinInProgress &&
-            roulette.CurrentSpinMethod ==
-                RouletteController.SpinMethod.Power;
+        switch (source.Trigger)
+        {
+            case EnemyCurseUntouchable.PhasingTrigger.LuckyShot:
+                return
+                    roulette.CurrentSpinMethod ==
+                    RouletteController.SpinMethod.LuckyShot;
+
+
+            case EnemyCurseUntouchable.PhasingTrigger.PowerSpin:
+            default:
+                return
+                    roulette.CurrentSpinMethod ==
+                    RouletteController.SpinMethod.Power;
+        }
     }
 
 
@@ -283,12 +308,9 @@ public class EnemyUntouchablePowerSpinFeedback : MonoBehaviour
 
 
     private void ApplyFeedback(
-        SpriteRenderer renderer)
+        SpriteRenderer renderer,
+        EnemyCurseUntouchable source)
     {
-        EnemyCurseUntouchable source =
-            GetPresentationSource();
-
-
         if (renderer == null ||
             source == null)
         {
@@ -380,14 +402,21 @@ public class EnemyUntouchablePowerSpinFeedback : MonoBehaviour
     }
 
 
-    private EnemyCurseUntouchable GetPresentationSource()
+    private EnemyCurseUntouchable GetActivePresentationSource()
     {
         foreach (
             KeyValuePair<EnemyCurseUntouchable, int> entry
             in activeSources)
         {
-            if (entry.Key != null &&
-                entry.Value > 0)
+            if (entry.Key == null ||
+                entry.Value <= 0)
+            {
+                continue;
+            }
+
+
+            if (IsTriggerWindowActive(
+                    entry.Key))
             {
                 return
                     entry.Key;
@@ -397,4 +426,5 @@ public class EnemyUntouchablePowerSpinFeedback : MonoBehaviour
 
         return null;
     }
+
 }

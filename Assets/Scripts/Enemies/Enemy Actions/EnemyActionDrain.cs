@@ -93,7 +93,8 @@ public class EnemyActionDrain : EnemyAction
 
 
         /*
-         * Healing is an independent authored value.
+         * Healing is an independent authored value and Drain is explicitly
+         * allowed to OVERHEAL above the enemy's starting Max HP.
          *
          * It does not depend on how much Blood the player actually lost after
          * mitigation. This lets Damage and Heal Amount be balanced separately.
@@ -102,7 +103,8 @@ public class EnemyActionDrain : EnemyAction
             !enemy.IsDead)
         {
             enemy.Heal(
-                healAmount
+                healAmount,
+                true
             );
         }
     }

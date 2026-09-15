@@ -426,7 +426,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enemyName: Succubus
-  maxHP: 7
+  maxHP: 5
   rowPlacementPriority: 0
   actionSequenceOrderMode: 0
   actionSequence:

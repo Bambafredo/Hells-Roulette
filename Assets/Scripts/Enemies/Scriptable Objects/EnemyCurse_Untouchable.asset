@@ -16,3 +16,6 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: c9bbee6c83dd0ea40b414181300e1e6d, type: 3}
   tooltipDescription: During Power Spins, single-target damage passes through this
     enemy to the next valid target. Damage that hits all enemies still affects it.
+  phasingTrigger: 0
+  feedbackMode: 0
+  feedbackStrength: 0.6

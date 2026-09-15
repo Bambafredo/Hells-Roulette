@@ -235,65 +235,126 @@ public class BaseEnemy : MonoBehaviour
 
 
     /// <summary>
-    /// True when one of this enemy's CURRENTLY ACTIVE Curses prevents it from
-    /// being selected by single-target attacks during a Power Spin.
-    ///
-    /// This deliberately checks the runtime activation flags instead of merely
-    /// inspecting assigned assets. Enemies outside CurrentRow, dead enemies and
-    /// inactive additional Curse slots therefore never affect targeting.
+    /// Backwards-compatible Power Spin query.
     /// </summary>
     public bool BlocksPowerSpinSingleTargeting
     {
         get
         {
-            if (!combatActive ||
-                isDead)
+            return
+                BlocksSingleTargetingForSpin(
+                    RouletteController.SpinMethod.Power
+                );
+        }
+    }
+
+
+    /// <summary>
+    /// Lucky Shot equivalent of BlocksPowerSpinSingleTargeting.
+    /// </summary>
+    public bool BlocksLuckyShotSingleTargeting
+    {
+        get
+        {
+            return
+                BlocksSingleTargetingForSpin(
+                    RouletteController.SpinMethod.LuckyShot
+                );
+        }
+    }
+
+
+    /// <summary>
+    /// True when one of this enemy's CURRENTLY ACTIVE Curses prevents it from
+    /// being selected by a single-target attack for the supplied spin method.
+    ///
+    /// This deliberately checks runtime activation flags instead of merely
+    /// inspecting assigned assets. Enemies outside CurrentRow, dead enemies and
+    /// inactive additional Curse slots therefore never affect targeting.
+    /// </summary>
+    public bool BlocksSingleTargetingForSpin(
+        RouletteController.SpinMethod spinMethod)
+    {
+        if (!combatActive ||
+            isDead)
+        {
+            return false;
+        }
+
+
+        if (curseActive &&
+            CurseBlocksSingleTargetingForSpin(
+                curse,
+                spinMethod
+            ))
+        {
+            return true;
+        }
+
+
+        EnsureAdditionalCurseRuntimeState();
+
+
+        if (additionalCurses == null)
+            return false;
+
+
+        for (int i = 0;
+             i < additionalCurses.Length;
+             i++)
+        {
+            if (i < 0 ||
+                i >= additionalCurseActiveStates.Length ||
+                !additionalCurseActiveStates[i])
             {
-                return false;
+                continue;
             }
 
 
-            if (curseActive &&
-                curse != null &&
-                curse.BlocksPowerSpinSingleTargeting)
+            AdditionalCurseSlot slot =
+                additionalCurses[i];
+
+
+            if (slot != null &&
+                CurseBlocksSingleTargetingForSpin(
+                    slot.curse,
+                    spinMethod
+                ))
             {
                 return true;
             }
+        }
 
 
-            EnsureAdditionalCurseRuntimeState();
+        return false;
+    }
 
 
-            if (additionalCurses == null)
-                return false;
-
-
-            for (int i = 0;
-                 i < additionalCurses.Length;
-                 i++)
-            {
-                if (i < 0 ||
-                    i >= additionalCurseActiveStates.Length ||
-                    !additionalCurseActiveStates[i])
-                {
-                    continue;
-                }
-
-
-                AdditionalCurseSlot slot =
-                    additionalCurses[i];
-
-
-                if (slot != null &&
-                    slot.curse != null &&
-                    slot.curse.BlocksPowerSpinSingleTargeting)
-                {
-                    return true;
-                }
-            }
-
-
+    private bool CurseBlocksSingleTargetingForSpin(
+        EnemyCurse targetCurse,
+        RouletteController.SpinMethod spinMethod)
+    {
+        if (targetCurse == null)
             return false;
+
+
+        switch (spinMethod)
+        {
+            case RouletteController.SpinMethod.Power:
+                return
+                    targetCurse
+                        .BlocksPowerSpinSingleTargeting;
+
+
+            case RouletteController.SpinMethod.LuckyShot:
+                return
+                    targetCurse
+                        .BlocksLuckyShotSingleTargeting;
+
+
+            case RouletteController.SpinMethod.Manual:
+            default:
+                return false;
         }
     }
 
@@ -1127,12 +1188,15 @@ public class BaseEnemy : MonoBehaviour
     /// <summary>
     /// Restores HP to this enemy and returns the ACTUAL amount healed.
     ///
-    /// Healing is capped at maxHP. Dead enemies cannot be healed.
+    /// By default, healing is capped at maxHP. Pass allowOverheal = true
+    /// for effects such as Drain that are allowed to exceed starting Max HP.
+    /// Dead enemies cannot be healed.
     /// The Game Log reports only real HP recovered, so an enemy already at
     /// full health does not generate a misleading heal line.
     /// </summary>
     public int Heal(
-        int amount)
+        int amount,
+        bool allowOverheal = false)
     {
         if (isDead ||
             amount <= 0)
@@ -1146,10 +1210,12 @@ public class BaseEnemy : MonoBehaviour
 
 
         currentHP =
-            Mathf.Min(
-                maxHP,
-                currentHP + amount
-            );
+            allowOverheal
+                ? currentHP + amount
+                : Mathf.Min(
+                    maxHP,
+                    currentHP + amount
+                );
 
 
         int actualHealed =

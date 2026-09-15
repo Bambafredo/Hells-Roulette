@@ -9,7 +9,34 @@ using UnityEngine;
 public class EnemyCurseUntouchable : EnemyCurse
 {
     // =========================================================
-    // POWER SPIN FEEDBACK
+    // PHASING TRIGGER
+    // =========================================================
+
+    public enum PhasingTrigger
+    {
+        PowerSpin,
+        LuckyShot
+    }
+
+
+    [Header("Phasing Trigger")]
+
+    [Tooltip(
+        "Spin method that activates Untouchable's single-target phasing. " +
+        "Power Spin preserves the original behaviour. Lucky Shot makes the " +
+        "enemy phase only during Lucky Shot spins."
+    )]
+    [SerializeField]
+    private PhasingTrigger phasingTrigger =
+        PhasingTrigger.PowerSpin;
+
+
+    public PhasingTrigger Trigger =>
+        phasingTrigger;
+
+
+    // =========================================================
+    // VISUAL FEEDBACK
     // =========================================================
 
     public enum PowerSpinFeedbackMode
@@ -19,11 +46,13 @@ public class EnemyCurseUntouchable : EnemyCurse
     }
 
 
-    [Header("Power Spin Feedback")]
+    [Header("Phasing Feedback")]
 
     [Tooltip(
-        "Visual feedback used while the Power Switch is being charged and " +
-        "throughout the complete Power Spin."
+        "Visual feedback used while Untouchable's configured trigger is active. " +
+        "For Power Spin this begins while the Power Switch is being charged and " +
+        "continues through the complete spin. For Lucky Shot it begins when the " +
+        "Lucky Shot launches and continues through its complete resolution."
     )]
     [SerializeField]
     private PowerSpinFeedbackMode feedbackMode =
@@ -57,17 +86,69 @@ public class EnemyCurseUntouchable : EnemyCurse
     // =========================================================
 
     /// <summary>
-    /// While this Curse is active, EnemyPanelManager skips its owner when a
-    /// Power Spin resolves a single-target attack.
-    ///
-    /// This is a targeting rule rather than damage immunity:
-    /// - left/right single-target attacks pass to the next valid enemy;
+    /// Untouchable is a targeting rule rather than damage immunity:
+    /// - directional single-target attacks pass to the next valid enemy;
     /// - random single-target attacks (Stone) exclude this enemy from the pool;
     /// - all-enemy / AoE damage still reaches this enemy normally.
+    ///
+    /// Which spin method enables that rule is authored in the asset.
     /// </summary>
     public override bool BlocksPowerSpinSingleTargeting
     {
-        get { return true; }
+        get
+        {
+            return
+                phasingTrigger ==
+                PhasingTrigger.PowerSpin;
+        }
+    }
+
+
+    public override bool BlocksLuckyShotSingleTargeting
+    {
+        get
+        {
+            return
+                phasingTrigger ==
+                PhasingTrigger.LuckyShot;
+        }
+    }
+
+
+    // =========================================================
+    // TOOLTIP
+    // =========================================================
+
+    public override string GetTooltipDescription(
+        BaseEnemy enemy,
+        int value)
+    {
+        string authored =
+            base.GetTooltipDescription(
+                enemy,
+                value
+            );
+
+
+        if (string.IsNullOrWhiteSpace(
+                authored))
+        {
+            return "";
+        }
+
+
+        string triggerText =
+            phasingTrigger ==
+                PhasingTrigger.LuckyShot
+                ? "Lucky Shots"
+                : "Power Spins";
+
+
+        return
+            authored.Replace(
+                "{trigger}",
+                triggerText
+            );
     }
 
 
@@ -83,6 +164,11 @@ public class EnemyCurseUntouchable : EnemyCurse
             return;
 
 
+        /*
+         * Legacy component name retained intentionally so existing project
+         * references do not need a script/class rename. It now supports both
+         * Power Spin and Lucky Shot trigger modes.
+         */
         EnemyUntouchablePowerSpinFeedback feedback =
             enemy.GetComponent<EnemyUntouchablePowerSpinFeedback>();
 

@@ -38,10 +38,10 @@ public class EnemyPanelManager : MonoBehaviour
     /// Returns the leftmost enemy that is currently eligible for a
     /// SINGLE-TARGET attack.
     ///
-    /// During Power Spins this skips enemies protected by a Curse whose
-    /// BlocksPowerSpinSingleTargeting rule is active. Therefore a left-to-right
-    /// attack naturally "passes through" an Untouchable enemy and reaches the
-    /// next valid enemy instead.
+    /// During the spin method configured by an active targeting Curse
+    /// (for example Untouchable on Power Spin or Lucky Shot), a left-to-right
+    /// attack naturally "passes through" that enemy and reaches the next valid
+    /// enemy instead.
     /// </summary>
     public BaseEnemy GetLeftmostAliveEnemy()
     {
@@ -78,7 +78,7 @@ public class EnemyPanelManager : MonoBehaviour
             }
 
 
-            if (IsPowerSpinProtectedSingleTarget(
+            if (IsSpinProtectedSingleTarget(
                     enemy))
             {
                 LogUntouchablePassThrough(
@@ -177,8 +177,8 @@ public class EnemyPanelManager : MonoBehaviour
     /// effect.
     ///
     /// This exists primarily for non-directional target selection such as Stone.
-    /// During a Power Spin, Untouchable enemies are removed from the random pool.
-    /// During Manual / Lucky Shot spins it is identical to GetAllAliveEnemies().
+    /// Untouchable enemies are removed from the random pool only during the
+    /// spin method configured by that Curse. Manual spins remain unaffected.
     /// </summary>
     public BaseEnemy[] GetAllSingleTargetEligibleEnemies()
     {
@@ -261,7 +261,7 @@ public class EnemyPanelManager : MonoBehaviour
             }
 
 
-            if (IsPowerSpinProtectedSingleTarget(
+            if (IsSpinProtectedSingleTarget(
                     enemy))
             {
                 LogUntouchablePassThrough(
@@ -306,19 +306,33 @@ public class EnemyPanelManager : MonoBehaviour
 
 
         return
-            !IsPowerSpinProtectedSingleTarget(
+            !IsSpinProtectedSingleTarget(
                 enemy
             );
     }
 
 
-    private bool IsPowerSpinProtectedSingleTarget(
+    private bool IsSpinProtectedSingleTarget(
         BaseEnemy enemy)
     {
+        if (enemy == null)
+            return false;
+
+
+        RouletteController.SpinMethod spinMethod;
+
+
+        if (!TryGetResolvingProtectedSpinMethod(
+                out spinMethod))
+        {
+            return false;
+        }
+
+
         return
-            enemy != null &&
-            IsResolvingPowerSpin() &&
-            enemy.BlocksPowerSpinSingleTargeting;
+            enemy.BlocksSingleTargetingForSpin(
+                spinMethod
+            );
     }
 
 
@@ -352,29 +366,42 @@ public class EnemyPanelManager : MonoBehaviour
     }
 
 
-    private bool IsResolvingPowerSpin()
+    private bool TryGetResolvingProtectedSpinMethod(
+        out RouletteController.SpinMethod spinMethod)
     {
+        spinMethod =
+            RouletteController.SpinMethod.Manual;
+
+
         RouletteController roulette =
             RouletteController.Instance != null
                 ? RouletteController.Instance
                 : Object.FindObjectOfType<RouletteController>();
 
 
-        if (roulette == null)
+        if (roulette == null ||
+            !roulette.SpinInProgress)
+        {
             return false;
+        }
 
 
         /*
          * SpinInProgress deliberately remains true through the COMPLETE valid
          * spin-resolution pass, including sticker effects. This prevents the
-         * previous Power Spin from influencing targeting later in Rewards or
-         * other non-spin flows merely because CurrentSpinMethod still remembers
-         * the last launch method.
+         * previous spin method from influencing targeting later in Rewards or
+         * other non-spin flows merely because CurrentSpinMethod remembers the
+         * last launch method.
          */
+        spinMethod =
+            roulette.CurrentSpinMethod;
+
+
         return
-            roulette.SpinInProgress &&
-            roulette.CurrentSpinMethod ==
-                RouletteController.SpinMethod.Power;
+            spinMethod ==
+                RouletteController.SpinMethod.Power ||
+            spinMethod ==
+                RouletteController.SpinMethod.LuckyShot;
     }
 
 
@@ -422,7 +449,7 @@ public class EnemyPanelManager : MonoBehaviour
 
         foreach (BaseEnemy enemy in ordered)
         {
-            if (IsPowerSpinProtectedSingleTarget(
+            if (IsSpinProtectedSingleTarget(
                     enemy))
             {
                 LogUntouchablePassThrough(
@@ -481,7 +508,7 @@ public class EnemyPanelManager : MonoBehaviour
 
         foreach (BaseEnemy enemy in ordered)
         {
-            if (IsPowerSpinProtectedSingleTarget(
+            if (IsSpinProtectedSingleTarget(
                     enemy))
             {
                 LogUntouchablePassThrough(
