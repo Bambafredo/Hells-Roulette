@@ -10,7 +10,11 @@ using UnityEngine.UI;
 ///
 /// - Toggleable from a normal Unity UI Button via ToggleResolutionOrderView().
 /// - Toggleable from InputsManager through an editable shortcut.
-/// - Shows one number per wheel sticker; numbering restarts at 1 in every segment.
+/// - Segment Order: numbering restarts at 1 in every segment and matches the
+///   winning-segment resolution rule (priority override, then radial distance).
+/// - Radial Order: one global 1..N across the wheel using pure radial distance;
+///   this matches the real non-winning roulette resolution phase.
+/// - The two views are mutually exclusive.
 /// - Uses StickerResolutionOrderUtility, the exact same ordering code used by
 ///   RouletteController.
 /// - While dragging, a sticker receives a prospective number only when its
@@ -22,6 +26,14 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public class ResolutionOrderViewManager : MonoBehaviour
 {
+    public enum ViewMode
+    {
+        Off,
+        SegmentOrder,
+        RadialOrder
+    }
+
+
     public static ResolutionOrderViewManager Instance;
 
     // =========================================================
@@ -135,6 +147,36 @@ public class ResolutionOrderViewManager : MonoBehaviour
     private Graphic utilityButtonColorTarget;
 
 
+    [Tooltip(
+        "Optional world-space Collider2D for the Radial Order button. " +
+        "Leave empty when using a normal Canvas Button."
+    )]
+    [SerializeField]
+    private Collider2D radialUtilityButtonCollider;
+
+
+    [Tooltip(
+        "Optional Canvas Button for Radial Order. Wire its OnClick to " +
+        "ToggleRadialOrderView()."
+    )]
+    [SerializeField]
+    private Button radialUtilityCanvasButton;
+
+
+    [Tooltip(
+        "Optional child / icon active only while Radial Order is ON."
+    )]
+    [SerializeField]
+    private GameObject radialUtilityButtonActiveIndicator;
+
+
+    [Tooltip(
+        "Optional Graphic used as Radial Order button colour feedback."
+    )]
+    [SerializeField]
+    private Graphic radialUtilityButtonColorTarget;
+
+
     [SerializeField]
     private Color utilityButtonOffColor =
         Color.white;
@@ -169,9 +211,33 @@ public class ResolutionOrderViewManager : MonoBehaviour
         28f;
 
 
+    [Tooltip(
+        "Radial Order only: font-size multiplier used for labels with two or " +
+        "more digits. Keeps 10, 11, 12... on one horizontal line."
+    )]
+    [Range(0.4f, 1f)]
+    [SerializeField]
+    private float radialMultiDigitFontScale =
+        0.72f;
+
+
     [SerializeField]
     private Color labelColor =
         Color.white;
+
+
+    [Tooltip(
+        "Segment Order only: number colour used when a sticker has a non-zero " +
+        "SpinResolutionPriority override (for example Coffee / Catapult)."
+    )]
+    [SerializeField]
+    private Color priorityOverrideLabelColor =
+        new Color(
+            0.3f,
+            0.9f,
+            1f,
+            1f
+        );
 
 
     [SerializeField]
@@ -211,8 +277,8 @@ public class ResolutionOrderViewManager : MonoBehaviour
     // RUNTIME STATE
     // =========================================================
 
-    private bool viewEnabled =
-        false;
+    private ViewMode currentViewMode =
+        ViewMode.Off;
 
     private BaseSticker activeDraggedSticker;
 
@@ -254,35 +320,83 @@ public class ResolutionOrderViewManager : MonoBehaviour
         workingSegmentStickers =
             new List<BaseSticker>();
 
+
+    private readonly List<BaseSticker>
+        workingWheelStickers =
+            new List<BaseSticker>();
+
+
+    private readonly HashSet<BaseSticker>
+        workingWheelStickerSet =
+            new HashSet<BaseSticker>();
+
     // =========================================================
     // PUBLIC STATE / BUTTON API
     // =========================================================
 
     public bool IsResolutionOrderViewEnabled =>
-        viewEnabled;
+        currentViewMode !=
+            ViewMode.Off;
+
+
+    public ViewMode CurrentViewMode =>
+        currentViewMode;
 
 
     /// <summary>
-    /// Wire a normal Unity UI Button's Inspector OnClick to this method.
+    /// Existing Segment Order button / shortcut.
+    /// Pressing it while Radial Order is visible switches directly to Segment.
     /// </summary>
     public void ToggleResolutionOrderView()
     {
-        SetResolutionOrderView(
-            !viewEnabled
+        SetViewMode(
+            currentViewMode ==
+                ViewMode.SegmentOrder
+                ? ViewMode.Off
+                : ViewMode.SegmentOrder
         );
     }
 
 
     public void ShowResolutionOrderView()
     {
-        SetResolutionOrderView(true);
+        SetViewMode(
+            ViewMode.SegmentOrder
+        );
     }
 
 
     public void HideResolutionOrderView()
     {
-        SetResolutionOrderView(false);
+        SetViewMode(
+            ViewMode.Off
+        );
     }
+
+
+    /// <summary>
+    /// Wire the second planning button to this method.
+    /// Segment Order is automatically disabled because only one ViewMode can
+    /// exist at a time.
+    /// </summary>
+    public void ToggleRadialOrderView()
+    {
+        SetViewMode(
+            currentViewMode ==
+                ViewMode.RadialOrder
+                ? ViewMode.Off
+                : ViewMode.RadialOrder
+        );
+    }
+
+
+    public void ShowRadialOrderView()
+    {
+        SetViewMode(
+            ViewMode.RadialOrder
+        );
+    }
+
 
     // =========================================================
     // UNITY
@@ -307,8 +421,10 @@ public class ResolutionOrderViewManager : MonoBehaviour
         EnsureLabelsBehindMagnifier();
 
 
-        viewEnabled =
-            startVisible;
+        currentViewMode =
+            startVisible
+                ? ViewMode.SegmentOrder
+                : ViewMode.Off;
 
 
         RefreshRootVisibility();
@@ -357,7 +473,7 @@ public class ResolutionOrderViewManager : MonoBehaviour
         }
 
 
-        HandleOptionalWorldUtilityButton();
+        HandleOptionalWorldUtilityButtons();
 #endif
 
 
@@ -446,10 +562,9 @@ public class ResolutionOrderViewManager : MonoBehaviour
     // OPTIONAL WORLD-SPACE UTILITY BUTTON
     // =========================================================
 
-    private void HandleOptionalWorldUtilityButton()
+    private void HandleOptionalWorldUtilityButtons()
     {
         if (!enableResolutionOrderView ||
-            utilityButtonCollider == null ||
             !Input.GetMouseButtonDown(0))
         {
             return;
@@ -480,22 +595,29 @@ public class ResolutionOrderViewManager : MonoBehaviour
             );
 
 
-        if (!utilityButtonCollider
-            .OverlapPoint(mouseWorld))
+        if (utilityButtonCollider != null &&
+            utilityButtonCollider.OverlapPoint(
+                mouseWorld
+            ))
         {
+            RouletteController.Instance?
+                .ConsumePointerInputThisFrame();
+
+            ToggleResolutionOrderView();
             return;
         }
 
 
-        /*
-         * If manual wheel drag is ever enabled again for debug / editor use,
-         * consume this click so the utility button cannot also start a wheel drag.
-         */
-        RouletteController.Instance?
-            .ConsumePointerInputThisFrame();
+        if (radialUtilityButtonCollider != null &&
+            radialUtilityButtonCollider.OverlapPoint(
+                mouseWorld
+            ))
+        {
+            RouletteController.Instance?
+                .ConsumePointerInputThisFrame();
 
-
-        ToggleResolutionOrderView();
+            ToggleRadialOrderView();
+        }
     }
 
 
@@ -503,20 +625,19 @@ public class ResolutionOrderViewManager : MonoBehaviour
     // VIEW STATE
     // =========================================================
 
-    private void SetResolutionOrderView(
-        bool enabled)
+    private void SetViewMode(
+        ViewMode mode)
     {
-        viewEnabled =
-            enabled;
+        currentViewMode =
+            mode;
 
 
         RefreshRootVisibility();
-
-
         RefreshUtilityButtonVisual();
 
 
-        if (!enabled)
+        if (currentViewMode ==
+            ViewMode.Off)
         {
             HideAllLabels();
         }
@@ -526,7 +647,8 @@ public class ResolutionOrderViewManager : MonoBehaviour
     private bool ShouldRenderOverlay()
     {
         if (!enableResolutionOrderView ||
-            !viewEnabled)
+            currentViewMode ==
+                ViewMode.Off)
         {
             return false;
         }
@@ -706,6 +828,28 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
     private void RefreshOrderLabels()
     {
+        switch (currentViewMode)
+        {
+            case ViewMode.SegmentOrder:
+                RefreshSegmentOrderLabels();
+                break;
+
+
+            case ViewMode.RadialOrder:
+                RefreshRadialOrderLabels();
+                break;
+
+
+            case ViewMode.Off:
+            default:
+                HideAllLabels();
+                break;
+        }
+    }
+
+
+    private void RefreshSegmentOrderLabels()
+    {
         WheelGenerator generator =
             RouletteController.Instance.generator;
 
@@ -725,11 +869,19 @@ public class ResolutionOrderViewManager : MonoBehaviour
             0;
 
 
-        foreach (var segmentData in
-                 generator.segments)
+        for (int segmentIndex = 0;
+             segmentIndex < generator.segments.Count;
+             segmentIndex++)
         {
+            WheelSegmentData segmentData =
+                generator.segments[segmentIndex];
+
+
             if (segmentData == null ||
-                segmentData.collider == null)
+                segmentData.collider == null ||
+                generator.IsSegmentBlocked(
+                    segmentIndex
+                ))
             {
                 continue;
             }
@@ -784,7 +936,7 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
             List<BaseSticker> ordered =
                 StickerResolutionOrderUtility
-                    .BuildStableResolutionOrder(
+                    .BuildSegmentResolutionOrder(
                         workingSegmentStickers,
                         wheelCenter
                     );
@@ -811,21 +963,187 @@ public class ResolutionOrderViewManager : MonoBehaviour
                 usedLabels++;
 
 
+                Color numberColor =
+                    StickerResolutionOrderUtility
+                        .HasSpinResolutionPriorityOverride(
+                            sticker
+                        )
+                            ? priorityOverrideLabelColor
+                            : labelColor;
+
+
                 ConfigureLabel(
                     label,
                     i + 1,
+                    sticker,
+                    numberColor,
+                    false
+                );
+            }
+        }
+
+
+        HideUnusedLabels(
+            usedLabels
+        );
+    }
+
+
+    private void RefreshRadialOrderLabels()
+    {
+        WheelGenerator generator =
+            RouletteController.Instance.generator;
+
+
+        if (generator.segments == null)
+        {
+            HideAllLabels();
+            return;
+        }
+
+
+        Collider2D prospectiveDraggedSegment =
+            GetProspectiveDraggedSegment();
+
+
+        workingWheelStickers.Clear();
+        workingWheelStickerSet.Clear();
+
+
+        for (int segmentIndex = 0;
+             segmentIndex < generator.segments.Count;
+             segmentIndex++)
+        {
+            WheelSegmentData segmentData =
+                generator.segments[segmentIndex];
+
+
+            if (segmentData == null ||
+                segmentData.collider == null ||
+                generator.IsSegmentBlocked(
+                    segmentIndex
+                ))
+            {
+                continue;
+            }
+
+
+            Transform segmentTransform =
+                segmentData.collider.transform;
+
+
+            BaseSticker[] placedStickers =
+                segmentTransform
+                    .GetComponentsInChildren<BaseSticker>(
+                        true
+                    );
+
+
+            foreach (BaseSticker sticker in
+                     placedStickers)
+            {
+                if (sticker == null ||
+                    !sticker.isPlaced ||
+                    sticker.currentSegment !=
+                        segmentTransform ||
+                    !workingWheelStickerSet.Add(
+                        sticker
+                    ))
+                {
+                    continue;
+                }
+
+
+                workingWheelStickers.Add(
                     sticker
                 );
             }
         }
 
 
+        if (activeDraggedSticker != null &&
+            prospectiveDraggedSegment != null)
+        {
+            int prospectiveSegmentIndex =
+                generator.GetSegmentIndex(
+                    prospectiveDraggedSegment.transform
+                );
+
+
+            if (prospectiveSegmentIndex >= 0 &&
+                !generator.IsSegmentBlocked(
+                    prospectiveSegmentIndex
+                ) &&
+                workingWheelStickerSet.Add(
+                    activeDraggedSticker
+                ))
+            {
+                workingWheelStickers.Add(
+                    activeDraggedSticker
+                );
+            }
+        }
+
+
+        List<BaseSticker> ordered =
+            StickerResolutionOrderUtility
+                .BuildRadialResolutionOrder(
+                    workingWheelStickers,
+                    wheelCenter
+                );
+
+
+        int usedLabels =
+            0;
+
+
+        for (int i = 0;
+             i < ordered.Count;
+             i++)
+        {
+            BaseSticker sticker =
+                ordered[i];
+
+
+            if (sticker == null)
+                continue;
+
+
+            OrderLabelVisual label =
+                GetLabel(
+                    usedLabels
+                );
+
+
+            usedLabels++;
+
+
+            ConfigureLabel(
+                label,
+                i + 1,
+                sticker,
+                labelColor,
+                true
+            );
+        }
+
+
+        HideUnusedLabels(
+            usedLabels
+        );
+    }
+
+
+    private void HideUnusedLabels(
+        int usedLabels)
+    {
         for (int i = usedLabels;
              i < labelPool.Count;
              i++)
         {
             OrderLabelVisual visual =
                 labelPool[i];
+
 
             if (visual != null &&
                 visual.root != null)
@@ -981,7 +1299,9 @@ public class ResolutionOrderViewManager : MonoBehaviour
     private void ConfigureLabel(
         OrderLabelVisual visual,
         int order,
-        BaseSticker sticker)
+        BaseSticker sticker,
+        Color numberColor,
+        bool radialOrder)
     {
         if (visual == null ||
             visual.root == null ||
@@ -1005,6 +1325,23 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
         string orderText =
             order.ToString();
+
+
+        float resolvedFontSize =
+            labelFontSize;
+
+
+        if (radialOrder &&
+            order >= 10)
+        {
+            resolvedFontSize =
+                labelFontSize *
+                Mathf.Clamp(
+                    radialMultiDigitFontScale,
+                    0.4f,
+                    1f
+                );
+        }
 
 
         float outlineDistance =
@@ -1045,7 +1382,8 @@ public class ResolutionOrderViewManager : MonoBehaviour
             ConfigureLabelText(
                 outline,
                 orderText,
-                labelOutlineColor
+                labelOutlineColor,
+                resolvedFontSize
             );
 
 
@@ -1059,7 +1397,8 @@ public class ResolutionOrderViewManager : MonoBehaviour
         ConfigureLabelText(
             visual.front,
             orderText,
-            labelColor
+            numberColor,
+            resolvedFontSize
         );
 
 
@@ -1078,7 +1417,8 @@ public class ResolutionOrderViewManager : MonoBehaviour
     private void ConfigureLabelText(
         TextMeshProUGUI text,
         string content,
-        Color color)
+        Color color,
+        float fontSize)
     {
         if (text == null)
             return;
@@ -1129,7 +1469,17 @@ public class ResolutionOrderViewManager : MonoBehaviour
             content;
 
         text.fontSize =
-            labelFontSize;
+            fontSize;
+
+        /*
+         * Order labels are atomic numbers. Never allow TMP to split a
+         * multi-digit value such as 10 into two vertical lines.
+         */
+        text.enableWordWrapping =
+            false;
+
+        text.overflowMode =
+            TextOverflowModes.Overflow;
 
         text.fontStyle =
             FontStyles.Bold;
@@ -1257,45 +1607,70 @@ public class ResolutionOrderViewManager : MonoBehaviour
 
     private void RefreshUtilityButtonVisual()
     {
-        if (utilityButtonActiveIndicator != null)
+        bool segmentActive =
+            currentViewMode ==
+                ViewMode.SegmentOrder;
+
+        bool radialActive =
+            currentViewMode ==
+                ViewMode.RadialOrder;
+
+
+        RefreshOneUtilityButtonVisual(
+            utilityCanvasButton,
+            utilityButtonActiveIndicator,
+            utilityButtonColorTarget,
+            segmentActive
+        );
+
+
+        RefreshOneUtilityButtonVisual(
+            radialUtilityCanvasButton,
+            radialUtilityButtonActiveIndicator,
+            radialUtilityButtonColorTarget,
+            radialActive
+        );
+    }
+
+
+    private void RefreshOneUtilityButtonVisual(
+        Button button,
+        GameObject activeIndicator,
+        Graphic explicitColorTarget,
+        bool active)
+    {
+        if (activeIndicator != null)
         {
-            utilityButtonActiveIndicator.SetActive(
-                viewEnabled
+            activeIndicator.SetActive(
+                active
             );
         }
 
 
         Color stateColor =
-            viewEnabled
+            active
                 ? utilityButtonOnColor
                 : utilityButtonOffColor;
 
 
         Graphic resolvedTarget =
-            utilityButtonColorTarget;
+            explicitColorTarget;
 
 
-        /*
-         * Normal Canvas Button support.
-         *
-         * Color Tint buttons overwrite targetGraphic.color during hover/press.
-         * Update their ColorBlock AND the current graphic so the state change is
-         * immediate and remains correct after pointer transitions.
-         */
-        if (utilityCanvasButton != null)
+        if (button != null)
         {
             if (resolvedTarget == null)
             {
                 resolvedTarget =
-                    utilityCanvasButton.targetGraphic;
+                    button.targetGraphic;
             }
 
 
-            if (utilityCanvasButton.transition ==
+            if (button.transition ==
                 Selectable.Transition.ColorTint)
             {
                 ColorBlock colors =
-                    utilityCanvasButton.colors;
+                    button.colors;
 
 
                 colors.normalColor =
@@ -1319,7 +1694,7 @@ public class ResolutionOrderViewManager : MonoBehaviour
                     );
 
 
-                utilityCanvasButton.colors =
+                button.colors =
                     colors;
             }
         }

@@ -2127,27 +2127,24 @@ public class RouletteController : MonoBehaviour
 
 
         // -----------------------------------------------------
-        // 2. ALL NON-WINNING SEGMENTS
+        // 2. ALL NON-WINNING WHEEL STICKERS - GLOBAL RADIAL ORDER
         // -----------------------------------------------------
 
-        if (generator != null &&
-            generator.segments != null)
-        {
-            for (int i = 0;
-                 i < generator.segments.Count;
-                 i++)
-            {
-                if (i == endSegmentIndex)
-                    continue;
-
-                AddSegmentStickersToSnapshot(
-                    i,
-                    StickerSpinLocation.NonWinningSegment,
-                    snapshot,
-                    alreadyAdded
-                );
-            }
-        }
+        /*
+         * Every non-winning wheel sticker belongs to ONE shared phase.
+         *
+         * Unlike the winning segment, this phase deliberately ignores
+         * SpinResolutionPriority and resolves purely INSIDE -> OUTSIDE across
+         * the whole roulette.
+         *
+         * This order also determines the registration order of reactive damage
+         * blockers such as Shield / Knight's Helmet, so only the earliest
+         * blocker that is actually needed consumes a use.
+         */
+        AddNonWinningWheelStickersToSnapshot(
+            snapshot,
+            alreadyAdded
+        );
 
 
         // -----------------------------------------------------
@@ -2161,6 +2158,152 @@ public class RouletteController : MonoBehaviour
 
 
         return snapshot;
+    }
+
+
+    private void AddNonWinningWheelStickersToSnapshot(
+        List<StickerResolutionEntry> snapshot,
+        HashSet<BaseSticker> alreadyAdded)
+    {
+        if (generator == null ||
+            generator.segments == null)
+        {
+            return;
+        }
+
+
+        List<BaseSticker> radialCandidates =
+            new List<BaseSticker>();
+
+
+        /*
+         * Activation-count modifiers are still evaluated with the stickers from
+         * the target's OWN physical segment. Only the final non-winning
+         * resolution order is global.
+         *
+         * This preserves local modifier semantics and avoids making a future
+         * segment-specific modifier suddenly affect the entire wheel.
+         */
+        Dictionary<Transform, BaseSticker[]>
+            modifierCandidatesBySegment =
+                new Dictionary<Transform, BaseSticker[]>();
+
+
+        for (int i = 0;
+             i < generator.segments.Count;
+             i++)
+        {
+            if (i == endSegmentIndex)
+                continue;
+
+
+            if (generator.IsSegmentBlocked(i))
+                continue;
+
+
+            WheelSegmentData segmentData =
+                generator.segments[i];
+
+
+            if (segmentData == null ||
+                segmentData.collider == null)
+            {
+                continue;
+            }
+
+
+            Transform segmentTransform =
+                segmentData.collider.transform;
+
+
+            BaseSticker[] segmentStickers =
+                segmentTransform
+                    .GetComponentsInChildren<BaseSticker>(
+                        true
+                    );
+
+
+            modifierCandidatesBySegment[
+                segmentTransform
+            ] = segmentStickers;
+
+
+            foreach (BaseSticker sticker in
+                     segmentStickers)
+            {
+                if (sticker == null ||
+                    alreadyAdded.Contains(sticker) ||
+                    !sticker.isPlaced ||
+                    sticker.currentSegment !=
+                        segmentTransform)
+                {
+                    continue;
+                }
+
+
+                radialCandidates.Add(
+                    sticker
+                );
+            }
+        }
+
+
+        List<BaseSticker> ordered =
+            StickerResolutionOrderUtility
+                .BuildRadialResolutionOrder(
+                    radialCandidates,
+                    wheel
+                );
+
+
+        foreach (BaseSticker sticker in ordered)
+        {
+            if (sticker == null ||
+                alreadyAdded.Contains(sticker))
+            {
+                continue;
+            }
+
+
+            BaseSticker[] modifierCandidates =
+                null;
+
+
+            if (sticker.currentSegment != null)
+            {
+                modifierCandidatesBySegment
+                    .TryGetValue(
+                        sticker.currentSegment,
+                        out modifierCandidates
+                    );
+            }
+
+
+            int activationCount =
+                GetModifiedStickerActivationCountForSnapshot(
+                    modifierCandidates,
+                    sticker,
+                    StickerSpinLocation.NonWinningSegment
+                );
+
+
+            alreadyAdded.Add(
+                sticker
+            );
+
+
+            if (activationCount <= 0)
+                continue;
+
+
+            snapshot.Add(
+                new StickerResolutionEntry(
+                    sticker,
+                    StickerSpinLocation.NonWinningSegment,
+                    activationCount
+                )
+            );
+        }
     }
 
 
@@ -2255,17 +2398,14 @@ public class RouletteController : MonoBehaviour
 
 
     /// <summary>
-    /// Stable generic ordering for sticker resolution.
+    /// Stable WINNING-SEGMENT ordering for sticker resolution.
     ///
     /// Ordering rules:
-    /// 1. Existing generic SpinResolutionPriority still wins first.
-    /// 2. Equal-priority stickers resolve INSIDE -> OUTSIDE, measured from the
-    ///    wheel centre to the closest point on each sticker's real Collider2D.
+    /// 1. Generic SpinResolutionPriority first.
+    /// 2. Equal-priority stickers resolve INSIDE -> OUTSIDE.
     /// 3. Exact geometric ties use a deterministic instance-id fallback.
     ///
-    /// Keeping the actual comparison in StickerResolutionOrderUtility means the
-    /// gameplay resolver and the optional visual order overlay share one source
-    /// of truth.
+    /// Non-winning wheel stickers use the separate global radial order above.
     /// </summary>
     private List<BaseSticker> BuildStableResolutionOrder(
         BaseSticker[] stickers)
@@ -2454,6 +2594,10 @@ public class RouletteController : MonoBehaviour
                 );
 
 
+        List<BaseSticker> albumCandidates =
+            new List<BaseSticker>();
+
+
         foreach (BaseSticker sticker in stickers)
         {
             if (sticker == null ||
@@ -2462,17 +2606,63 @@ public class RouletteController : MonoBehaviour
                 continue;
             }
 
-            /*
-             * Verify logical / hierarchy membership instead of assuming every
-             * BaseSticker below ContentRoot is currently an Album sticker.
-             */
+
             if (!AlbumManager.Instance
                 .IsStickerInAlbum(sticker))
             {
                 continue;
             }
 
-            alreadyAdded.Add(sticker);
+
+            albumCandidates.Add(
+                sticker
+            );
+        }
+
+
+        /*
+         * Album is intentionally the final RANDOM phase.
+         *
+         * Shuffle ONCE while constructing the immutable spin snapshot. The same
+         * captured order is then used by preparation, normal resolution and
+         * therefore ordinary sticker log output for this spin.
+         */
+        for (int i = albumCandidates.Count - 1;
+             i > 0;
+             i--)
+        {
+            int swapIndex =
+                UnityEngine.Random.Range(
+                    0,
+                    i + 1
+                );
+
+
+            BaseSticker temp =
+                albumCandidates[i];
+
+            albumCandidates[i] =
+                albumCandidates[swapIndex];
+
+            albumCandidates[swapIndex] =
+                temp;
+        }
+
+
+        foreach (BaseSticker sticker in
+                 albumCandidates)
+        {
+            if (sticker == null ||
+                alreadyAdded.Contains(sticker))
+            {
+                continue;
+            }
+
+
+            alreadyAdded.Add(
+                sticker
+            );
+
 
             snapshot.Add(
                 new StickerResolutionEntry(

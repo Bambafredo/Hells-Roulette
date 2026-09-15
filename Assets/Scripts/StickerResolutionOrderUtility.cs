@@ -3,16 +3,23 @@ using UnityEngine;
 
 
 /// <summary>
-/// Single source of truth for the physical resolution order of stickers that
-/// share one roulette segment.
+/// Single source of truth for roulette sticker ordering.
 ///
-/// Ordinary stickers resolve INSIDE -> OUTSIDE. "Inside" is intentionally NOT
-/// based on Transform.position, pivot or sprite bounds: it is the shortest
-/// distance from the wheel centre to the sticker's real Collider2D silhouette.
+/// Two different orders intentionally exist:
 ///
-/// Existing StickerEffect.SpinResolutionPriority remains the first sorting key
-/// so special generic systems that explicitly require earlier / later resolution
-/// keep their authored behaviour.
+/// SEGMENT RESOLUTION ORDER
+/// - Used by the winning segment.
+/// - SpinResolutionPriority first.
+/// - Then INSIDE -> OUTSIDE by physical collider distance.
+///
+/// RADIAL ORDER
+/// - Used by the global non-winning roulette phase.
+/// - Pure INSIDE -> OUTSIDE across the whole wheel.
+/// - SpinResolutionPriority is deliberately ignored because priority overrides
+///   currently describe special winning-resolution behaviour.
+///
+/// Both use the closest point on the real Collider2D silhouette rather than
+/// transform pivots, so gameplay and planning overlays measure the same thing.
 /// </summary>
 public static class StickerResolutionOrderUtility
 {
@@ -21,15 +28,61 @@ public static class StickerResolutionOrderUtility
 
 
     /// <summary>
-    /// Builds a deterministic resolution order without mutating the supplied
-    /// collection.
-    ///
-    /// Arrays and Lists both implement IList, so gameplay and presentation can
-    /// share this method without converting between collection types.
+    /// Backwards-compatible name for the existing winning/segment order.
+    /// Priority first, then radial distance.
     /// </summary>
     public static List<BaseSticker> BuildStableResolutionOrder(
         IList<BaseSticker> stickers,
         Transform wheelCenter)
+    {
+        return
+            BuildOrderedList(
+                stickers,
+                wheelCenter,
+                true
+            );
+    }
+
+
+    /// <summary>
+    /// Explicit alias used by presentation code when it wants to communicate
+    /// that this is the per-segment / winning-resolution rule.
+    /// </summary>
+    public static List<BaseSticker> BuildSegmentResolutionOrder(
+        IList<BaseSticker> stickers,
+        Transform wheelCenter)
+    {
+        return
+            BuildStableResolutionOrder(
+                stickers,
+                wheelCenter
+            );
+    }
+
+
+    /// <summary>
+    /// Builds one global INSIDE -> OUTSIDE order without applying
+    /// SpinResolutionPriority.
+    ///
+    /// This is the real non-winning roulette resolution order.
+    /// </summary>
+    public static List<BaseSticker> BuildRadialResolutionOrder(
+        IList<BaseSticker> stickers,
+        Transform wheelCenter)
+    {
+        return
+            BuildOrderedList(
+                stickers,
+                wheelCenter,
+                false
+            );
+    }
+
+
+    private static List<BaseSticker> BuildOrderedList(
+        IList<BaseSticker> stickers,
+        Transform wheelCenter,
+        bool includeSpinResolutionPriority)
     {
         List<BaseSticker> ordered =
             new List<BaseSticker>();
@@ -56,7 +109,8 @@ public static class StickerResolutionOrderUtility
                 if (ComesBefore(
                         sticker,
                         ordered[i],
-                        wheelCenter))
+                        wheelCenter,
+                        includeSpinResolutionPriority))
                 {
                     insertIndex =
                         i;
@@ -81,8 +135,8 @@ public static class StickerResolutionOrderUtility
     /// Returns the exact world-space point on the sticker silhouette that is
     /// closest to the wheel centre.
     ///
-    /// This is also the best visual anchor for the optional order-number overlay,
-    /// because it shows the player what the ordering rule is actually measuring.
+    /// The order-number overlay also anchors here so the UI visually explains
+    /// the same measurement gameplay uses.
     /// </summary>
     public static Vector2 GetClosestPointToWheelCenter(
         BaseSticker sticker,
@@ -111,11 +165,6 @@ public static class StickerResolutionOrderUtility
         }
 
 
-        /*
-         * Defensive fallback only. Every normal gameplay sticker already owns a
-         * real Collider2D, but a transform fallback prevents one incomplete test
-         * prefab from breaking the entire ordering pass.
-         */
         Transform fallbackTransform =
             sticker.stickerRoot != null
                 ? sticker.stickerRoot
@@ -129,10 +178,6 @@ public static class StickerResolutionOrderUtility
     }
 
 
-    /// <summary>
-    /// Squared distance is enough for comparisons and avoids an unnecessary
-    /// square root. With a handful of stickers per segment this cost is tiny.
-    /// </summary>
     public static float GetDistanceToWheelCenterSqr(
         BaseSticker sticker,
         Transform wheelCenter)
@@ -156,10 +201,33 @@ public static class StickerResolutionOrderUtility
     }
 
 
+    public static int GetSpinResolutionPriority(
+        BaseSticker sticker)
+    {
+        return
+            sticker != null &&
+            sticker.effect != null
+                ? sticker.effect
+                    .SpinResolutionPriority
+                : 0;
+    }
+
+
+    public static bool HasSpinResolutionPriorityOverride(
+        BaseSticker sticker)
+    {
+        return
+            GetSpinResolutionPriority(
+                sticker
+            ) != 0;
+    }
+
+
     private static bool ComesBefore(
         BaseSticker candidate,
         BaseSticker existing,
-        Transform wheelCenter)
+        Transform wheelCenter,
+        bool includeSpinResolutionPriority)
     {
         if (candidate == null)
             return false;
@@ -168,25 +236,26 @@ public static class StickerResolutionOrderUtility
             return true;
 
 
-        int candidatePriority =
-            candidate.effect != null
-                ? candidate.effect
-                    .SpinResolutionPriority
-                : 0;
-
-        int existingPriority =
-            existing.effect != null
-                ? existing.effect
-                    .SpinResolutionPriority
-                : 0;
-
-
-        if (candidatePriority !=
-            existingPriority)
+        if (includeSpinResolutionPriority)
         {
-            return
-                candidatePriority <
-                existingPriority;
+            int candidatePriority =
+                GetSpinResolutionPriority(
+                    candidate
+                );
+
+            int existingPriority =
+                GetSpinResolutionPriority(
+                    existing
+                );
+
+
+            if (candidatePriority !=
+                existingPriority)
+            {
+                return
+                    candidatePriority <
+                    existingPriority;
+            }
         }
 
 
@@ -218,10 +287,8 @@ public static class StickerResolutionOrderUtility
 
 
         /*
-         * Exact radial ties are rare, but they must still resolve identically in
-         * gameplay and in the visual overlay. Instance ID is deterministic for
-         * the lifetime of the current scene and avoids depending on discovery
-         * order from two different callers.
+         * Exact radial ties are rare, but gameplay and UI must still agree.
+         * Instance ID is stable for the lifetime of the current scene.
          */
         return
             candidate.GetInstanceID() <
