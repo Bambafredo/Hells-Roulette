@@ -606,7 +606,7 @@ public class StickerTooltipManager : MonoBehaviour
          * Losing Segment with its normal configuration.
          */
         if (sticker.HasLimitedUses &&
-            effect.ShouldConsumeUseOnActivation(
+            effect.ShouldShowUsesInTooltip(
                 location
             ))
         {

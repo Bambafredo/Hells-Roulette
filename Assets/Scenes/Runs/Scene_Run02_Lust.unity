@@ -3809,7 +3809,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -124.900024, y: 0.5999756}
+  m_AnchoredPosition: {x: -124.90015, y: 0.5999756}
   m_SizeDelta: {x: 466.19995, y: 179.20001}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &495618920
@@ -4228,6 +4228,68 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!1001 &587270324
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1156078942}
+    m_Modifications:
+    - target: {fileID: 577474978131120927, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_Name
+      value: Sticker_KnightsHelmet
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0.66
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -1.16
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+--- !u!4 &587270325 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 9022462484478120845, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
+  m_PrefabInstance: {fileID: 587270324}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &609707076
 GameObject:
   m_ObjectHideFlags: 0
@@ -6661,6 +6723,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 40ebd899d1dee314db2d55897a6cc1e0, type: 3}
   - {fileID: 577474978131120927, guid: 46a8ce007cc0c36498aae087d3dae18f, type: 3}
   - {fileID: 577474978131120927, guid: 183d2dd0a9d581344908ea7af51231ab, type: 3}
+  - {fileID: 577474978131120927, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
   bloodPriceMultiplier: 2
   enableSharedPricing: 1
   sharedCoinPriceSequence: 060000000a0000001000000018000000
@@ -6829,6 +6892,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 40ebd899d1dee314db2d55897a6cc1e0, type: 3}
   - {fileID: 577474978131120927, guid: 46a8ce007cc0c36498aae087d3dae18f, type: 3}
   - {fileID: 577474978131120927, guid: 183d2dd0a9d581344908ea7af51231ab, type: 3}
+  - {fileID: 577474978131120927, guid: 20c01195366f2e5468b33f505b707cbb, type: 3}
   rerollButtonCollider: {fileID: 23581347}
   rerollsRemainingText: {fileID: 701791785}
   startingRerolls: 3
@@ -8583,6 +8647,7 @@ Transform:
   - {fileID: 1849301722}
   - {fileID: 1840691570}
   - {fileID: 33877464}
+  - {fileID: 587270325}
   m_Father: {fileID: 1353839698}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1171386728
@@ -10594,7 +10659,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 47.1, y: -86}
+  m_AnchoredPosition: {x: 47.100098, y: -86}
   m_SizeDelta: {x: 160, y: 20}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &1397869060

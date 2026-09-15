@@ -5,6 +5,13 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "NewStickerEffect", menuName = "Stickers/StickerEffect")]
 public class StickerEffect : ScriptableObject
 {
+    public enum TooltipUsesDisplayMode
+    {
+        FollowUseConsumption,
+        Show,
+        Hide
+    }
+
     // =========================================================
     // INFO
     // =========================================================
@@ -53,6 +60,32 @@ public class StickerEffect : ScriptableObject
         "If enabled, an activation while this sticker is in the Album consumes one use."
     )]
     public bool consumeUseOnAlbumActivation = false;
+
+
+    [Header("Tooltip Use Counter")]
+
+    [Tooltip(
+        "Controls whether remaining uses are shown beside the Winning Segment " +
+        "tooltip header. Follow Use Consumption preserves the default behaviour."
+    )]
+    public TooltipUsesDisplayMode winningTooltipUses =
+        TooltipUsesDisplayMode.FollowUseConsumption;
+
+
+    [Tooltip(
+        "Controls whether remaining uses are shown beside the Losing Segment " +
+        "tooltip header. Follow Use Consumption preserves the default behaviour."
+    )]
+    public TooltipUsesDisplayMode losingTooltipUses =
+        TooltipUsesDisplayMode.FollowUseConsumption;
+
+
+    [Tooltip(
+        "Controls whether remaining uses are shown beside the Album tooltip " +
+        "header. Follow Use Consumption preserves the default behaviour."
+    )]
+    public TooltipUsesDisplayMode albumTooltipUses =
+        TooltipUsesDisplayMode.FollowUseConsumption;
 
 
     public bool HasLimitedUses =>
@@ -539,6 +572,71 @@ public class StickerEffect : ScriptableObject
         }
 
         return false;
+    }
+
+
+    // =========================================================
+    // TOOLTIP USE COUNTER
+    // =========================================================
+
+    /// <summary>
+    /// Controls whether the tooltip header shows the physical sticker's
+    /// remaining uses for this location.
+    ///
+    /// By default this preserves the existing behaviour: uses are shown only
+    /// beside locations that consume a use on activation.
+    ///
+    /// Custom stickers whose effect value depends on remaining uses may
+    /// override this independently from actual use consumption.
+    /// </summary>
+    public virtual bool ShouldShowUsesInTooltip(
+        StickerSpinLocation location)
+    {
+        TooltipUsesDisplayMode mode;
+
+
+        switch (location)
+        {
+            case StickerSpinLocation.WinningSegment:
+                mode =
+                    winningTooltipUses;
+                break;
+
+
+            case StickerSpinLocation.NonWinningSegment:
+                mode =
+                    losingTooltipUses;
+                break;
+
+
+            case StickerSpinLocation.Album:
+                mode =
+                    albumTooltipUses;
+                break;
+
+
+            default:
+                return false;
+        }
+
+
+        switch (mode)
+        {
+            case TooltipUsesDisplayMode.Show:
+                return true;
+
+
+            case TooltipUsesDisplayMode.Hide:
+                return false;
+
+
+            case TooltipUsesDisplayMode.FollowUseConsumption:
+            default:
+                return
+                    ShouldConsumeUseOnActivation(
+                        location
+                    );
+        }
     }
 
 
