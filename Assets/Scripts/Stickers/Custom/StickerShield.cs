@@ -315,6 +315,31 @@ public class StickerShield : StickerEffect
 
 
     // =========================================================
+    // TOOLTIP USE CONSUMPTION TAG
+    // =========================================================
+
+    protected override bool DefaultShowsUseConsumptionTag(
+        StickerSpinLocation location)
+    {
+        if (location == StickerSpinLocation.WinningSegment ||
+            location == StickerSpinLocation.NonWinningSegment)
+        {
+            /*
+             * Shield only spends a use if it actually prevents damage.
+             * The authored tooltip explains that condition precisely.
+             */
+            return false;
+        }
+
+
+        return
+            base.DefaultShowsUseConsumptionTag(
+                location
+            );
+    }
+
+
+    // =========================================================
     // TOOLTIP
     // =========================================================
 

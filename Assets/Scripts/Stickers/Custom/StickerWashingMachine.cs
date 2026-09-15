@@ -282,6 +282,30 @@ public class StickerWashingMachine : StickerEffect
 
 
     // =========================================================
+    // TOOLTIP USE CONSUMPTION TAG
+    // =========================================================
+
+    protected override bool DefaultShowsUseConsumptionTag(
+        StickerSpinLocation location)
+    {
+        if (location == StickerSpinLocation.Album)
+        {
+            /*
+             * Washing Machine only spends its Album use when at least one
+             * OTHER valid Album sticker can actually be shrunk.
+             */
+            return false;
+        }
+
+
+        return
+            base.DefaultShowsUseConsumptionTag(
+                location
+            );
+    }
+
+
+    // =========================================================
     // TOOLTIP
     // =========================================================
 

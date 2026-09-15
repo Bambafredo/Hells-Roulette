@@ -376,4 +376,28 @@ public class StickerHealthInsurance : StickerEffect
                     nextTariff.ToString()
                 );
     }
+    // =========================================================
+    // TOOLTIP USE CONSUMPTION TAG
+    // =========================================================
+
+    protected override bool DefaultShowsUseConsumptionTag(
+        StickerSpinLocation location)
+    {
+        if (location == StickerSpinLocation.WinningSegment)
+        {
+            /*
+             * Health Insurance only reaches its use-consumption path after the
+             * current tariff can actually be paid.
+             */
+            return false;
+        }
+
+
+        return
+            base.DefaultShowsUseConsumptionTag(
+                location
+            );
+    }
+
+
 }

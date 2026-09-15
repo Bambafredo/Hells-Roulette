@@ -19,9 +19,9 @@ MonoBehaviour:
   consumeUseOnWinningActivation: 0
   consumeUseOnNonWinningActivation: 1
   consumeUseOnAlbumActivation: 0
-  winningTooltipUses: 0
-  losingTooltipUses: 0
-  albumTooltipUses: 0
+  winningUseConsumptionTag: 0
+  losingUseConsumptionTag: 0
+  albumUseConsumptionTag: 0
   dollarReward: 0
   logDescription: 
   winningSegmentTooltip: Block up to {block} damage.

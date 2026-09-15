@@ -6527,6 +6527,9 @@ MonoBehaviour:
   enemyDebtPenaltyPercent: 0
   activeEnemyCurseDebtPercent: 0
   currentEnemyCurseDebtAmount: 0
+  activeStickerInterestPercent: 0
+  currentStickerInterestAmount: 0
+  currentActiveInterestAmount: 0
   debtPending: 0
   waitingForRewardCompletion: 0
   roundText: {fileID: 1455258518}
@@ -6719,6 +6722,7 @@ MonoBehaviour:
   minPanelWidth: 220
   textPadding: {x: 16, y: 12}
   nameColor: {r: 1, g: 0, b: 1, a: 1}
+  usesColor: {r: 1, g: 0.91764706, b: 0, a: 1}
   winningSegmentColor: {r: 0.35, g: 1, b: 0.45, a: 1}
   losingSegmentColor: {r: 1, g: 0.32381463, b: 0.19999999, a: 1}
   albumColor: {r: 0.4, g: 0.75, b: 1, a: 1}
@@ -6776,6 +6780,8 @@ MonoBehaviour:
   textPadding: {x: 16, y: 12}
   blockedTitleColor: {r: 1, g: 0.2, b: 0.2, a: 1}
   unlockCountdownColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  markTitleColor: {r: 0.85, g: 0.35, b: 1, a: 1}
+  markStatusColor: {r: 1, g: 0.85, b: 0.25, a: 1}
   blockedTitle: Segment blocked
   blockedDescription: Stickers in blocked segments do not activate and can't be moved
     until unlocked.

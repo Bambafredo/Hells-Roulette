@@ -256,6 +256,31 @@ public class StickerFridge : StickerEffect
 
 
     // =========================================================
+    // TOOLTIP USE CONSUMPTION TAG
+    // =========================================================
+
+    protected override bool DefaultShowsUseConsumptionTag(
+        StickerSpinLocation location)
+    {
+        if (location == StickerSpinLocation.Album)
+        {
+            /*
+             * Fridge only spends its Album use when at least one OTHER
+             * functional Album sticker exists. Keep that conditional rule in
+             * the authored description instead of showing an unconditional tag.
+             */
+            return false;
+        }
+
+
+        return
+            base.DefaultShowsUseConsumptionTag(
+                location
+            );
+    }
+
+
+    // =========================================================
     // TOOLTIP
     // =========================================================
 

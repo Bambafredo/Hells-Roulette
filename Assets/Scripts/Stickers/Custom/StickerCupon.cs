@@ -213,6 +213,32 @@ public class StickerCupon : StickerEffect
 
 
     // =========================================================
+    // TOOLTIP USE CONSUMPTION TAG
+    // =========================================================
+
+    protected override bool DefaultShowsUseConsumptionTag(
+        StickerSpinLocation location)
+    {
+        if (location == StickerSpinLocation.WinningSegment ||
+            location == StickerSpinLocation.Album)
+        {
+            /*
+             * Winning consumes ALL remaining uses, not one.
+             * Album consumes one only when a free Reward reroll is actually
+             * used. Both rules need their precise authored description.
+             */
+            return false;
+        }
+
+
+        return
+            base.DefaultShowsUseConsumptionTag(
+                location
+            );
+    }
+
+
+    // =========================================================
     // TOOLTIP
     // =========================================================
 

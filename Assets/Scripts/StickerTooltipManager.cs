@@ -80,6 +80,16 @@ public class StickerTooltipManager : MonoBehaviour
     public Color nameColor =
         Color.white;
 
+    [Tooltip(
+        "Color used for the global remaining-uses line shown on limited-use stickers."
+    )]
+    public Color usesColor =
+        new Color(
+            1f,
+            0.35f,
+            0.75f
+        );
+
     public Color winningSegmentColor =
         new Color(
             0.35f,
@@ -521,6 +531,11 @@ public class StickerTooltipManager : MonoBehaviour
         );
 
 
+        AppendUsesIfRelevant(
+            sticker
+        );
+
+
         AppendLocationIfRelevant(
             sticker,
             StickerSpinLocation.WinningSegment,
@@ -552,6 +567,45 @@ public class StickerTooltipManager : MonoBehaviour
 
         return
             builder.ToString();
+    }
+
+
+    private void AppendUsesIfRelevant(
+        BaseSticker sticker)
+    {
+        if (sticker == null ||
+            sticker.effect == null ||
+            !sticker.HasLimitedUses)
+        {
+            return;
+        }
+
+
+        int remaining =
+            Mathf.Max(
+                0,
+                sticker.RemainingUses
+            );
+
+
+        int maximum =
+            Mathf.Max(
+                0,
+                sticker.effect.maxUses
+            );
+
+
+        builder.Append(
+            '\n'
+        );
+
+
+        builder.Append(
+            ColorText(
+                $"Uses: {remaining} / {maximum}",
+                usesColor
+            )
+        );
     }
 
 
@@ -597,30 +651,19 @@ public class StickerTooltipManager : MonoBehaviour
 
 
         /*
-         * Uses appear beside the location that actually consumes them.
+         * Remaining uses now live in one global line above the location rules.
          *
-         * Example:
-         * Winning Segment [1 use left]: Cash out $12
-         *
-         * Piggy Bank therefore shows uses beside Winning Segment but not
-         * Losing Segment with its normal configuration.
+         * Location headers only explain whether THAT rule has the ordinary
+         * one-use cost. Conditional/custom costs deliberately opt out and put
+         * their exact wording in the authored description instead.
          */
         if (sticker.HasLimitedUses &&
-            effect.ShouldShowUsesInTooltip(
+            effect.ShouldShowUseConsumptionTag(
                 location
             ))
         {
-            int uses =
-                Mathf.Max(
-                    0,
-                    sticker.RemainingUses
-                );
-
-
             header +=
-                uses == 1
-                    ? " [1 use left]"
-                    : $" [{uses} uses left]";
+                " [Consumes 1 use]";
         }
 
 

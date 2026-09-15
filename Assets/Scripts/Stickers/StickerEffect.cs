@@ -5,7 +5,7 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "NewStickerEffect", menuName = "Stickers/StickerEffect")]
 public class StickerEffect : ScriptableObject
 {
-    public enum TooltipUsesDisplayMode
+    public enum TooltipUseConsumptionDisplayMode
     {
         FollowUseConsumption,
         Show,
@@ -62,30 +62,33 @@ public class StickerEffect : ScriptableObject
     public bool consumeUseOnAlbumActivation = false;
 
 
-    [Header("Tooltip Use Counter")]
+    [Header("Tooltip Use Consumption Tags")]
 
     [Tooltip(
-        "Controls whether remaining uses are shown beside the Winning Segment " +
-        "tooltip header. Follow Use Consumption preserves the default behaviour."
+        "Controls whether the Winning Segment tooltip header shows " +
+        "'[Consumes 1 use]'. Follow Use Consumption uses the sticker's " +
+        "normal consumption rule; Show/Hide are explicit authoring overrides."
     )]
-    public TooltipUsesDisplayMode winningTooltipUses =
-        TooltipUsesDisplayMode.FollowUseConsumption;
-
-
-    [Tooltip(
-        "Controls whether remaining uses are shown beside the Losing Segment " +
-        "tooltip header. Follow Use Consumption preserves the default behaviour."
-    )]
-    public TooltipUsesDisplayMode losingTooltipUses =
-        TooltipUsesDisplayMode.FollowUseConsumption;
+    public TooltipUseConsumptionDisplayMode winningUseConsumptionTag =
+        TooltipUseConsumptionDisplayMode.FollowUseConsumption;
 
 
     [Tooltip(
-        "Controls whether remaining uses are shown beside the Album tooltip " +
-        "header. Follow Use Consumption preserves the default behaviour."
+        "Controls whether the Losing Segment tooltip header shows " +
+        "'[Consumes 1 use]'. Follow Use Consumption uses the sticker's " +
+        "normal consumption rule; Show/Hide are explicit authoring overrides."
     )]
-    public TooltipUsesDisplayMode albumTooltipUses =
-        TooltipUsesDisplayMode.FollowUseConsumption;
+    public TooltipUseConsumptionDisplayMode losingUseConsumptionTag =
+        TooltipUseConsumptionDisplayMode.FollowUseConsumption;
+
+
+    [Tooltip(
+        "Controls whether the Album tooltip header shows '[Consumes 1 use]'. " +
+        "Follow Use Consumption uses the sticker's normal consumption rule; " +
+        "Show/Hide are explicit authoring overrides."
+    )]
+    public TooltipUseConsumptionDisplayMode albumUseConsumptionTag =
+        TooltipUseConsumptionDisplayMode.FollowUseConsumption;
 
 
     public bool HasLimitedUses =>
@@ -576,42 +579,51 @@ public class StickerEffect : ScriptableObject
 
 
     // =========================================================
-    // TOOLTIP USE COUNTER
+    // TOOLTIP USE CONSUMPTION TAG
     // =========================================================
 
     /// <summary>
-    /// Controls whether the tooltip header shows the physical sticker's
-    /// remaining uses for this location.
+    /// Default automatic rule for the '[Consumes 1 use]' location tag.
     ///
-    /// By default this preserves the existing behaviour: uses are shown only
-    /// beside locations that consume a use on activation.
+    /// Ordinary stickers simply mirror their authored use-consumption toggle.
+    /// Conditional/custom consumers can override this and return false for the
+    /// relevant location so the precise condition stays in their description.
     ///
-    /// Custom stickers whose effect value depends on remaining uses may
-    /// override this independently from actual use consumption.
+    /// The Inspector Show/Hide mode still takes precedence over this default.
     /// </summary>
-    public virtual bool ShouldShowUsesInTooltip(
+    protected virtual bool DefaultShowsUseConsumptionTag(
         StickerSpinLocation location)
     {
-        TooltipUsesDisplayMode mode;
+        return
+            ShouldConsumeUseOnActivation(
+                location
+            );
+    }
+
+
+    public bool ShouldShowUseConsumptionTag(
+        StickerSpinLocation location)
+    {
+        TooltipUseConsumptionDisplayMode mode;
 
 
         switch (location)
         {
             case StickerSpinLocation.WinningSegment:
                 mode =
-                    winningTooltipUses;
+                    winningUseConsumptionTag;
                 break;
 
 
             case StickerSpinLocation.NonWinningSegment:
                 mode =
-                    losingTooltipUses;
+                    losingUseConsumptionTag;
                 break;
 
 
             case StickerSpinLocation.Album:
                 mode =
-                    albumTooltipUses;
+                    albumUseConsumptionTag;
                 break;
 
 
@@ -622,18 +634,18 @@ public class StickerEffect : ScriptableObject
 
         switch (mode)
         {
-            case TooltipUsesDisplayMode.Show:
+            case TooltipUseConsumptionDisplayMode.Show:
                 return true;
 
 
-            case TooltipUsesDisplayMode.Hide:
+            case TooltipUseConsumptionDisplayMode.Hide:
                 return false;
 
 
-            case TooltipUsesDisplayMode.FollowUseConsumption:
+            case TooltipUseConsumptionDisplayMode.FollowUseConsumption:
             default:
                 return
-                    ShouldConsumeUseOnActivation(
+                    DefaultShowsUseConsumptionTag(
                         location
                     );
         }
