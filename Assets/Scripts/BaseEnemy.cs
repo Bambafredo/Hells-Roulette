@@ -1124,6 +1124,72 @@ public class BaseEnemy : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Restores HP to this enemy and returns the ACTUAL amount healed.
+    ///
+    /// Healing is capped at maxHP. Dead enemies cannot be healed.
+    /// The Game Log reports only real HP recovered, so an enemy already at
+    /// full health does not generate a misleading heal line.
+    /// </summary>
+    public int Heal(
+        int amount)
+    {
+        if (isDead ||
+            amount <= 0)
+        {
+            return 0;
+        }
+
+
+        int hpBefore =
+            currentHP;
+
+
+        currentHP =
+            Mathf.Min(
+                maxHP,
+                currentHP + amount
+            );
+
+
+        int actualHealed =
+            Mathf.Max(
+                0,
+                currentHP - hpBefore
+            );
+
+
+        if (actualHealed <= 0)
+            return 0;
+
+
+        UpdateHPDisplay();
+
+
+        if (GameLogManager.Instance != null)
+        {
+            GameLogManager.Instance
+                .AddGameplayLine(
+                    GameLogManager.Instance
+                        .EnemyText(
+                            enemyName
+                        ) +
+                    $" heals: +{actualHealed} HP"
+                );
+        }
+
+
+        Debug.Log(
+            $"[ENEMY] {enemyName} heals for {actualHealed} HP " +
+            $"({currentHP}/{maxHP})."
+        );
+
+
+        return
+            actualHealed;
+    }
+
+
     // =========================================================
     // DAMAGE
     // =========================================================

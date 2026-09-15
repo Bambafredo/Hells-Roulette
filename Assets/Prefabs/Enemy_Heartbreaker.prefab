@@ -105,7 +105,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 21300000, guid: b61d9db450ef64b41bbe063413bf02aa, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 035534395b6c10249be208995f43e7ca, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -388,7 +388,7 @@ GameObject:
   - component: {fileID: 7265420577131008082}
   - component: {fileID: 279940912682771310}
   m_Layer: 3
-  m_Name: Enemy_Succubus
+  m_Name: Enemy_Heartbreaker
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -425,16 +425,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 84d28e295ccd56a469f32288a07ea3a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enemyName: Succubus
-  maxHP: 7
-  rowPlacementPriority: 0
+  enemyName: Heartbreaker
+  maxHP: 5
+  rowPlacementPriority: 2
   actionSequenceOrderMode: 0
   actionSequence:
-  - {fileID: 11400000, guid: d360c3cace902c24d875ba4f00506363, type: 2}
-  - {fileID: 11400000, guid: d360c3cace902c24d875ba4f00506363, type: 2}
-  - {fileID: 11400000, guid: 6d8011e7d6b800e499a3a770e93d9225, type: 2}
-  curse: {fileID: 11400000, guid: 7cb017d460e1b364cabe7209f69be116, type: 2}
-  curseValue: 3
+  - {fileID: 11400000, guid: 1b0d369592f3f0141a911c6e159b11aa, type: 2}
+  - {fileID: 11400000, guid: 9d3baaae28a5d0948aef9ee00543b26d, type: 2}
+  - {fileID: 11400000, guid: 372a6189d1de1ff4eaa7ef79efa95aa9, type: 2}
+  curse: {fileID: 11400000, guid: 11eb71712448ea24dac5eb478a038920, type: 2}
+  curseValue: 0
   additionalCurses: []
   hpText: {fileID: 4695612484063555935}
   sprite: {fileID: 8621462763584552993}

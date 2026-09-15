@@ -9,6 +9,22 @@ using UnityEngine;
 public class EnemyCurseBurnout : EnemyCurse
 {
     // =========================================================
+    // CONFIG
+    // =========================================================
+
+    [Header("Safe Phases")]
+
+    [Tooltip(
+        "If enabled, Burnout is temporarily disabled while the Infestation " +
+        "Panel is open AND the player has no spins remaining. Infestations " +
+        "that happen while spins still remain are still affected by Burnout."
+    )]
+    [SerializeField]
+    private bool disableDuringFinalInfestation =
+        true;
+
+
+    // =========================================================
     // RUNTIME REGISTRATIONS
     // =========================================================
 
@@ -27,6 +43,9 @@ public class EnemyCurseBurnout : EnemyCurse
 
     private bool listeningToUseConsumption =
         false;
+
+
+    private DraftManager draftManager;
 
 
     // =========================================================
@@ -71,6 +90,71 @@ public class EnemyCurseBurnout : EnemyCurse
         StopListening();
 
         activeOwners.Clear();
+
+        draftManager =
+            null;
+    }
+
+
+    // =========================================================
+    // GAMEPLAY STATE
+    // =========================================================
+
+    private bool CanApplyBurnout()
+    {
+        /*
+         * Reward Phase is always a safe setup / shop zone.
+         *
+         * This is especially important for stickers such as Coupon, whose
+         * uses can be spent inside the shop after the combat round has ended.
+         */
+        if (RewardManager.Instance != null &&
+            RewardManager.Instance.RewardPhaseActive)
+        {
+            return false;
+        }
+
+
+        /*
+         * Starting Draft is also a safe setup zone.
+         *
+         * DraftManager has no singleton in the current architecture, so cache
+         * the scene instance instead of changing a central manager just for
+         * this Curse.
+         */
+        if (draftManager == null)
+        {
+            draftManager =
+                FindObjectOfType<DraftManager>();
+        }
+
+
+        if (draftManager != null &&
+            draftManager.DraftActive)
+        {
+            return false;
+        }
+
+
+        /*
+         * Optional parity with Repositioning Fee:
+         *
+         * once the last spin has been consumed and the Infestation Panel is
+         * actually open, the round is effectively over. This can be disabled
+         * per Burnout asset if future panel / enemy-visibility behaviour makes
+         * a different rule preferable.
+         */
+        if (disableDuringFinalInfestation &&
+            InfestationManager.Instance != null &&
+            InfestationManager.Instance.InfestationActive &&
+            RoundManager.Instance != null &&
+            RoundManager.Instance.TokensRemaining <= 0)
+        {
+            return false;
+        }
+
+
+        return true;
     }
 
 
@@ -82,6 +166,13 @@ public class EnemyCurseBurnout : EnemyCurse
         BaseSticker sticker,
         int requestedUses)
     {
+        if (!CanApplyBurnout())
+        {
+            return
+                requestedUses;
+        }
+
+
         CleanupInvalidOwners();
 
 
@@ -238,6 +329,16 @@ public class EnemyCurseBurnout : EnemyCurse
     private void HandleUseConsumptionResolved(
         BaseSticker.UseConsumptionEvent consumption)
     {
+        /*
+         * Normally this event will already reflect ordinary (non-Burnout)
+         * consumption because ModifyUseConsumption returned untouched during a
+         * safe phase. Keep the guard anyway so no stale/deferred Burnout log can
+         * leak into Reward / Draft / final Infestation presentation.
+         */
+        if (!CanApplyBurnout())
+            return;
+
+
         CleanupInvalidOwners();
 
 

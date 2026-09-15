@@ -7125,6 +7125,7 @@ MonoBehaviour:
   utilityButtonOnColor: {r: 0.55, g: 1, b: 0.55, a: 1}
   labelFont: {fileID: 0}
   labelFontSize: 60
+  radialMultiDigitFontScale: 0.72
   labelColor: {r: 1, g: 1, b: 1, a: 1}
   priorityOverrideLabelColor: {r: 0.3, g: 0.9, b: 1, a: 1}
   labelOutlineColor: {r: 0, g: 0, b: 0, a: 1}
@@ -10994,13 +10995,9 @@ MonoBehaviour:
     weightSchedule:
     - fromRound: 3
       weight: 1
-  - enemyPrefab: {fileID: 7377409930441240661, guid: 331390e0567aa7a40b2462b1c6af17e6, type: 3}
+  - enemyPrefab: {fileID: 7377409930441240661, guid: c89141392dee06e4a97678b066805c88, type: 3}
     weightSchedule:
     - fromRound: 5
-      weight: 1
-  - enemyPrefab: {fileID: 7377409930441240661, guid: 9ac71f69cd3dc114481700ac64e0265f, type: 3}
-    weightSchedule:
-    - fromRound: 6
       weight: 1
   presetPool: []
   specialEncounterPool: []
