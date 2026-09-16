@@ -1018,7 +1018,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c41eab183ef5ad418a8ba540321fb58, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gameplaySceneName: Scene_Main
+  gameplaySceneName: Scene_Run01_Limbo
   firstSelectedButton: {fileID: 825498860}
 --- !u!4 &1699836361
 Transform:

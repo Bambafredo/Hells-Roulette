@@ -424,10 +424,11 @@ public class BaseEnemy : MonoBehaviour
 
 
         /*
-         * Next/Future enemies remain visible, but their action and curse
-         * feedback stay hidden. Persistent curses are gameplay-active only
-         * while the enemy is in CurrentRow.
+         * Next/Future enemies remain visible, but their combat-only feedback
+         * stays hidden. HP is shown only for enemies in CurrentRow.
          */
+        UpdateHPDisplay();
+
         UpdateActionFeedback();
 
         RefreshCurseState();
@@ -1413,6 +1414,9 @@ public class BaseEnemy : MonoBehaviour
             true;
 
 
+        UpdateHPDisplay();
+
+
         /*
          * A persistent curse ends immediately when its owner dies.
          * This happens before round-end debt is collected.
@@ -1467,10 +1471,20 @@ public class BaseEnemy : MonoBehaviour
 
     private void UpdateHPDisplay()
     {
-        if (hpText != null)
-        {
-            hpText.text =
-                currentHP.ToString();
-        }
+        if (hpText == null)
+            return;
+
+
+        hpText.text =
+            currentHP.ToString();
+
+        /*
+         * Future-row enemies are previews only. Their sprites remain visible,
+         * but HP belongs to active combat information and should only be shown
+         * for the CurrentRow.
+         */
+        hpText.enabled =
+            combatActive &&
+            !isDead;
     }
 }
