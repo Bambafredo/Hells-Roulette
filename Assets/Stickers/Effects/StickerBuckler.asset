@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9a78e0a128f622b479c79aceb09853d5, type: 3}
+  m_Name: StickerBuckler
+  m_EditorClassIdentifier: 
+  stickerName: Buckler
+  icon: {fileID: 21300000, guid: 5705a91a0b253d3428304fe103d964ab, type: 3}
+  basePurchaseCost: 5
+  maxUses: 3
+  consumeUseOnWinningActivation: 1
+  consumeUseOnNonWinningActivation: 0
+  consumeUseOnAlbumActivation: 0
+  winningUseConsumptionTag: 0
+  losingUseConsumptionTag: 0
+  albumUseConsumptionTag: 0
+  dollarReward: 0
+  logDescription: 
+  winningSegmentTooltip: Block {block}. On Lucky Shot, instead parry the next enemy
+    attack back to its attacker.
+  losingSegmentTooltip: 
+  albumTooltip: 
+  destroyedTooltip: 
+  blockAmount: 3

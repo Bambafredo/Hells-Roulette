@@ -1152,7 +1152,8 @@ public class BaseEnemy : MonoBehaviour
         BloodManager.DamageResult result =
             BloodManager.Instance
                 .TakeDamage(
-                    damage
+                    damage,
+                    this
                 );
 
 
@@ -1261,7 +1262,8 @@ public class BaseEnemy : MonoBehaviour
     // =========================================================
 
     public void TakeDamage(
-        int dmg)
+        int dmg,
+        bool deferDeathLog = false)
     {
         if (isDead)
             return;
@@ -1281,7 +1283,9 @@ public class BaseEnemy : MonoBehaviour
 
         if (currentHP <= 0)
         {
-            Die();
+            Die(
+                deferDeathLog
+            );
         }
     }
 
@@ -1398,7 +1402,8 @@ public class BaseEnemy : MonoBehaviour
     // DEATH
     // =========================================================
 
-    private void Die()
+    private void Die(
+        bool deferGameLog = false)
     {
         if (isDead)
             return;
@@ -1417,10 +1422,31 @@ public class BaseEnemy : MonoBehaviour
         UpdateActionFeedback();
 
 
-        GameLogManager.Instance?
-            .LogEnemyDeath(
-                enemyName
-            );
+        if (deferGameLog &&
+            BloodManager.Instance != null)
+        {
+            string deferredEnemyName =
+                enemyName;
+
+
+            BloodManager.Instance
+                .QueueDeferredDamageFeedback(
+                    () =>
+                    {
+                        GameLogManager.Instance?
+                            .LogEnemyDeath(
+                                deferredEnemyName
+                            );
+                    }
+                );
+        }
+        else
+        {
+            GameLogManager.Instance?
+                .LogEnemyDeath(
+                    enemyName
+                );
+        }
 
 
         Debug.Log(

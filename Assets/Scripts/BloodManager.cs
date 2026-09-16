@@ -82,16 +82,48 @@ public class BloodManager : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Event sent to a one-shot damage redirector when it actually redirects
+    /// an enemy attack. Redirectors only react to damage carrying a BaseEnemy
+    /// attacker; environmental / self-inflicted damage passes through them.
+    /// </summary>
+    public struct DamageRedirectEvent
+    {
+        public int redirectedDamage;
+        public BaseEnemy attacker;
+
+        public DamageRedirectEvent(
+            int redirectedDamage,
+            BaseEnemy attacker)
+        {
+            this.redirectedDamage =
+                redirectedDamage;
+
+            this.attacker =
+                attacker;
+        }
+    }
+
+
     // =========================================================
     // SPIN DAMAGE PROTECTION
     // =========================================================
 
+    private enum DamageProtectionMode
+    {
+        Block,
+        RedirectEnemyAttack
+    }
+
+
     private class DamageBlockerRegistration
     {
         public UnityEngine.Object source;
+        public DamageProtectionMode mode;
         public int remainingCapacity;
         public bool hasPreventedDamage;
         public Action<DamageBlockEvent> onDamagePrevented;
+        public Action<DamageRedirectEvent> onDamageRedirected;
     }
 
 
@@ -286,7 +318,8 @@ public class BloodManager : MonoBehaviour
     /// never carries into the next spin.
     /// </summary>
     public DamageResult TakeDamage(
-        int amount)
+        int amount,
+        BaseEnemy attacker = null)
     {
         int requestedDamage =
             Mathf.Max(
@@ -338,6 +371,75 @@ public class BloodManager : MonoBehaviour
                     blocker.source == null ||
                     blocker.remainingCapacity <= 0)
                 {
+                    continue;
+                }
+
+
+                /*
+                 * A redirector is a one-shot parry. It only reacts when the
+                 * incoming damage identifies a living enemy attacker.
+                 *
+                 * It lives in the SAME ordered registration list as Shield /
+                 * Knight's Helmet, so sticker preparation order remains the
+                 * single source of truth for mitigation priority.
+                 */
+                if (blocker.mode ==
+                        DamageProtectionMode.RedirectEnemyAttack)
+                {
+                    if (attacker == null ||
+                        attacker.IsDead)
+                    {
+                        continue;
+                    }
+
+
+                    int redirectedDamage =
+                        remainingDamage;
+
+
+                    if (redirectedDamage <= 0)
+                        continue;
+
+
+                    remainingDamage =
+                        0;
+
+                    preventedTotal +=
+                        redirectedDamage;
+
+                    // One enemy-damage instance only.
+                    blocker.remainingCapacity =
+                        0;
+
+                    blocker.hasPreventedDamage =
+                        true;
+
+
+                    /*
+                     * Queue the parry feedback BEFORE applying reflected damage.
+                     * If the reflection kills the attacker, BaseEnemy defers only
+                     * its death-log line into this same feedback queue, giving:
+                     *
+                     *   Enemy attacks
+                     *   Buckler parries...
+                     *   Enemy dies
+                     *
+                     * Gameplay death itself still happens immediately.
+                     */
+                    blocker.onDamageRedirected?
+                        .Invoke(
+                            new DamageRedirectEvent(
+                                redirectedDamage,
+                                attacker
+                            )
+                        );
+
+
+                    attacker.TakeDamage(
+                        redirectedDamage,
+                        true
+                    );
+
                     continue;
                 }
 
@@ -462,9 +564,47 @@ public class BloodManager : MonoBehaviour
             new DamageBlockerRegistration
             {
                 source = source,
+                mode = DamageProtectionMode.Block,
                 remainingCapacity = capacity,
                 hasPreventedDamage = false,
-                onDamagePrevented = onDamagePrevented
+                onDamagePrevented = onDamagePrevented,
+                onDamageRedirected = null
+            }
+        );
+
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Registers one one-shot enemy-attack redirector in the SAME ordered
+    /// protection list used by normal blockers.
+    ///
+    /// The registration remains armed until the first damage instance carrying
+    /// a BaseEnemy attacker reaches it. Damage without an attacker does not
+    /// consume it.
+    /// </summary>
+    public bool RegisterSpinDamageRedirector(
+        UnityEngine.Object source,
+        Action<DamageRedirectEvent> onDamageRedirected)
+    {
+        if (!spinDamageProtectionWindowActive ||
+            source == null)
+        {
+            return false;
+        }
+
+
+        spinDamageBlockers.Add(
+            new DamageBlockerRegistration
+            {
+                source = source,
+                mode = DamageProtectionMode.RedirectEnemyAttack,
+                remainingCapacity = 1,
+                hasPreventedDamage = false,
+                onDamagePrevented = null,
+                onDamageRedirected = onDamageRedirected
             }
         );
 
