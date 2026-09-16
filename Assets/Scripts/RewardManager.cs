@@ -462,7 +462,22 @@ public class RewardManager : MonoBehaviour
     private readonly Queue<string> gameplayFreeStickerRequests =
         new Queue<string>();
 
+    /*
+     * Parallel queue for an OPTIONAL exact prefab requested by the gameplay
+     * effect. A null entry preserves the original behaviour: RewardManager
+     * chooses a random sticker from stickerPrefabs.
+     *
+     * Keeping this parallel to the existing source-name queue makes the new
+     * exact-reward path fully backwards-compatible with Cupon and any other
+     * existing callers of RequestFreeStickerReward(string).
+     */
+    private readonly Queue<GameObject> gameplayFreeStickerPrefabRequests =
+        new Queue<GameObject>();
+
     private string activeGameplayFreeStickerSource =
+        null;
+
+    private GameObject activeGameplayFreeStickerPrefab =
         null;
 
     private RoundManager roundManager;
@@ -677,10 +692,86 @@ public class RewardManager : MonoBehaviour
             normalizedSourceName
         );
 
+        /*
+         * Null means: use the normal random reward pool when this queued
+         * request is eventually presented.
+         */
+        gameplayFreeStickerPrefabRequests.Enqueue(
+            null
+        );
+
 
         Debug.Log(
             $"[FREE STICKER] Request queued by '{normalizedSourceName}'. " +
             $"Queued requests = {gameplayFreeStickerRequests.Count}."
+        );
+
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Queues one SPECIFIC physical sticker prefab as a free gameplay reward.
+    ///
+    /// This uses the same post-spin modal flow as the random free-sticker API,
+    /// so callers may safely request it during sticker resolution without
+    /// spawning / placing a physical sticker in the middle of the spin.
+    /// </summary>
+    public bool RequestFreeStickerReward(
+        GameObject exactStickerPrefab,
+        string sourceName = null)
+    {
+        if (rewardPanel == null ||
+            rewardBonusSlot == null ||
+            exactStickerPrefab == null)
+        {
+            Debug.LogWarning(
+                "[FREE STICKER] Cannot queue exact reward: Reward Panel, " +
+                "Reward Bonus Slot or requested prefab is missing."
+            );
+
+            return false;
+        }
+
+
+        BaseSticker sticker =
+            exactStickerPrefab
+                .GetComponentInChildren<BaseSticker>(
+                    true
+                );
+
+
+        if (sticker == null)
+        {
+            Debug.LogWarning(
+                $"[FREE STICKER] Cannot queue exact reward '{exactStickerPrefab.name}': " +
+                "prefab has no BaseSticker."
+            );
+
+            return false;
+        }
+
+
+        string normalizedSourceName =
+            string.IsNullOrWhiteSpace(sourceName)
+                ? "Gameplay effect"
+                : sourceName;
+
+
+        gameplayFreeStickerRequests.Enqueue(
+            normalizedSourceName
+        );
+
+        gameplayFreeStickerPrefabRequests.Enqueue(
+            exactStickerPrefab
+        );
+
+
+        Debug.Log(
+            $"[FREE STICKER] Exact reward '{exactStickerPrefab.name}' queued " +
+            $"by '{normalizedSourceName}'. Queued requests = " +
+            $"{gameplayFreeStickerRequests.Count}."
         );
 
 
@@ -850,19 +941,36 @@ public class RewardManager : MonoBehaviour
             gameplayFreeStickerRequests.Dequeue();
 
 
+        activeGameplayFreeStickerPrefab =
+            gameplayFreeStickerPrefabRequests.Count > 0
+                ? gameplayFreeStickerPrefabRequests.Dequeue()
+                : null;
+
+
         ApplyGameplayFreeStickerBonusText();
 
 
-        int randomIndex =
-            UnityEngine.Random.Range(
-                0,
-                stickerPrefabs.Length
-            );
+        GameObject rewardPrefab =
+            activeGameplayFreeStickerPrefab;
+
+
+        if (rewardPrefab == null)
+        {
+            int randomIndex =
+                UnityEngine.Random.Range(
+                    0,
+                    stickerPrefabs.Length
+                );
+
+
+            rewardPrefab =
+                stickerPrefabs[randomIndex];
+        }
 
 
         currentBonusOffer =
             SpawnOffer(
-                stickerPrefabs[randomIndex],
+                rewardPrefab,
                 rewardBonusSlot,
                 RewardStickerOffer.OfferMode.FreeClaim
             );
@@ -876,6 +984,9 @@ public class RewardManager : MonoBehaviour
             );
 
             activeGameplayFreeStickerSource =
+                null;
+
+            activeGameplayFreeStickerPrefab =
                 null;
 
             BeginNextGameplayFreeStickerOffer();
@@ -910,6 +1021,9 @@ public class RewardManager : MonoBehaviour
 
 
         activeGameplayFreeStickerSource =
+            null;
+
+        activeGameplayFreeStickerPrefab =
             null;
 
 
