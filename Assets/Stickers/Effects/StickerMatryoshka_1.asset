@@ -22,7 +22,7 @@ MonoBehaviour:
   winningUseConsumptionTag: 0
   losingUseConsumptionTag: 0
   albumUseConsumptionTag: 0
-  dollarReward: 5
+  dollarReward: 2
   logDescription: 
   winningSegmentTooltip: Earn ${dollarReward}. On Lucky Shot, if at maximum uses,
     get a {bonusSticker}.

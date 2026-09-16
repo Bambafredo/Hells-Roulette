@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cfbebeb28ed549043824c5f4437a9308, type: 3}
-  m_Name: StickerMatryoshka_2
+  m_Name: StickerMatryoshka_Silver
   m_EditorClassIdentifier: 
-  stickerName: Matryoshka
+  stickerName: Silver Matryoshka
   icon: {fileID: 21300000, guid: e80d387c0413c594888164fbc3e32c4a, type: 3}
   basePurchaseCost: 5
   maxUses: 2
@@ -22,7 +22,7 @@ MonoBehaviour:
   winningUseConsumptionTag: 0
   losingUseConsumptionTag: 0
   albumUseConsumptionTag: 0
-  dollarReward: 4
+  dollarReward: 3
   logDescription: 
   winningSegmentTooltip: Earn ${dollarReward}. On Lucky Shot, if at maximum uses,
     get a {bonusSticker}.

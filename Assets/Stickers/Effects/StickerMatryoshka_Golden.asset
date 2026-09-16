@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cfbebeb28ed549043824c5f4437a9308, type: 3}
   m_Name: StickerMatryoshka_Golden
   m_EditorClassIdentifier: 
-  stickerName: Matryoshka
+  stickerName: Golden Matryoshka
   icon: {fileID: 21300000, guid: 8615387a0a6fa3c4db28eb9dfe7415a2, type: 3}
   basePurchaseCost: 5
   maxUses: 0
@@ -22,7 +22,7 @@ MonoBehaviour:
   winningUseConsumptionTag: 0
   losingUseConsumptionTag: 0
   albumUseConsumptionTag: 0
-  dollarReward: 5
+  dollarReward: 4
   logDescription: 
   winningSegmentTooltip: Earn ${dollarReward}.
   losingSegmentTooltip: 

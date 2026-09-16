@@ -7051,6 +7051,9 @@ MonoBehaviour:
   magnifierInputMode: 1
   magnifierToggleKey: 324
   resolutionOrderToggleKey: 9
+  powerSpinKey: 113
+  luckyShotKey: 101
+  manualBrakeKey: 32
 --- !u!114 &996127472
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10985,7 +10988,7 @@ MonoBehaviour:
       weight: 1
   - enemyPrefab: {fileID: 7377409930441240661, guid: 8dd64ac380bfa04439b2131caeae82a6, type: 3}
     weightSchedule:
-    - fromRound: 15
+    - fromRound: 1
       weight: 1
     - fromRound: 6
       weight: 0
