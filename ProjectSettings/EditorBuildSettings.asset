@@ -14,4 +14,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Runs/Scene_Run01_Limbo.unity
     guid: 73a129b16339d7e4a8c460d90b706b00
+  - enabled: 1
+    path: Assets/Scenes/Runs/Scene_Run02_Lust.unity
+    guid: f4e5e81cdb003514d96dd3c9a3f727f6
   m_configObjects: {}

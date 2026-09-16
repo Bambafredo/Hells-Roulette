@@ -403,7 +403,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1699836360}
         m_TargetAssemblyTypeName: MainMenuController, Assembly-CSharp
-        m_MethodName: StartNewRun
+        m_MethodName: StartLimboRun
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -807,7 +807,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1699836360}
         m_TargetAssemblyTypeName: MainMenuController, Assembly-CSharp
-        m_MethodName: StartNewRun
+        m_MethodName: StartLustRun
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -1018,7 +1018,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c41eab183ef5ad418a8ba540321fb58, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gameplaySceneName: Scene_Run01_Limbo
+  limboSceneName: Scene_Run01_Limbo
+  lustSceneName: Scene_Run02_Lust
   firstSelectedButton: {fileID: 825498860}
 --- !u!4 &1699836361
 Transform:

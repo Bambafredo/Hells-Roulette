@@ -4,29 +4,46 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
-/// Minimal main-menu controller for Hell's Roulette.
+/// Main-menu controller for Hell's Roulette.
 ///
 /// Responsibilities:
-/// - Start a fresh run by loading the gameplay scene.
+/// - Start a fresh Limbo run.
+/// - Start a fresh Lust run.
 /// - Quit the application.
-/// - Optionally select the New Run button on scene start so controller /
-///   keyboard navigation has a sensible default focus.
+/// - Optionally select a default button for keyboard/controller navigation.
 ///
 /// This script intentionally owns no persistent game state.
 /// </summary>
 public class MainMenuController : MonoBehaviour
 {
+    // =========================================================
+    // SCENES
+    // =========================================================
+
     [Header("Scenes")]
+
+    [Tooltip("Gameplay scene used for a fresh Limbo run.")]
     [SerializeField]
-    private string gameplaySceneName = "Scene_Main";
+    private string limboSceneName = "Scene_Main";
+
+    [Tooltip("Gameplay scene used for a fresh Lust run.")]
+    [SerializeField]
+    private string lustSceneName = "Scene_Lust";
+
+
+    // =========================================================
+    // DEFAULT SELECTION
+    // =========================================================
 
     [Header("Default Selection")]
+
     [Tooltip(
-        "Optional. Assign NewRun_Button here so the menu already has a selected " +
-        "button when using keyboard / controller navigation."
+        "Optional. Assign the button that should already be selected when " +
+        "using keyboard / controller navigation."
     )]
     [SerializeField]
     private Button firstSelectedButton;
+
 
     private void Start()
     {
@@ -36,26 +53,78 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
+
         EventSystem.current.SetSelectedGameObject(
             firstSelectedButton.gameObject
         );
     }
 
+
+    // =========================================================
+    // RUN SELECTION
+    // =========================================================
+
+    /// <summary>
+    /// Backwards-compatible entry point for the existing New Run / Limbo button.
+    /// </summary>
     public void StartNewRun()
     {
-        if (string.IsNullOrWhiteSpace(gameplaySceneName))
+        StartLimboRun();
+    }
+
+
+    public void StartLimboRun()
+    {
+        LoadRunScene(
+            limboSceneName,
+            "Limbo"
+        );
+    }
+
+
+    public void StartLustRun()
+    {
+        LoadRunScene(
+            lustSceneName,
+            "Lust"
+        );
+    }
+
+
+    private void LoadRunScene(
+        string sceneName,
+        string runLabel)
+    {
+        if (string.IsNullOrWhiteSpace(sceneName))
         {
             Debug.LogError(
-                "[MAIN MENU] Gameplay scene name is empty."
+                $"[MAIN MENU] {runLabel} scene name is empty."
             );
 
             return;
         }
 
+
+        if (!Application.CanStreamedLevelBeLoaded(sceneName))
+        {
+            Debug.LogError(
+                $"[MAIN MENU] Cannot load {runLabel} scene '{sceneName}'. " +
+                "Check the scene name and make sure it is included in Build Settings."
+            );
+
+            return;
+        }
+
+
         SceneManager.LoadScene(
-            gameplaySceneName
+            sceneName
         );
     }
+
+
+    // =========================================================
+    // EXIT
+    // =========================================================
 
     public void ExitGame()
     {
