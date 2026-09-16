@@ -104,6 +104,18 @@ public class LuckyShotController : MonoBehaviour
     {
 #if UNITY_EDITOR || UNITY_STANDALONE
 
+        /*
+         * Keyboard / Steam Deck shortcut.
+         * It calls the exact same TryLuckyShot() path as the world-space button.
+         */
+        if (InputsManager.Instance != null &&
+            InputsManager.Instance.LuckyShotPressed)
+        {
+            TryLuckyShot();
+            return;
+        }
+
+
         if (!Input.GetMouseButtonDown(0))
             return;
 

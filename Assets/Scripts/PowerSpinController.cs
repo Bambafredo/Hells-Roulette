@@ -144,6 +144,13 @@ public class PowerSpinController : MonoBehaviour
     private bool isCharging = false;
 
     /*
+     * Tracks whether the CURRENT charge was started from the keyboard shortcut.
+     * Mouse and keyboard keep identical charge/release behaviour without one
+     * input source accidentally releasing a charge started by the other.
+     */
+    private bool chargingFromShortcut = false;
+
+    /*
      * Potencia REAL actual.
      *
      * Ya incluye maxSwitchPower.
@@ -317,31 +324,60 @@ public class PowerSpinController : MonoBehaviour
 
         ResolveReferences();
 
-        if (cam == null)
-            cam = Camera.main;
+        /*
+         * Keyboard shortcut does not need the world-space switch Collider.
+         * Mouse interaction still does.
+         */
+        bool shortcutPressed =
+            InputsManager.Instance != null &&
+            InputsManager.Instance.PowerSpinPressed;
 
-        if (cam == null ||
-            roulette == null ||
-            switchCollider == null)
+        if (!isCharging &&
+            shortcutPressed)
         {
+            chargingFromShortcut =
+                true;
+
+            TryBeginCharge();
+
+            if (!isCharging)
+            {
+                chargingFromShortcut =
+                    false;
+            }
+
             return;
         }
 
-        Vector2 mouseWorld =
-            cam.ScreenToWorldPoint(
-                Input.mousePosition
-            );
+
+        if (cam == null)
+            cam = Camera.main;
 
 
         // =====================================================
-        // START CHARGE
+        // START CHARGE - MOUSE
         // =====================================================
 
         if (!isCharging &&
             Input.GetMouseButtonDown(0))
         {
+            if (cam == null ||
+                roulette == null ||
+                switchCollider == null)
+            {
+                return;
+            }
+
+            Vector2 mouseWorld =
+                cam.ScreenToWorldPoint(
+                    Input.mousePosition
+                );
+
             if (!switchCollider.OverlapPoint(mouseWorld))
                 return;
+
+            chargingFromShortcut =
+                false;
 
             TryBeginCharge();
 
@@ -355,22 +391,24 @@ public class PowerSpinController : MonoBehaviour
 
         if (isCharging)
         {
-            if (Input.GetMouseButton(0))
+            bool held =
+                chargingFromShortcut
+                    ? InputsManager.Instance != null &&
+                      InputsManager.Instance.PowerSpinHeld
+                    : Input.GetMouseButton(0);
+
+            bool released =
+                chargingFromShortcut
+                    ? InputsManager.Instance == null ||
+                      InputsManager.Instance.PowerSpinReleased
+                    : Input.GetMouseButtonUp(0);
+
+
+            if (held)
             {
                 chargeElapsed +=
                     Time.deltaTime;
 
-                /*
-                 * PingPong:
-                 *
-                 * 0 → 1 → 0 → 1 → 0...
-                 *
-                 * chargeDuration representa cuánto tarda
-                 * cada recorrido:
-                 *
-                 * 0 → MAX = chargeDuration
-                 * MAX → 0 = chargeDuration
-                 */
                 float oscillator =
                     Mathf.PingPong(
                         chargeElapsed /
@@ -381,14 +419,6 @@ public class PowerSpinController : MonoBehaviour
                         1f
                     );
 
-                /*
-                 * Aplicamos el máximo particular
-                 * de este interruptor.
-                 *
-                 * maxSwitchPower = 0.75:
-                 *
-                 * 0 → 0.75 → 0 → 0.75...
-                 */
                 charge01 =
                     oscillator *
                     maxSwitchPower;
@@ -399,11 +429,7 @@ public class PowerSpinController : MonoBehaviour
             }
 
 
-            // -------------------------------------------------
-            // RELEASE
-            // -------------------------------------------------
-
-            if (Input.GetMouseButtonUp(0))
+            if (released)
             {
                 ReleaseCharge();
             }
@@ -563,6 +589,7 @@ public class PowerSpinController : MonoBehaviour
 
 
         isCharging = false;
+        chargingFromShortcut = false;
 
         SetSwitchPressed(false);
 
@@ -638,6 +665,7 @@ public class PowerSpinController : MonoBehaviour
             return;
 
         isCharging = false;
+        chargingFromShortcut = false;
 
         charge01 = 0f;
         chargeElapsed = 0f;

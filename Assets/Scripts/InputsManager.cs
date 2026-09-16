@@ -123,6 +123,34 @@ public class InputsManager : MonoBehaviour
 
 
     // ===========================================================
+    // GAMEPLAY SHORTCUTS
+    // ===========================================================
+
+    [Header("Gameplay Shortcuts")]
+
+    [Tooltip(
+        "Hold to charge Power Spin. Releasing the key launches the spin, " +
+        "mirroring the existing Power Switch mouse interaction."
+    )]
+    [SerializeField]
+    private KeyCode powerSpinKey =
+        KeyCode.Q;
+
+    [Tooltip("Press to trigger Lucky Shot.")]
+    [SerializeField]
+    private KeyCode luckyShotKey =
+        KeyCode.E;
+
+    [Tooltip(
+        "Hold during a spin to use the same Blood-powered manual brake " +
+        "as holding the roulette with the mouse."
+    )]
+    [SerializeField]
+    private KeyCode manualBrakeKey =
+        KeyCode.Space;
+
+
+    // ===========================================================
     // PUBLIC ACTION STATE
     // ===========================================================
 
@@ -270,6 +298,86 @@ public class InputsManager : MonoBehaviour
                 Input.GetKeyDown(
                     resolutionOrderToggleKey
                 );
+#else
+            return false;
+#endif
+        }
+    }
+
+
+    /// <summary>
+    /// True only on the frame the authored Power Spin shortcut is pressed.
+    /// </summary>
+    public bool PowerSpinPressed
+    {
+        get
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            return Input.GetKeyDown(powerSpinKey);
+#else
+            return false;
+#endif
+        }
+    }
+
+
+    /// <summary>
+    /// True while the authored Power Spin shortcut is held.
+    /// </summary>
+    public bool PowerSpinHeld
+    {
+        get
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            return Input.GetKey(powerSpinKey);
+#else
+            return false;
+#endif
+        }
+    }
+
+
+    /// <summary>
+    /// True only on the frame the authored Power Spin shortcut is released.
+    /// </summary>
+    public bool PowerSpinReleased
+    {
+        get
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            return Input.GetKeyUp(powerSpinKey);
+#else
+            return false;
+#endif
+        }
+    }
+
+
+    /// <summary>
+    /// True only on the frame the authored Lucky Shot shortcut is pressed.
+    /// </summary>
+    public bool LuckyShotPressed
+    {
+        get
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            return Input.GetKeyDown(luckyShotKey);
+#else
+            return false;
+#endif
+        }
+    }
+
+
+    /// <summary>
+    /// True while the authored manual-brake shortcut is held.
+    /// </summary>
+    public bool ManualBrakeHeld
+    {
+        get
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            return Input.GetKey(manualBrakeKey);
 #else
             return false;
 #endif

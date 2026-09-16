@@ -436,6 +436,16 @@ public class RouletteController : MonoBehaviour
             {
                 isBraking = false;
             }
+            else if (InputsManager.Instance != null &&
+                     InputsManager.Instance.ManualBrakeHeld)
+            {
+                /*
+                 * Keyboard / Steam Deck shortcut.
+                 * Same gameplay brake as holding LMB over the wheel, but it
+                 * does not require the pointer to be over the roulette.
+                 */
+                isBraking = true;
+            }
             else if (Input.GetMouseButton(0))
             {
                 Vector2 mouseWorld =
