@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1182bb378f1d67e439c715a19e18551b, type: 3}
+  m_Name: StickerStreak_3
+  m_EditorClassIdentifier: 
+  stickerName: Streak 3
+  icon: {fileID: 21300000, guid: 607210d10c9725641a20f0f5c8103d2e, type: 3}
+  basePurchaseCost: 5
+  maxUses: 1
+  consumeUseOnWinningActivation: 1
+  consumeUseOnNonWinningActivation: 0
+  consumeUseOnAlbumActivation: 0
+  winningUseConsumptionTag: 0
+  losingUseConsumptionTag: 0
+  albumUseConsumptionTag: 0
+  dollarReward: 0
+  logDescription: 
+  winningSegmentTooltip: Consumes 1 use.
+  losingSegmentTooltip: 
+  albumTooltip: Current Debt is reduced by {discount}%. Consumes 1 use after Debt
+    is paid.
+  destroyedTooltip: 
+  debtReductionPercent: 60

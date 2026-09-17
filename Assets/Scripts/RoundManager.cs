@@ -154,6 +154,30 @@ public class RoundManager : MonoBehaviour
             new Dictionary<BaseSticker, int>();
 
 
+    [Header("Active Sticker Debt Discount")]
+
+    [SerializeField]
+    private int activeStickerDebtDiscountPercent = 0;
+
+    [SerializeField]
+    private int currentStickerDebtDiscountAmount = 0;
+
+    /*
+     * Keyed by physical sticker instance so several discount stickers stack
+     * additively while each physical sticker can register only once.
+     * The combined discount is clamped to 100%.
+     */
+    private readonly Dictionary<BaseSticker, int>
+        activeStickerDebtDiscountSources =
+            new Dictionary<BaseSticker, int>();
+
+    /*
+     * Debt-paid listeners may consume / destroy a physical discount sticker.
+     * Unregistering during that callback must not rebuild an already-paid debt.
+     */
+    private bool debtSettlementInProgress = false;
+
+
     [SerializeField]
     private bool debtPending = false;
 
@@ -1040,8 +1064,19 @@ public class RoundManager : MonoBehaviour
                 $"[DEBT] Paid ${paidAmount} successfully."
             );
 
-            OnDebtPaid?
-                .Invoke(paidAmount);
+            debtSettlementInProgress =
+                true;
+
+            try
+            {
+                OnDebtPaid?
+                    .Invoke(paidAmount);
+            }
+            finally
+            {
+                debtSettlementInProgress =
+                    false;
+            }
 
 
             /*
@@ -1260,12 +1295,18 @@ public class RoundManager : MonoBehaviour
             previousActiveInterestAmount;
 
 
-        currentDebt =
+        int grossDebt =
             Mathf.Max(
                 0,
                 currentDebt +
+                currentStickerDebtDiscountAmount +
                 amountDelta
             );
+
+
+        ApplyStickerDebtDiscountToGrossDebt(
+            grossDebt
+        );
 
 
         UpdateDebtUI();
@@ -1435,17 +1476,6 @@ public class RoundManager : MonoBehaviour
 
 
         /*
-         * The percentage display represents the CURRENT active Interest sources,
-         * even during Rewards.
-         *
-         * Reward edits configure the upcoming round, so the already-paid Debt
-         * total must stay frozen there, but the visible Interest percentage must
-         * still react immediately when Ladybugs enter or leave the Album.
-         */
-        UpdateEnemyDebtPenaltyUI();
-
-
-        /*
          * During normal gameplay / starting Draft, changing Album composition
          * changes this round's debt immediately.
          *
@@ -1461,15 +1491,23 @@ public class RoundManager : MonoBehaviour
                 previousActiveInterestAmount;
 
 
-            currentDebt =
+            int grossDebt =
                 Mathf.Max(
                     0,
                     currentDebt +
+                    currentStickerDebtDiscountAmount +
                     amountDelta
                 );
 
 
+            ApplyStickerDebtDiscountToGrossDebt(
+                grossDebt
+            );
+
+
             UpdateDebtUI();
+
+            UpdateEnemyDebtPenaltyUI();
 
 
             OnDebtChanged?
@@ -1531,6 +1569,213 @@ public class RoundManager : MonoBehaviour
     }
 
 
+    // =========================================================
+    // STICKER DEBT DISCOUNT
+    // =========================================================
+
+    /// <summary>
+    /// Registers one physical Album sticker as a percentage discount on Debt.
+    /// Multiple physical stickers stack additively up to 100%.
+    /// </summary>
+    public void RegisterStickerDebtDiscount(
+        BaseSticker source,
+        int percent)
+    {
+        if (source == null ||
+            percent <= 0)
+        {
+            return;
+        }
+
+
+        int clampedPercent =
+            Mathf.Clamp(
+                percent,
+                0,
+                100
+            );
+
+
+        if (activeStickerDebtDiscountSources.TryGetValue(
+                source,
+                out int existingPercent) &&
+            existingPercent == clampedPercent)
+        {
+            return;
+        }
+
+
+        activeStickerDebtDiscountSources[source] =
+            clampedPercent;
+
+
+        RefreshStickerDebtDiscountContribution(
+            ShouldApplyStickerDebtDiscountToCurrentDebt()
+        );
+
+
+        Debug.Log(
+            $"[STICKER DEBT DISCOUNT] {GetStickerDisplayName(source)} adds " +
+            $"-{clampedPercent}% Debt. Active discount = " +
+            $"{activeStickerDebtDiscountPercent}%."
+        );
+    }
+
+
+    /// <summary>
+    /// Removes one physical sticker's Debt discount contribution.
+    /// </summary>
+    public void UnregisterStickerDebtDiscount(
+        BaseSticker source)
+    {
+        if (source == null)
+            return;
+
+
+        if (!activeStickerDebtDiscountSources.Remove(
+                source))
+        {
+            return;
+        }
+
+
+        RefreshStickerDebtDiscountContribution(
+            ShouldApplyStickerDebtDiscountToCurrentDebt()
+        );
+
+
+        Debug.Log(
+            $"[STICKER DEBT DISCOUNT] {GetStickerDisplayName(source)} removed. " +
+            $"Active discount = {activeStickerDebtDiscountPercent}%."
+        );
+    }
+
+
+    private void RefreshStickerDebtDiscountContribution(
+        bool applyToCurrentDebt)
+    {
+        activeStickerDebtDiscountPercent =
+            CalculateActiveStickerDebtDiscountPercent();
+
+
+        if (!applyToCurrentDebt)
+        {
+            currentStickerDebtDiscountAmount =
+                0;
+
+            return;
+        }
+
+
+        int grossDebt =
+            Mathf.Max(
+                0,
+                currentDebt +
+                currentStickerDebtDiscountAmount
+            );
+
+
+        ApplyStickerDebtDiscountToGrossDebt(
+            grossDebt
+        );
+
+
+        UpdateDebtUI();
+        UpdateEnemyDebtPenaltyUI();
+
+
+        OnDebtChanged?
+            .Invoke(
+                currentDebt
+            );
+    }
+
+
+    private int CalculateActiveStickerDebtDiscountPercent()
+    {
+        int total =
+            0;
+
+
+        foreach (
+            KeyValuePair<BaseSticker, int> entry
+            in activeStickerDebtDiscountSources)
+        {
+            if (entry.Key == null ||
+                entry.Value <= 0)
+            {
+                continue;
+            }
+
+
+            total +=
+                entry.Value;
+        }
+
+
+        return
+            Mathf.Clamp(
+                total,
+                0,
+                100
+            );
+    }
+
+
+    private void ApplyStickerDebtDiscountToGrossDebt(
+        int grossDebt)
+    {
+        grossDebt =
+            Mathf.Max(
+                0,
+                grossDebt
+            );
+
+
+        activeStickerDebtDiscountPercent =
+            CalculateActiveStickerDebtDiscountPercent();
+
+
+        currentStickerDebtDiscountAmount =
+            Mathf.Min(
+                grossDebt,
+                CalculatePercentAmount(
+                    grossDebt,
+                    activeStickerDebtDiscountPercent
+                )
+            );
+
+
+        currentDebt =
+            Mathf.Max(
+                0,
+                grossDebt -
+                currentStickerDebtDiscountAmount
+            );
+    }
+
+
+    private bool ShouldApplyStickerDebtDiscountToCurrentDebt()
+    {
+        if (debtSettlementInProgress)
+            return false;
+
+
+        if (waitingForRewardCompletion)
+            return false;
+
+
+        if (RewardManager.Instance != null &&
+            RewardManager.Instance.RewardPhaseActive)
+        {
+            return false;
+        }
+
+
+        return true;
+    }
+
+
     private string GetStickerDisplayName(
         BaseSticker sticker)
     {
@@ -1559,11 +1804,18 @@ public class RoundManager : MonoBehaviour
     public void ModifyDebt(
         int amount)
     {
-        currentDebt =
+        int grossDebt =
             Mathf.Max(
                 0,
-                currentDebt + amount
+                currentDebt +
+                currentStickerDebtDiscountAmount +
+                amount
             );
+
+
+        ApplyStickerDebtDiscountToGrossDebt(
+            grossDebt
+        );
 
         UpdateDebtUI();
 
@@ -1771,10 +2023,15 @@ public class RoundManager : MonoBehaviour
             );
 
 
-        currentDebt =
+        int grossDebt =
             currentBaseDebt +
             currentEnemyDebtPenaltyAmount +
             currentActiveInterestAmount;
+
+
+        ApplyStickerDebtDiscountToGrossDebt(
+            grossDebt
+        );
     }
 
 
