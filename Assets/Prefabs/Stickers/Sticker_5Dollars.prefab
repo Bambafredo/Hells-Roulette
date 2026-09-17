@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 9022462484478120845}
   - component: {fileID: 575237485781066836}
   m_Layer: 0
-  m_Name: ST_5_Dollars
+  m_Name: Sticker_5Dollars
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
