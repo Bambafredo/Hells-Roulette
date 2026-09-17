@@ -67,6 +67,24 @@ public class RewardManager : MonoBehaviour
 
 
     [Tooltip(
+        "Clean Row choice slot for the normal random bonus sticker."
+    )]
+    public Transform rewardSlotC;
+
+    [Tooltip(
+        "Clean Row choice slot for the Streak cash-out sticker."
+    )]
+    public Transform rewardSlotD;
+
+    [Tooltip(
+        "Exact physical Streak sticker prefabs, ordered by Clean Row streak: " +
+        "index 0 = streak 1, index 1 = streak 2, etc. " +
+        "For the current design assign 10%, 30%, 60%, 100%."
+    )]
+    public GameObject[] cleanRowStreakStickerPrefabs;
+
+
+    [Tooltip(
         "Reward_Panel/RewardBonus. This acts as both the visual root and " +
         "the spawn/return slot for the single free sticker."
     )]
@@ -163,6 +181,22 @@ public class RewardManager : MonoBehaviour
 
         currentBonusOffer =
             null;
+    }
+
+
+    private void ClearCleanRowOffers()
+    {
+        if (currentCleanRowRandomOffer != null)
+        {
+            Destroy(currentCleanRowRandomOffer);
+            currentCleanRowRandomOffer = null;
+        }
+
+        if (currentCleanRowStreakOffer != null)
+        {
+            Destroy(currentCleanRowStreakOffer);
+            currentCleanRowStreakOffer = null;
+        }
     }
 
 
@@ -428,6 +462,9 @@ public class RewardManager : MonoBehaviour
     private GameObject currentOfferB;
 
     private GameObject currentBonusOffer;
+
+    private GameObject currentCleanRowRandomOffer;
+    private GameObject currentCleanRowStreakOffer;
 
     /*
      * Bonus_Text is intentionally discovered from RewardBonus instead of
@@ -919,7 +956,7 @@ public class RewardManager : MonoBehaviour
         );
 
 
-        ShowCleanRowBonusView();
+        ShowGameplayFreeStickerView();
 
         BeginNextGameplayFreeStickerOffer();
     }
@@ -1247,10 +1284,11 @@ public class RewardManager : MonoBehaviour
         }
 
 
-        if (rewardBonusSlot == null)
+        if (rewardSlotC == null ||
+            rewardSlotD == null)
         {
             Debug.LogWarning(
-                "[CLEAN ROW BONUS] Reward Bonus Slot is missing. " +
+                "[CLEAN ROW BONUS] Reward Slot C/D is missing. " +
                 "Opening the normal Reward Phase instead."
             );
 
@@ -1270,6 +1308,25 @@ public class RewardManager : MonoBehaviour
         }
 
 
+        int streak =
+            roundManager != null
+                ? roundManager.CurrentCleanRowStreak
+                : 0;
+
+        if (streak <= 0 ||
+            cleanRowStreakStickerPrefabs == null ||
+            cleanRowStreakStickerPrefabs.Length < streak ||
+            cleanRowStreakStickerPrefabs[streak - 1] == null)
+        {
+            Debug.LogWarning(
+                $"[CLEAN ROW BONUS] Missing Streak sticker prefab for " +
+                $"streak {streak}. Opening the normal Reward Phase instead."
+            );
+
+            return false;
+        }
+
+
         return true;
     }
 
@@ -1278,13 +1335,12 @@ public class RewardManager : MonoBehaviour
     {
         ClearRemainingOffers();
         ClearBonusOffer();
+        ClearCleanRowOffers();
 
 
         CurrentRewardStage =
             RewardStage.CleanRowBonus;
 
-
-        RestoreDefaultRewardBonusText();
 
         ShowCleanRowBonusView();
 
@@ -1295,31 +1351,52 @@ public class RewardManager : MonoBehaviour
                 stickerPrefabs.Length
             );
 
+        int streak =
+            roundManager != null
+                ? roundManager.CurrentCleanRowStreak
+                : 1;
 
-        currentBonusOffer =
+        streak =
+            Mathf.Clamp(
+                streak,
+                1,
+                cleanRowStreakStickerPrefabs.Length
+            );
+
+
+        currentCleanRowRandomOffer =
             SpawnOffer(
                 stickerPrefabs[randomIndex],
-                rewardBonusSlot,
+                rewardSlotC,
+                RewardStickerOffer.OfferMode.FreeClaim
+            );
+
+        currentCleanRowStreakOffer =
+            SpawnOffer(
+                cleanRowStreakStickerPrefabs[streak - 1],
+                rewardSlotD,
                 RewardStickerOffer.OfferMode.FreeClaim
             );
 
 
-        if (currentBonusOffer == null)
+        if (currentCleanRowRandomOffer == null ||
+            currentCleanRowStreakOffer == null)
         {
             Debug.LogWarning(
-                "[CLEAN ROW BONUS] Could not spawn the free sticker. " +
+                "[CLEAN ROW BONUS] Could not spawn both Clean Row choices. " +
                 "Opening the normal Reward Phase instead."
             );
 
-
+            ClearCleanRowOffers();
             BeginStandardRewardStage();
             return;
         }
 
 
         Debug.Log(
-            "[CLEAN ROW BONUS] CurrentRow cleared. " +
-            $"Free sticker = {GetOfferName(currentBonusOffer)}."
+            $"[CLEAN ROW BONUS] Streak {streak}. " +
+            $"Random option = {GetOfferName(currentCleanRowRandomOffer)}; " +
+            $"cash-out option = {GetOfferName(currentCleanRowStreakOffer)}."
         );
     }
 
@@ -1340,16 +1417,8 @@ public class RewardManager : MonoBehaviour
         GameObject offerObject,
         BaseSticker sticker)
     {
-        bool freeClaimStageActive =
-            CleanRowBonusActive ||
-            GameplayFreeStickerActive;
-
-
-        if (!freeClaimStageActive ||
-            offerObject == null ||
-            sticker == null ||
-            currentBonusOffer !=
-                offerObject)
+        if (offerObject == null ||
+            sticker == null)
         {
             return false;
         }
@@ -1361,16 +1430,18 @@ public class RewardManager : MonoBehaviour
             );
 
 
-        /*
-         * Detach the claimed object from bonus ownership BEFORE switching
-         * views. BeginStandardRewardStage() clears any UNCLAIMED bonus offer.
-         */
-        currentBonusOffer =
-            null;
-
+        // -----------------------------------------------------
+        // GAMEPLAY FREE STICKER (Cupon / Matryoshka / etc.)
+        // -----------------------------------------------------
 
         if (GameplayFreeStickerActive)
         {
+            if (currentBonusOffer != offerObject)
+                return false;
+
+            currentBonusOffer =
+                null;
+
             CompleteCurrentGameplayFreeStickerOffer(
                 true,
                 stickerName
@@ -1380,13 +1451,61 @@ public class RewardManager : MonoBehaviour
         }
 
 
+        // -----------------------------------------------------
+        // CLEAN ROW: RANDOM STICKER OR STREAK CASH-OUT
+        // -----------------------------------------------------
+
+        if (!CleanRowBonusActive)
+            return false;
+
+
+        bool choseRandomSticker =
+            currentCleanRowRandomOffer ==
+                offerObject;
+
+        bool choseStreakSticker =
+            currentCleanRowStreakOffer ==
+                offerObject;
+
+
+        if (!choseRandomSticker &&
+            !choseStreakSticker)
+        {
+            return false;
+        }
+
+
+        // Detach the claimed object before destroying the unchosen option.
+        if (choseRandomSticker)
+        {
+            currentCleanRowRandomOffer =
+                null;
+        }
+        else
+        {
+            currentCleanRowStreakOffer =
+                null;
+        }
+
+
+        ClearCleanRowOffers();
+
+
+        if (choseStreakSticker &&
+            roundManager != null)
+        {
+            roundManager.ResetCleanRowStreak();
+        }
+
+
         Debug.Log(
-            $"[CLEAN ROW BONUS] Claimed '{stickerName}' for FREE."
+            choseStreakSticker
+                ? $"[CLEAN ROW BONUS] Cashed out Streak with '{stickerName}'."
+                : $"[CLEAN ROW BONUS] Claimed random bonus '{stickerName}'. Streak preserved."
         );
 
 
         BeginStandardRewardStage();
-
 
         return true;
     }
@@ -1399,6 +1518,7 @@ public class RewardManager : MonoBehaviour
     private void BeginStandardRewardStage()
     {
         ClearBonusOffer();
+        ClearCleanRowOffers();
 
 
         CurrentRewardStage =
@@ -1546,77 +1666,59 @@ public class RewardManager : MonoBehaviour
     }
 
 
+    private void ShowGameplayFreeStickerView()
+    {
+        SetActive(regularRewardBackground, true);
+
+        SetTransformActive(rewardSlotA, false);
+        SetTransformActive(rewardSlotB, false);
+        SetTransformActive(rewardSlotC, false);
+        SetTransformActive(rewardSlotD, false);
+
+        SetTextActive(rewardSlotAPriceText, false);
+        SetTextActive(rewardSlotBPriceText, false);
+
+        SetTransformActive(rewardBonusSlot, true);
+
+        SetColliderObjectActive(rerollButtonCollider, false);
+        SetTextActive(rerollCostText, false);
+
+        SetColliderObjectActive(changeCurrencyButtonCollider, false);
+        SetTextActive(changeCurrencyButtonText, false);
+
+        SetColliderObjectActive(skipButtonCollider, true);
+    }
+
+
     private void ShowCleanRowBonusView()
     {
         /*
-         * Desired Clean Row presentation:
+         * Clean Row is now a two-sticker choice:
+         * C = normal random bonus
+         * D = Streak cash-out sticker
          *
-         * Shared Reward background             = ON
-         * RewardBonus + Bonus_Text (its child) = ON
-         * SkipButton                           = ON
-         *
-         * Everything specific to the normal store = OFF.
+         * The legacy RewardBonus slot remains reserved for gameplay-generated
+         * free stickers such as Cupon and Matryoshka.
          */
-        SetActive(
-            regularRewardBackground,
-            true
-        );
+        SetActive(regularRewardBackground, true);
 
+        SetTransformActive(rewardSlotA, false);
+        SetTransformActive(rewardSlotB, false);
+        SetTransformActive(rewardSlotC, true);
+        SetTransformActive(rewardSlotD, true);
 
-        SetTransformActive(
-            rewardSlotA,
-            false
-        );
+        SetTextActive(rewardSlotAPriceText, false);
+        SetTextActive(rewardSlotBPriceText, false);
 
-        SetTransformActive(
-            rewardSlotB,
-            false
-        );
+        SetTransformActive(rewardBonusSlot, false);
 
+        SetColliderObjectActive(rerollButtonCollider, false);
+        SetTextActive(rerollCostText, false);
 
-        SetTextActive(
-            rewardSlotAPriceText,
-            false
-        );
+        SetColliderObjectActive(changeCurrencyButtonCollider, false);
+        SetTextActive(changeCurrencyButtonText, false);
 
-        SetTextActive(
-            rewardSlotBPriceText,
-            false
-        );
-
-
-        SetTransformActive(
-            rewardBonusSlot,
-            true
-        );
-
-
-        SetColliderObjectActive(
-            rerollButtonCollider,
-            false
-        );
-
-        SetTextActive(
-            rerollCostText,
-            false
-        );
-
-
-        SetColliderObjectActive(
-            changeCurrencyButtonCollider,
-            false
-        );
-
-        SetTextActive(
-            changeCurrencyButtonText,
-            false
-        );
-
-
-        SetColliderObjectActive(
-            skipButtonCollider,
-            true
-        );
+        SetColliderObjectActive(skipButtonCollider, true);
     }
 
 
@@ -1636,6 +1738,16 @@ public class RewardManager : MonoBehaviour
         SetTransformActive(
             rewardSlotB,
             true
+        );
+
+        SetTransformActive(
+            rewardSlotC,
+            false
+        );
+
+        SetTransformActive(
+            rewardSlotD,
+            false
         );
 
 
@@ -2963,7 +3075,7 @@ public class RewardManager : MonoBehaviour
             );
 
 
-            ClearBonusOffer();
+            ClearCleanRowOffers();
 
             BeginStandardRewardStage();
             return;
@@ -2999,6 +3111,7 @@ public class RewardManager : MonoBehaviour
     {
         ClearRemainingOffers();
         ClearBonusOffer();
+        ClearCleanRowOffers();
 
 
         UpdateRewardTexts();

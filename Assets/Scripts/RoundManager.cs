@@ -183,6 +183,66 @@ public class RoundManager : MonoBehaviour
 
 
     // =========================================================
+    // CLEAN ROW STREAK
+    // =========================================================
+
+    [Header("Clean Row Streak")]
+
+    [SerializeField, Range(0, 4)]
+    private int currentCleanRowStreak = 0;
+
+    public int CurrentCleanRowStreak =>
+        currentCleanRowStreak;
+
+
+    public void ResetCleanRowStreak()
+    {
+        if (currentCleanRowStreak == 0)
+            return;
+
+        Debug.Log(
+            $"[CLEAN ROW STREAK] Cashed out/reset from " +
+            $"{currentCleanRowStreak} to 0."
+        );
+
+        currentCleanRowStreak = 0;
+    }
+
+
+    private void AdvanceCleanRowStreak()
+    {
+        int previous =
+            currentCleanRowStreak;
+
+        currentCleanRowStreak =
+            Mathf.Clamp(
+                currentCleanRowStreak + 1,
+                0,
+                4
+            );
+
+        Debug.Log(
+            $"[CLEAN ROW STREAK] Clean Row: " +
+            $"{previous} -> {currentCleanRowStreak}."
+        );
+    }
+
+
+    private void BreakCleanRowStreak()
+    {
+        if (currentCleanRowStreak <= 0)
+            return;
+
+        Debug.Log(
+            $"[CLEAN ROW STREAK] Row not cleared. " +
+            $"Streak {currentCleanRowStreak} -> 0."
+        );
+
+        currentCleanRowStreak = 0;
+    }
+
+
+    // =========================================================
     // ENEMY ROUND OUTCOME
     // =========================================================
 
@@ -251,6 +311,16 @@ public class RoundManager : MonoBehaviour
                 $"Next-round debt penalty is now " +
                 $"{enemyDebtPenaltyPercent}%."
             );
+        }
+
+
+        if (encounterCleared)
+        {
+            AdvanceCleanRowStreak();
+        }
+        else
+        {
+            BreakCleanRowStreak();
         }
 
 
