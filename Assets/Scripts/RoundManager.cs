@@ -366,6 +366,20 @@ public class RoundManager : MonoBehaviour
     public TMP_Text enemyDebtPenaltyText;
 
     [Tooltip(
+        "Color used by the Extra Debt text when the CURRENT total Debt is " +
+        "below the round's Base Debt."
+    )]
+    [SerializeField]
+    private Color negativeDebtExtraColor =
+        Color.green;
+
+    private Color defaultDebtExtraColor =
+        Color.white;
+
+    private bool defaultDebtExtraColorCaptured =
+        false;
+
+    [Tooltip(
         "Opcional. Texto numérico de fichas, por ejemplo 2 / 3."
     )]
     public TMP_Text tokensText;
@@ -512,15 +526,58 @@ public class RoundManager : MonoBehaviour
         currentActiveInterestAmount;
 
     /*
-     * This is the number shown by the existing Extra Debt TMP.
+     * THEORETICAL net percentage shown by the existing Extra Debt TMP.
      *
-     * Ascension penalty + active enemy Debt curses + Album sticker interest
-     * stack additively into one readable percentage.
+     * Do NOT reconstruct this value from currentDebt dollars. The actual Debt
+     * uses integer rounding when percentage amounts are converted to money, so
+     * a configured -10% can otherwise appear as -11% / -12% on small debts.
+     * That is mathematically accurate in dollars but noisy for the player.
+     *
+     * Instead, show the clean configured percentage math:
+     *
+     *   gross multiplier = 1 + all positive/base-relative modifiers
+     *   final multiplier = gross multiplier * (1 - Debt Discount)
+     *
+     * Example: +20% total extra Debt followed by -10% Discount:
+     *   1.20 * 0.90 = 1.08  ->  +8%
+     *
+     * The real dollar amount may differ by a tiny amount because of rounding,
+     * but the UI remains stable and communicates the intended modifiers.
      */
-    public int CurrentTotalDebtExtraPercent =>
-        enemyDebtPenaltyPercent +
-        activeEnemyCurseDebtPercent +
-        activeStickerInterestPercent;
+    public int CurrentTotalDebtExtraPercent
+    {
+        get
+        {
+            int grossExtraPercent =
+                Mathf.Max(0, enemyDebtPenaltyPercent) +
+                Mathf.Max(0, activeEnemyCurseDebtPercent) +
+                Mathf.Max(0, activeStickerInterestPercent);
+
+            int discountPercent =
+                Mathf.Clamp(
+                    activeStickerDebtDiscountPercent,
+                    0,
+                    100
+                );
+
+            float grossMultiplier =
+                1f +
+                (grossExtraPercent / 100f);
+
+            float discountMultiplier =
+                1f -
+                (discountPercent / 100f);
+
+            float theoreticalNetPercent =
+                (grossMultiplier * discountMultiplier - 1f) *
+                100f;
+
+            return
+                Mathf.RoundToInt(
+                    theoreticalNetPercent
+                );
+        }
+    }
 
     public bool DebtPending =>
         debtPending;
@@ -624,6 +681,15 @@ public class RoundManager : MonoBehaviour
         {
             enemyCorridorController =
                 FindObjectOfType<EnemyCorridorController>();
+        }
+
+        if (enemyDebtPenaltyText != null)
+        {
+            defaultDebtExtraColor =
+                enemyDebtPenaltyText.color;
+
+            defaultDebtExtraColorCaptured =
+                true;
         }
 
         // -----------------------------------------------------
@@ -2201,11 +2267,38 @@ public class RoundManager : MonoBehaviour
 
     private void UpdateEnemyDebtPenaltyUI()
     {
-        if (enemyDebtPenaltyText != null)
+        if (enemyDebtPenaltyText == null)
+            return;
+
+
+        if (!defaultDebtExtraColorCaptured)
         {
-            enemyDebtPenaltyText.text =
-                $"{CurrentTotalDebtExtraPercent}%";
+            defaultDebtExtraColor =
+                enemyDebtPenaltyText.color;
+
+            defaultDebtExtraColorCaptured =
+                true;
         }
+
+
+        int netExtraPercent =
+            CurrentTotalDebtExtraPercent;
+
+
+        /*
+         * Keep the existing explicit + sign for neutral / positive Extra Debt,
+         * while negative values naturally render as e.g. -10%.
+         */
+        enemyDebtPenaltyText.text =
+            netExtraPercent >= 0
+                ? $"+{netExtraPercent}%"
+                : $"{netExtraPercent}%";
+
+
+        enemyDebtPenaltyText.color =
+            netExtraPercent < 0
+                ? negativeDebtExtraColor
+                : defaultDebtExtraColor;
     }
 
 
