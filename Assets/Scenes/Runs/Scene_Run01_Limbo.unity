@@ -6911,7 +6911,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 40ebd899d1dee314db2d55897a6cc1e0, type: 3}
   - {fileID: 577474978131120927, guid: 46a8ce007cc0c36498aae087d3dae18f, type: 3}
   bloodPriceMultiplier: 2
-  enableSharedPricing: 0
+  enableSharedPricing: 1
   sharedCoinPriceSequence: 060000000a0000001000000018000000
   sharedBloodPriceSequence: 060000000a0000001000000018000000
   enableFirstPurchaseDiscount: 1
@@ -10859,7 +10859,7 @@ MonoBehaviour:
     m_PressedTrigger: Pressed
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
-  m_Interactable: 1
+  m_Interactable: 0
   m_TargetGraphic: {fileID: 0}
   m_FillRect: {fileID: 1828547888}
   m_HandleRect: {fileID: 0}

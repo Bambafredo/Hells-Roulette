@@ -341,16 +341,19 @@ public class BloodManager : MonoBehaviour
 
 
         /*
-         * Damage beyond the player's remaining Blood cannot meaningfully be
-         * "prevented". Capping here keeps Shield use consumption truthful:
-         * a Shield only spends a use when it saves Blood that could actually
-         * have been lost.
+         * Mitigation must resolve against the FULL incoming attack before
+         * Blood loss is clamped by the player's remaining Blood.
+         *
+         * Example: 2 Blood, 6 incoming damage, 2 Block must resolve as
+         * 6 - 2 = 4 damage remaining, then Blood falls from 2 to 0.
+         *
+         * Capping the attack to currentBlood here would incorrectly turn the
+         * 6-damage attack into 2 damage before mitigation, allowing 2 Block
+         * to negate the whole attack and keep the player alive.
+         * ConsumeBlood() already clamps the final Blood loss safely to zero.
          */
         int remainingDamage =
-            Mathf.Min(
-                requestedDamage,
-                currentBlood
-            );
+            requestedDamage;
 
 
         int preventedTotal =
