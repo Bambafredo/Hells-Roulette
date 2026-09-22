@@ -5,6 +5,13 @@ using UnityEngine;
 [DefaultExecutionOrder(-100)]
 public class LuckyShotController : MonoBehaviour
 {
+    public static LuckyShotController Instance
+    {
+        get;
+        private set;
+    }
+
+
     // =========================================================
     // REFERENCES
     // =========================================================
@@ -70,6 +77,35 @@ public class LuckyShotController : MonoBehaviour
 
     private Camera cam;
 
+    private readonly Dictionary<Object, float>
+        rewardBonusSources =
+            new Dictionary<Object, float>();
+
+
+    public float ActiveRewardBonusPercent
+    {
+        get
+        {
+            float total = 0f;
+
+            foreach (
+                KeyValuePair<Object, float> pair
+                in rewardBonusSources)
+            {
+                if (pair.Key == null)
+                    continue;
+
+                total +=
+                    Mathf.Max(
+                        0f,
+                        pair.Value
+                    );
+            }
+
+            return total;
+        }
+    }
+
 
     // =========================================================
     // UNITY
@@ -77,6 +113,8 @@ public class LuckyShotController : MonoBehaviour
 
     private void Awake()
     {
+        Instance = this;
+
         if (roulette == null)
         {
             roulette =
@@ -157,6 +195,46 @@ public class LuckyShotController : MonoBehaviour
     }
 
 
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
+
+
+    // =========================================================
+    // LUCKY SHOT BONUS SOURCES
+    // =========================================================
+
+    public void RegisterRewardBonus(
+        Object source,
+        float percent)
+    {
+        if (source == null)
+            return;
+
+        rewardBonusSources[source] =
+            Mathf.Max(
+                0f,
+                percent
+            );
+    }
+
+
+    public void UnregisterRewardBonus(
+        Object source)
+    {
+        if (source == null)
+            return;
+
+        rewardBonusSources.Remove(
+            source
+        );
+    }
+
+
     // =========================================================
     // LUCKY SHOT
     // =========================================================
@@ -216,10 +294,19 @@ public class LuckyShotController : MonoBehaviour
             rolledPowerPercent /
             100f;
 
+        float finalRewardPercent =
+            Mathf.Clamp(
+                rewardPercent +
+                ActiveRewardBonusPercent,
+                0f,
+                500f
+            );
+
+
         bool started =
             roulette.TryStartLuckyShot(
                 normalizedPower,
-                rewardPercent,
+                finalRewardPercent,
                 allowManualBrake
             );
 
@@ -227,7 +314,9 @@ public class LuckyShotController : MonoBehaviour
         {
             Debug.Log(
                 $"[LUCKY SHOT] Rolled {rolledPowerPercent:0.##}% power. " +
-                $"Reward = {rewardPercent:0.##}%."
+                $"Base Reward = {rewardPercent:0.##}%. " +
+                $"Sticker Bonus = +{ActiveRewardBonusPercent:0.##}%. " +
+                $"Final Reward = {finalRewardPercent:0.##}%."
             );
         }
 
