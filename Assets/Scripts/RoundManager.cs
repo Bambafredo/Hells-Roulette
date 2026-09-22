@@ -644,6 +644,25 @@ public class RoundManager : MonoBehaviour
         }
 
         Instance = this;
+
+        /*
+         * Capture the authored TMP color as early as possible.
+         *
+         * A sticker that starts the run already in the Album can register a
+         * negative Debt modifier before Start(). If the first UI refresh turns
+         * this text green before we cache its normal color, green would
+         * incorrectly become the "default" color for 0% / positive values.
+         *
+         * This is presentation-only state. No Debt or round logic changes.
+         */
+        if (enemyDebtPenaltyText != null)
+        {
+            defaultDebtExtraColor =
+                enemyDebtPenaltyText.color;
+
+            defaultDebtExtraColorCaptured =
+                true;
+        }
     }
 
     private void Start()
@@ -677,15 +696,6 @@ public class RoundManager : MonoBehaviour
         {
             enemyCorridorController =
                 FindObjectOfType<EnemyCorridorController>();
-        }
-
-        if (enemyDebtPenaltyText != null)
-        {
-            defaultDebtExtraColor =
-                enemyDebtPenaltyText.color;
-
-            defaultDebtExtraColorCaptured =
-                true;
         }
 
         // -----------------------------------------------------
