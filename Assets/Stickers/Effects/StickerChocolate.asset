@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f8ea16d637b18f478435fb612f32d9a, type: 3}
+  m_Name: StickerChocolate
+  m_EditorClassIdentifier: 
+  stickerName: Chocolate
+  icon: {fileID: 21300000, guid: 65c3c8fbd4589c145a2c4aea2645014a, type: 3}
+  basePurchaseCost: 5
+  maxUses: 1
+  consumeUseOnWinningActivation: 1
+  consumeUseOnNonWinningActivation: 1
+  consumeUseOnAlbumActivation: 0
+  winningUseConsumptionTag: 0
+  losingUseConsumptionTag: 0
+  albumUseConsumptionTag: 0
+  dollarReward: 0
+  logDescription: 
+  winningSegmentTooltip: Recover {blood} Blood. {ticketChance}% chance to win a {goldenTicket}.
+  losingSegmentTooltip: Recover {blood} Blood.
+  albumTooltip: 
+  destroyedTooltip: 
+  bloodGain: 8
+  goldenTicketChance: 20
+  goldenTicketPrefab: {fileID: 577474978131120927, guid: ee145c185e9c71f4fb76838a30706301, type: 3}
