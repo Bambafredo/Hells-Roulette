@@ -538,29 +538,26 @@ public class RoundManager : MonoBehaviour
         currentActiveInterestAmount;
 
     /*
-     * THEORETICAL net percentage shown by the existing Extra Debt TMP.
+     * CLEAN modifier total shown by the existing Extra Debt TMP.
      *
      * Do NOT reconstruct this value from currentDebt dollars. The actual Debt
-     * uses integer rounding when percentage amounts are converted to money, so
-     * a configured -10% can otherwise appear as -11% / -12% on small debts.
-     * That is mathematically accurate in dollars but noisy for the player.
+     * uses its existing percentage application and integer-rounding rules.
      *
-     * Instead, show the clean configured percentage math:
+     * This UI is presentation only: positive configured modifiers are added
+     * together and the configured Sticker Debt Discount is subtracted directly.
      *
-     *   gross multiplier = 1 + all positive/base-relative modifiers
-     *   final multiplier = gross multiplier * (1 - Debt Discount)
+     * Example:
+     *   Ladybug +5% + Golden Ticket -50% -> -45%
      *
-     * Example: +20% total extra Debt followed by -10% Discount:
-     *   1.20 * 0.90 = 1.08  ->  +8%
-     *
-     * The real dollar amount may differ by a tiny amount because of rounding,
-     * but the UI remains stable and communicates the intended modifiers.
+     * The real dollar amount can differ because its calculation remains
+     * multiplicative / rounded. This displayed percentage deliberately stays
+     * clean and communicates the authored modifiers.
      */
     public int CurrentTotalDebtExtraPercent
     {
         get
         {
-            int grossExtraPercent =
+            int positiveExtraPercent =
                 Mathf.Max(0, enemyDebtPenaltyPercent) +
                 Mathf.Max(0, activeEnemyCurseDebtPercent) +
                 Mathf.Max(0, activeStickerInterestPercent);
@@ -572,22 +569,9 @@ public class RoundManager : MonoBehaviour
                     100
                 );
 
-            float grossMultiplier =
-                1f +
-                (grossExtraPercent / 100f);
-
-            float discountMultiplier =
-                1f -
-                (discountPercent / 100f);
-
-            float theoreticalNetPercent =
-                (grossMultiplier * discountMultiplier - 1f) *
-                100f;
-
             return
-                Mathf.RoundToInt(
-                    theoreticalNetPercent
-                );
+                positiveExtraPercent -
+                discountPercent;
         }
     }
 
