@@ -395,6 +395,18 @@ public class RoundManager : MonoBehaviour
     // =========================================================
 
     private int hitsThisSpin = 0;
+
+    /// <summary>
+    /// Number of accepted Flag Pin -> flapper contacts recorded during the
+    /// current / most recently completed physical spin.
+    ///
+    /// Read-only gameplay information for effects such as Bowling Ball.
+    /// RoundManager remains the sole owner of the counter.
+    /// </summary>
+    public int FlapperHitsThisSpin
+    {
+        get { return hitsThisSpin; }
+    }
     private bool spinActive = false;
 
 
