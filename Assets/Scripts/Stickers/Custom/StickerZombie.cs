@@ -316,6 +316,11 @@ public class StickerZombie : StickerEffect
         bool wasOnWheel =
             target.currentSegment != null;
 
+        bool wasInAlbum =
+            target.currentAlbumZone != null ||
+            (AlbumManager.Instance != null &&
+             AlbumManager.Instance.IsStickerInAlbum(target));
+
 
         BaseSticker replacement =
             target.TransmuteTo(
@@ -330,11 +335,15 @@ public class StickerZombie : StickerEffect
 
         /*
          * A replacement can have a different collider / size than the sticker
-         * it replaced. Re-run the project's existing wheel placement authority
-         * immediately so out-of-segment or overlap states hard-lock input in
-         * exactly the same way as any other invalid placement.
+         * it replaced.
+         *
+         * Re-run the project's shared placement authority immediately for both
+         * Roulette and Album transmutations. The validator delegates Album
+         * geometry to AlbumPlacementUtility, so bounds / overlap rules remain
+         * identical to normal manual Album placement.
          */
-        if (wasOnWheel)
+        if (wasOnWheel ||
+            wasInAlbum)
         {
             Physics2D.SyncTransforms();
 

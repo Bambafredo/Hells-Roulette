@@ -11,7 +11,7 @@ public class StickerPlacementValidator : MonoBehaviour
     public GameObject wrongStickerPanel;
 
     // Estado global:
-    // true = hay al menos un sticker de la ruleta colocado incorrectamente.
+    // true = hay al menos un sticker de la ruleta o Album colocado incorrectamente.
     private bool hardInputLock = false;
 
     private RouletteController controller;
@@ -237,6 +237,58 @@ public class StickerPlacementValidator : MonoBehaviour
                 sticker.tolerance
             );
         }
+
+        // ---------------------------------------------------------
+        // STICKER EN ALBUM
+        // ---------------------------------------------------------
+
+        /*
+         * Album placement can also become invalid without a manual drag.
+         * Example: a sticker is transmuted into a physically larger Zombie
+         * while keeping the replaced sticker's position.
+         *
+         * Reuse AlbumPlacementUtility as the single geometric authority for:
+         * - full collider inside Album bounds
+         * - no overlap with another Album sticker
+         */
+        bool isInAlbum =
+            sticker.currentAlbumZone != null;
+
+        if (!isInAlbum &&
+            AlbumManager.Instance != null)
+        {
+            isInAlbum =
+                AlbumManager.Instance
+                    .IsStickerInAlbum(
+                        sticker
+                    );
+        }
+
+        if (isInAlbum)
+        {
+            if (AlbumManager.Instance == null ||
+                AlbumManager.Instance.albumZone == null)
+            {
+                return false;
+            }
+
+            Transform contentRoot =
+                AlbumManager.Instance.albumZone
+                    .GetContentRoot();
+
+            if (contentRoot == null ||
+                !root.IsChildOf(contentRoot))
+            {
+                return false;
+            }
+
+            return
+                AlbumPlacementUtility.CanPlaceInAlbum(
+                    sticker,
+                    AlbumManager.Instance.albumZone
+                );
+        }
+
 
         // ---------------------------------------------------------
         // STICKER QUE DICE NO ESTAR EN LA RULETA
