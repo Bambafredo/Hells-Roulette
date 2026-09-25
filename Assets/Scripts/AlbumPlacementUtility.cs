@@ -30,10 +30,16 @@ public class AlbumPlacementUtility : MonoBehaviour
 
         Physics2D.SyncTransforms();
 
+        float placementTolerance =
+            Mathf.Max(
+                0f,
+                sticker.tolerance
+            );
+
         if (!IsColliderInsideAlbum(
                 stickerCollider,
                 albumZone.areaCollider,
-                albumZone.boundaryTolerance))
+                placementTolerance))
         {
             return false;
         }
@@ -41,7 +47,8 @@ public class AlbumPlacementUtility : MonoBehaviour
         if (OverlapsAnotherAlbumSticker(
                 sticker,
                 stickerCollider,
-                albumZone))
+                albumZone,
+                placementTolerance))
         {
             return false;
         }
@@ -109,7 +116,8 @@ public class AlbumPlacementUtility : MonoBehaviour
     private static bool OverlapsAnotherAlbumSticker(
         BaseSticker sticker,
         Collider2D stickerCollider,
-        AlbumZone albumZone)
+        AlbumZone albumZone,
+        float tolerance)
     {
         BaseSticker[] allStickers =
             Object.FindObjectsOfType<BaseSticker>(true);
@@ -161,8 +169,18 @@ public class AlbumPlacementUtility : MonoBehaviour
                     otherCollider
                 );
 
-            if (distance.isOverlapped)
+            /*
+             * Match the forgiving placement feel used on the roulette:
+             * a tiny penetration up to this sticker's BaseSticker.tolerance
+             * is accepted. ColliderDistance2D.distance is negative while
+             * colliders overlap, so only penetration deeper than tolerance
+             * invalidates the Album placement.
+             */
+            if (distance.isOverlapped &&
+                distance.distance < -tolerance)
+            {
                 return true;
+            }
         }
 
         return false;
