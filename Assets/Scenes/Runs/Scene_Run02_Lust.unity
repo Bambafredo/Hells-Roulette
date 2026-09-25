@@ -7002,6 +7002,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 6758b30d1a032ed449a71337417212f7, type: 3}
   - {fileID: 577474978131120927, guid: b185d523438bf1a4788e0f6a699a0bcc, type: 3}
   - {fileID: 577474978131120927, guid: 5dd84fa0e43cc7045b6aefa714ce79b0, type: 3}
+  - {fileID: 577474978131120927, guid: 1fc19221487ac294f91721a683e2e6b7, type: 3}
   bloodPriceMultiplier: 2
   enableSharedPricing: 1
   sharedCoinPriceSequence: 060000000a0000001000000018000000
@@ -7179,6 +7180,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 6758b30d1a032ed449a71337417212f7, type: 3}
   - {fileID: 577474978131120927, guid: b185d523438bf1a4788e0f6a699a0bcc, type: 3}
   - {fileID: 577474978131120927, guid: 5dd84fa0e43cc7045b6aefa714ce79b0, type: 3}
+  - {fileID: 577474978131120927, guid: 1fc19221487ac294f91721a683e2e6b7, type: 3}
   rerollButtonCollider: {fileID: 23581347}
   rerollsRemainingText: {fileID: 701791785}
   startingRerolls: 3
