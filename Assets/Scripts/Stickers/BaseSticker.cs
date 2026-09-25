@@ -1676,6 +1676,210 @@ public class BaseSticker : MonoBehaviour
     /// Destroy(gameObject) directly so the spin snapshot knows the target must
     /// not activate later in the same resolution.
     /// </summary>
+    /// <summary>
+    /// Replaces this physical sticker with another sticker prefab WITHOUT
+    /// resolving this sticker's gameplay-destruction effect.
+    ///
+    /// This is intentionally separate from DestroyFromGameplay(): effects such
+    /// as Zombie are transmutations, not destruction. The old sticker is marked
+    /// pending immediately so an existing spin-resolution snapshot cannot make
+    /// it activate later in the same spin.
+    ///
+    /// Wheel / Album ownership is transferred to the replacement. The caller
+    /// may run the normal placement validator afterwards if the replacement's
+    /// geometry differs from the original.
+    /// </summary>
+    public BaseSticker TransmuteTo(
+        GameObject replacementPrefab,
+        string reason = null)
+    {
+        if (replacementPrefab == null ||
+            pendingGameplayDestruction ||
+            consumed)
+        {
+            return null;
+        }
+
+
+        BaseSticker replacementTemplate =
+            replacementPrefab.GetComponentInChildren<BaseSticker>(
+                true
+            );
+
+        if (replacementTemplate == null)
+        {
+            Debug.LogWarning(
+                $"[STICKER] Cannot transmute '{gameObject.name}': " +
+                $"replacement prefab '{replacementPrefab.name}' has no BaseSticker."
+            );
+
+            return null;
+        }
+
+
+        Transform oldRoot =
+            stickerRoot != null
+                ? stickerRoot
+                : transform;
+
+        if (oldRoot == null)
+            return null;
+
+
+        Transform oldSegment =
+            currentSegment;
+
+        AlbumZone oldAlbumZone =
+            currentAlbumZone;
+
+        Transform oldParent =
+            oldRoot.parent;
+
+        Vector3 oldWorldPosition =
+            oldRoot.position;
+
+        Quaternion oldWorldRotation =
+            oldRoot.rotation;
+
+
+        /*
+         * IMPORTANT:
+         * Do NOT call NotifyGameplayDestructionEffect().
+         *
+         * A transmuted sticker did not die; therefore Destroyed effects must
+         * not fire.
+         */
+        pendingGameplayDestruction =
+            true;
+
+        isPlaced = false;
+        currentSegment = null;
+        currentAlbumZone = null;
+        currentBagZone = null;
+        currentGameplayZone = null;
+
+
+        Collider2D oldCollider =
+            StickerCollider;
+
+        if (oldCollider != null)
+        {
+            oldCollider.enabled =
+                false;
+        }
+
+
+        GameObject replacementObject =
+            Instantiate(
+                replacementPrefab,
+                oldWorldPosition,
+                oldWorldRotation,
+                oldParent
+            );
+
+
+        BaseSticker replacement =
+            replacementObject.GetComponentInChildren<BaseSticker>(
+                true
+            );
+
+
+        if (replacement == null)
+        {
+            Destroy(
+                replacementObject
+            );
+
+            pendingGameplayDestruction =
+                false;
+
+            Debug.LogWarning(
+                $"[STICKER] Transmutation of '{gameObject.name}' failed: " +
+                "instantiated replacement has no BaseSticker."
+            );
+
+            return null;
+        }
+
+
+        if (oldSegment != null)
+        {
+            replacement.isPlaced =
+                true;
+
+            replacement.currentSegment =
+                oldSegment;
+
+            replacement.currentAlbumZone =
+                null;
+
+            replacement.currentBagZone =
+                null;
+
+            replacement.currentGameplayZone =
+                null;
+        }
+        else if (oldAlbumZone != null)
+        {
+            replacement.isPlaced =
+                false;
+
+            replacement.currentSegment =
+                null;
+
+            replacement.currentAlbumZone =
+                oldAlbumZone;
+
+            replacement.currentBagZone =
+                null;
+
+            replacement.currentGameplayZone =
+                null;
+        }
+
+
+        string oldDisplayName =
+            effect != null &&
+            !string.IsNullOrWhiteSpace(
+                effect.stickerName
+            )
+                ? effect.stickerName
+                : gameObject.name;
+
+        string newDisplayName =
+            replacement.effect != null &&
+            !string.IsNullOrWhiteSpace(
+                replacement.effect.stickerName
+            )
+                ? replacement.effect.stickerName
+                : replacement.gameObject.name;
+
+
+        Debug.Log(
+            string.IsNullOrWhiteSpace(reason)
+                ? $"[STICKER] '{oldDisplayName}' transmuted into '{newDisplayName}'."
+                : $"[STICKER] '{oldDisplayName}' transmuted into '{newDisplayName}': {reason}."
+        );
+
+
+        GameObject objectToDestroy =
+            stickerRoot != null
+                ? stickerRoot.gameObject
+                : gameObject;
+
+        Destroy(
+            objectToDestroy
+        );
+
+
+        return replacement;
+    }
+
+
+    // ===========================================================
+    // GENERIC GAMEPLAY DESTRUCTION
+    // ===========================================================
+
     public bool DestroyFromGameplay(
         string reason = null)
     {

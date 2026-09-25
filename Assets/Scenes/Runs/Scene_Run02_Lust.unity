@@ -7003,6 +7003,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: b185d523438bf1a4788e0f6a699a0bcc, type: 3}
   - {fileID: 577474978131120927, guid: 5dd84fa0e43cc7045b6aefa714ce79b0, type: 3}
   - {fileID: 577474978131120927, guid: 1fc19221487ac294f91721a683e2e6b7, type: 3}
+  - {fileID: 577474978131120927, guid: f15ee9276d3bb5b42ab0d4fc6f5a76b8, type: 3}
   bloodPriceMultiplier: 2
   enableSharedPricing: 1
   sharedCoinPriceSequence: 060000000a0000001000000018000000
@@ -7069,7 +7070,7 @@ MonoBehaviour:
   winningSegmentColor: {r: 0.35, g: 1, b: 0.45, a: 1}
   losingSegmentColor: {r: 1, g: 0.32381463, b: 0.19999999, a: 1}
   albumColor: {r: 0.4, g: 0.75, b: 1, a: 1}
-  destroyedColor: {r: 1, g: 0.35, b: 0.35, a: 1}
+  destroyedColor: {r: 0.34901965, g: 0.99191225, b: 1, a: 1}
 --- !u!114 &996127466
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7181,6 +7182,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: b185d523438bf1a4788e0f6a699a0bcc, type: 3}
   - {fileID: 577474978131120927, guid: 5dd84fa0e43cc7045b6aefa714ce79b0, type: 3}
   - {fileID: 577474978131120927, guid: 1fc19221487ac294f91721a683e2e6b7, type: 3}
+  - {fileID: 577474978131120927, guid: f15ee9276d3bb5b42ab0d4fc6f5a76b8, type: 3}
   rerollButtonCollider: {fileID: 23581347}
   rerollsRemainingText: {fileID: 701791785}
   startingRerolls: 3
