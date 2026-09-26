@@ -166,6 +166,14 @@ public class GameLogManager : MonoBehaviour
     )]
     public Color segmentColor = Color.cyan;
 
+    [Tooltip("Color used for invalid sticker placement warnings.")]
+    public Color invalidPlacementColor =
+        new Color(
+            1f,
+            0.55f,
+            0.15f
+        );
+
 
     // =========================================================
     // STATE
@@ -212,6 +220,13 @@ public class GameLogManager : MonoBehaviour
      */
     private readonly List<string> pendingSpinEntries =
         new List<string>();
+
+    /*
+     * Placement can become invalid halfway through sticker resolution.
+     * Keep its warning separate so it can be appended AFTER the spin totals,
+     * regardless of when the invalidation actually happened.
+     */
+    private bool pendingInvalidPlacementWarning = false;
 
 
     private Camera cam;
@@ -1360,6 +1375,7 @@ public class GameLogManager : MonoBehaviour
          * spin somehow left a block open.
          */
         pendingSpinEntries.Clear();
+        pendingInvalidPlacementWarning = false;
 
         SpinBlockOpen = true;
 
@@ -1433,6 +1449,7 @@ public class GameLogManager : MonoBehaviour
     public void DiscardSpinBlock()
     {
         pendingSpinEntries.Clear();
+        pendingInvalidPlacementWarning = false;
         SpinBlockOpen = false;
     }
 
@@ -1935,6 +1952,47 @@ public class GameLogManager : MonoBehaviour
                 totalBloodLost + " Blood"
             )
         );
+
+
+        /*
+         * Deliberately last in the spin block. Placement may have become
+         * invalid much earlier during resolution, but the actionable warning
+         * is clearer after the final money / Blood summary.
+         */
+        FlushPendingInvalidPlacementWarning();
+    }
+
+
+    public void LogInvalidPlacementWarning()
+    {
+        if (SpinBlockOpen)
+        {
+            pendingInvalidPlacementWarning = true;
+            return;
+        }
+
+        AddLine(
+            InvalidPlacementText(
+                "INVALID STICKER PLACEMENT: " +
+                "Rearrange invalid stickers to unlock roulette."
+            )
+        );
+    }
+
+
+    private void FlushPendingInvalidPlacementWarning()
+    {
+        if (!pendingInvalidPlacementWarning)
+            return;
+
+        pendingInvalidPlacementWarning = false;
+
+        AddGameplayLine(
+            InvalidPlacementText(
+                "INVALID STICKER PLACEMENT: " +
+                "Rearrange invalid stickers to unlock roulette."
+            )
+        );
     }
 
 
@@ -2229,6 +2287,16 @@ public class GameLogManager : MonoBehaviour
         return ColorText(
             text,
             spinHeaderColor
+        );
+    }
+
+
+    public string InvalidPlacementText(
+        string text)
+    {
+        return ColorText(
+            text,
+            invalidPlacementColor
         );
     }
 

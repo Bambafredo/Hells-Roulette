@@ -408,6 +408,12 @@ public class StickerPlacementValidator : MonoBehaviour
                 "[Validator] 🔒 Hay stickers mal colocados. " +
                 "La ruleta queda bloqueada hasta corregirlos."
             );
+
+            if (GameLogManager.Instance != null)
+            {
+                GameLogManager.Instance
+                    .LogInvalidPlacementWarning();
+            }
         }
         else
         {
