@@ -6845,6 +6845,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   wrongStickerPanel: {fileID: 1866646970}
+  flashInvalidStickers: 1
+  invalidStickerFlashColor: {r: 1, g: 0, b: 0, a: 1}
+  invalidStickerFlashSpeed: 2.5
+  invalidStickerFlashIntensity: 1
 --- !u!114 &996127463
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6936,13 +6940,18 @@ MonoBehaviour:
   logText: {fileID: 1820544743}
   logButtonCollider: {fileID: 250003984}
   startOpen: 1
+  allowNormalState: 0
+  allowExtendedState: 1
+  allowFullExtendedState: 1
+  startSizeState: 1
+  hideAlbumInFullExtended: 1
   slideDuration: 0.2
   hiddenExtraOffset: 10
   maxLogEntries: 250
   separateSpinBlocks: 1
   mouseWheelScrollSpeed: 0.12
   normalTextColor: {r: 1, g: 1, b: 1, a: 1}
-  spinHeaderColor: {r: 1, g: 1, b: 1, a: 1}
+  spinHeaderColor: {r: 0, g: 1, b: 0.9882353, a: 1}
   stickerColor: {r: 0, g: 1, b: 0, a: 1}
   bloodColor: {r: 1, g: 0, b: 0, a: 1}
   moneyColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
@@ -6951,6 +6960,7 @@ MonoBehaviour:
   debtColor: {r: 0.8867924, g: 0, b: 0.8162863, a: 1}
   enemyColor: {r: 1, g: 0.5, b: 0.2, a: 1}
   segmentColor: {r: 0, g: 1, b: 1, a: 1}
+  invalidPlacementColor: {r: 0.84313726, g: 0.34901962, b: 0.32941177, a: 1}
 --- !u!114 &996127465
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -14681,7 +14691,7 @@ Transform:
   m_GameObject: {fileID: 1772204977}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 4.45, y: 0, z: 0}
+  m_LocalPosition: {x: 4.45, y: -1.63, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -14702,6 +14712,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   albumZone: {fileID: 1353839700}
+  presentationRoot: {fileID: 1353839698}
 --- !u!43 &1772441285
 Mesh:
   m_ObjectHideFlags: 0
@@ -16184,9 +16195,9 @@ RectTransform:
   - {fileID: 1571623145}
   m_Father: {fileID: 282651945}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 1, y: 0}
-  m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: 661.26, y: -369.68}
+  m_AnchorMin: {x: 1, y: 1}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 885, y: 224}
   m_SizeDelta: {x: 79.48001, y: 73.8}
   m_Pivot: {x: 1, y: 0}
 --- !u!1 &1866646970
@@ -17996,9 +18007,9 @@ RectTransform:
   - {fileID: 1490290356}
   m_Father: {fileID: 282651945}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 1, y: 0}
-  m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: 546, y: -369.68}
+  m_AnchorMin: {x: 1, y: 1}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 885, y: 313}
   m_SizeDelta: {x: 79.48001, y: 73.8}
   m_Pivot: {x: 1, y: 0}
 --- !u!21 &2029992127

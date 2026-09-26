@@ -7197,7 +7197,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 4750936881a0c44408b234204482cae3, type: 3}
   rerollButtonCollider: {fileID: 23581347}
   rerollsRemainingText: {fileID: 701791785}
-  startingRerolls: 99
+  startingRerolls: 3
   rerollMode: 1
 --- !u!114 &996127469
 MonoBehaviour:
