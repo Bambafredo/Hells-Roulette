@@ -4,6 +4,14 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+public enum GameLogPanelSizeState
+{
+    Normal,
+    Extended,
+    FullExtended
+}
+
+
 public class GameLogManager : MonoBehaviour
 {
     public static GameLogManager Instance;
@@ -41,6 +49,24 @@ public class GameLogManager : MonoBehaviour
 
     [Tooltip("If enabled, the panel starts open.")]
     public bool startOpen = false;
+
+    [Header("Open Log Size States")]
+
+    [Tooltip("Allow the authored normal panel size in the size-cycle button.")]
+    public bool allowNormalState = true;
+
+    [Tooltip("Allow the regular expanded panel size in the size-cycle button.")]
+    public bool allowExtendedState = true;
+
+    [Tooltip("Allow the maximum-height panel size in the size-cycle button.")]
+    public bool allowFullExtendedState = true;
+
+    [Tooltip(
+        "Size used when the log starts open. If this state is disabled, " +
+        "the first enabled state in Normal -> Extended -> Full Extended order is used."
+    )]
+    public GameLogPanelSizeState startSizeState =
+        GameLogPanelSizeState.Normal;
 
     [Tooltip("Duration of the open/close slide animation.")]
     [Min(0.01f)]
@@ -146,11 +172,15 @@ public class GameLogManager : MonoBehaviour
     }
 
 
-    public bool IsExpanded
+    public GameLogPanelSizeState CurrentSizeState
     {
         get;
         private set;
     }
+
+    public bool IsExpanded =>
+        CurrentSizeState !=
+        GameLogPanelSizeState.Normal;
 
 
     public bool SpinBlockOpen
@@ -197,6 +227,7 @@ public class GameLogManager : MonoBehaviour
 
     private float normalPanelHeight;
     private float expandedPanelHeight;
+    private float fullExpandedPanelHeight;
 
     private Coroutine slideRoutine;
     private Coroutine resizeRoutine;
@@ -288,6 +319,9 @@ public class GameLogManager : MonoBehaviour
         expandedPanelHeight =
             CalculateExpandedPanelHeight();
 
+        fullExpandedPanelHeight =
+            CalculateFullExpandedPanelHeight();
+
 
         hiddenPosition =
             shownPosition +
@@ -301,16 +335,21 @@ public class GameLogManager : MonoBehaviour
         IsOpen =
             startOpen;
 
-        IsExpanded =
-            false;
+        CurrentSizeState =
+            startOpen
+                ? ResolveAllowedStartSizeState()
+                : GameLogPanelSizeState.Normal;
 
 
         /*
-         * Always begin at the authored NORMAL height.
+         * A closed log still uses the authored normal size.
+         * An open log starts directly in the selected enabled size state.
          */
         logPanel.SetSizeWithCurrentAnchors(
             RectTransform.Axis.Vertical,
-            normalPanelHeight
+            GetHeightForState(
+                CurrentSizeState
+            )
         );
 
 
@@ -534,7 +573,7 @@ public class GameLogManager : MonoBehaviour
          */
         if (startOpen)
         {
-            ToggleExpandedPanel();
+            CyclePanelSizeState();
             return;
         }
 
@@ -581,7 +620,8 @@ public class GameLogManager : MonoBehaviour
             }
 
 
-            IsExpanded = false;
+            CurrentSizeState =
+                GameLogPanelSizeState.Normal;
 
             logPanel.SetSizeWithCurrentAnchors(
                 RectTransform.Axis.Vertical,
@@ -619,47 +659,56 @@ public class GameLogManager : MonoBehaviour
     // EXPANDED PANEL
     // =========================================================
 
-    private void ToggleExpandedPanel()
+    private void CyclePanelSizeState()
     {
         if (logPanel == null)
             return;
 
 
         /*
-         * Start Open mode should always keep the log visible.
-         * If some external call happened to close it, restore the
-         * normal visible state before allowing expansion.
+         * Start Open mode keeps the log visible. If an external call closed
+         * it, restore it before cycling through the enabled size states.
          */
         if (!IsOpen)
         {
             IsOpen = true;
 
+            CurrentSizeState =
+                ResolveAllowedStartSizeState();
+
             logPanel.SetSizeWithCurrentAnchors(
                 RectTransform.Axis.Vertical,
-                normalPanelHeight
+                GetHeightForState(
+                    CurrentSizeState
+                )
             );
 
             logPanel.anchoredPosition =
                 normalPanelPosition;
 
             RefreshLogLayout();
+
+            return;
         }
 
 
-        SetExpandedPanel(
-            !IsExpanded
+        SetPanelSizeState(
+            GetNextAllowedSizeState(
+                CurrentSizeState
+            )
         );
     }
 
 
-    private void SetExpandedPanel(
-        bool expanded)
+    private void SetPanelSizeState(
+        GameLogPanelSizeState state)
     {
         if (logPanel == null)
             return;
 
 
-        IsExpanded = expanded;
+        CurrentSizeState =
+            state;
 
 
         if (resizeRoutine != null)
@@ -673,14 +722,14 @@ public class GameLogManager : MonoBehaviour
         resizeRoutine =
             StartCoroutine(
                 ResizePanelRoutine(
-                    expanded
+                    state
                 )
             );
     }
 
 
     private IEnumerator ResizePanelRoutine(
-        bool expanding)
+        GameLogPanelSizeState targetState)
     {
         float preservedScrollPosition =
             scrollRect != null
@@ -692,9 +741,9 @@ public class GameLogManager : MonoBehaviour
             logPanel.rect.height;
 
         float targetHeight =
-            expanding
-                ? expandedPanelHeight
-                : normalPanelHeight;
+            GetHeightForState(
+                targetState
+            );
 
 
         float elapsed = 0f;
@@ -1006,6 +1055,132 @@ public class GameLogManager : MonoBehaviour
 
 
         Canvas.ForceUpdateCanvases();
+    }
+
+
+    private GameLogPanelSizeState ResolveAllowedStartSizeState()
+    {
+        if (IsSizeStateAllowed(startSizeState))
+            return startSizeState;
+
+        if (allowNormalState)
+            return GameLogPanelSizeState.Normal;
+
+        if (allowExtendedState)
+            return GameLogPanelSizeState.Extended;
+
+        if (allowFullExtendedState)
+            return GameLogPanelSizeState.FullExtended;
+
+        /*
+         * Safety fallback: never leave the button without a valid state.
+         */
+        return GameLogPanelSizeState.Normal;
+    }
+
+
+    private GameLogPanelSizeState GetNextAllowedSizeState(
+        GameLogPanelSizeState current)
+    {
+        for (int offset = 1; offset <= 3; offset++)
+        {
+            GameLogPanelSizeState candidate =
+                (GameLogPanelSizeState)
+                (
+                    (
+                        (int)current +
+                        offset
+                    ) %
+                    3
+                );
+
+            if (IsSizeStateAllowed(candidate))
+                return candidate;
+        }
+
+        return current;
+    }
+
+
+    private bool IsSizeStateAllowed(
+        GameLogPanelSizeState state)
+    {
+        switch (state)
+        {
+            case GameLogPanelSizeState.Normal:
+                return allowNormalState;
+
+            case GameLogPanelSizeState.Extended:
+                return allowExtendedState;
+
+            case GameLogPanelSizeState.FullExtended:
+                return allowFullExtendedState;
+
+            default:
+                return false;
+        }
+    }
+
+
+    private float GetHeightForState(
+        GameLogPanelSizeState state)
+    {
+        switch (state)
+        {
+            case GameLogPanelSizeState.Extended:
+                return expandedPanelHeight;
+
+            case GameLogPanelSizeState.FullExtended:
+                return fullExpandedPanelHeight;
+
+            default:
+                return normalPanelHeight;
+        }
+    }
+
+
+    private float CalculateFullExpandedPanelHeight()
+    {
+        RectTransform parentRect =
+            logPanel.parent as RectTransform;
+
+        if (parentRect == null)
+        {
+            return Mathf.Max(
+                normalPanelHeight,
+                expandedPanelHeight
+            );
+        }
+
+
+        Vector3[] panelCorners =
+            new Vector3[4];
+
+        logPanel.GetWorldCorners(
+            panelCorners
+        );
+
+
+        Vector3 panelTopLeftInParent =
+            parentRect.InverseTransformPoint(
+                panelCorners[1]
+            );
+
+
+        /*
+         * Full Extended reaches from the panel's current top edge all the
+         * way to the parent's bottom edge. Unlike the regular Extended state,
+         * it intentionally does not reserve hiddenExtraOffset.
+         */
+        float availableHeight =
+            panelTopLeftInParent.y -
+            parentRect.rect.yMin;
+
+
+        return Mathf.Max(
+            normalPanelHeight,
+            availableHeight
+        );
     }
 
 
