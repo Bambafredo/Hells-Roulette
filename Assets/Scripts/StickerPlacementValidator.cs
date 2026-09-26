@@ -10,9 +10,37 @@ public class StickerPlacementValidator : MonoBehaviour
     [Header("UI")]
     public GameObject wrongStickerPanel;
 
+
+    [Header("Invalid Sticker Flash")]
+
+    [Tooltip("If enabled, every currently invalid sticker pulses toward the configured color.")]
+    public bool flashInvalidStickers = true;
+
+    [Tooltip("Color used to highlight invalid stickers.")]
+    public Color invalidStickerFlashColor = Color.red;
+
+    [Tooltip("Number of full color pulses per second.")]
+    [Min(0.01f)]
+    public float invalidStickerFlashSpeed = 2.5f;
+
+    [Tooltip("How strongly the sticker blends toward the flash color at the peak of the pulse.")]
+    [Range(0f, 1f)]
+    public float invalidStickerFlashIntensity = 1f;
+
     // Estado global:
     // true = hay al menos un sticker de la ruleta o Album colocado incorrectamente.
     private bool hardInputLock = false;
+
+    /*
+     * Visual feedback is owned entirely by the validator.
+     * We cache the original color of every SpriteRenderer we tint so it can
+     * always be restored exactly when that sticker becomes valid again.
+     */
+    private readonly HashSet<BaseSticker> invalidStickers =
+        new HashSet<BaseSticker>();
+
+    private readonly Dictionary<SpriteRenderer, Color> originalRendererColors =
+        new Dictionary<SpriteRenderer, Color>();
 
     private RouletteController controller;
 
@@ -36,8 +64,16 @@ public class StickerPlacementValidator : MonoBehaviour
             wrongStickerPanel.SetActive(false);
     }
 
+    private void Update()
+    {
+        UpdateInvalidStickerFlash();
+    }
+
+
     private void OnDestroy()
     {
+        RestoreAllInvalidStickerColors();
+
         if (Instance == this)
             Instance = null;
     }
@@ -85,18 +121,26 @@ public class StickerPlacementValidator : MonoBehaviour
         BaseSticker[] allStickers =
             FindObjectsOfType<BaseSticker>(true);
 
-        bool anyWrong = false;
+        HashSet<BaseSticker> newInvalidStickers =
+            new HashSet<BaseSticker>();
 
         foreach (BaseSticker sticker in allStickers)
         {
             if (!IsStickerValid(sticker))
             {
-                anyWrong = true;
-                break;
+                newInvalidStickers.Add(
+                    sticker
+                );
             }
         }
 
-        SetBlockState(anyWrong);
+        RefreshInvalidStickerSet(
+            newInvalidStickers
+        );
+
+        SetBlockState(
+            newInvalidStickers.Count > 0
+        );
     }
 
     /// <summary>
@@ -323,6 +367,210 @@ public class StickerPlacementValidator : MonoBehaviour
 
         return true;
     }
+
+    // =========================================================
+    // INVALID STICKER VISUAL FEEDBACK
+    // =========================================================
+
+    private void RefreshInvalidStickerSet(
+        HashSet<BaseSticker> newInvalidStickers)
+    {
+        /*
+         * Restore stickers that have just become valid BEFORE replacing the
+         * set. Stickers that remain invalid keep their cached original colors.
+         */
+        List<BaseSticker> becameValid =
+            new List<BaseSticker>();
+
+        foreach (BaseSticker sticker in invalidStickers)
+        {
+            if (sticker == null ||
+                !newInvalidStickers.Contains(sticker))
+            {
+                becameValid.Add(
+                    sticker
+                );
+            }
+        }
+
+        foreach (BaseSticker sticker in becameValid)
+        {
+            RestoreStickerColors(
+                sticker
+            );
+        }
+
+
+        invalidStickers.Clear();
+
+        foreach (BaseSticker sticker in newInvalidStickers)
+        {
+            if (sticker != null)
+            {
+                invalidStickers.Add(
+                    sticker
+                );
+
+                CacheStickerRendererColors(
+                    sticker
+                );
+            }
+        }
+    }
+
+
+    private void UpdateInvalidStickerFlash()
+    {
+        if (invalidStickers.Count == 0)
+            return;
+
+
+        if (!flashInvalidStickers)
+        {
+            RestoreAllInvalidStickerColors();
+            return;
+        }
+
+
+        float pulse =
+            (
+                Mathf.Sin(
+                    Time.unscaledTime *
+                    invalidStickerFlashSpeed *
+                    Mathf.PI *
+                    2f
+                ) +
+                1f
+            ) *
+            0.5f;
+
+        float blend =
+            pulse *
+            invalidStickerFlashIntensity;
+
+
+        foreach (BaseSticker sticker in invalidStickers)
+        {
+            if (sticker == null)
+                continue;
+
+            CacheStickerRendererColors(
+                sticker
+            );
+
+            Transform visualRoot =
+                sticker.stickerRoot != null
+                    ? sticker.stickerRoot
+                    : sticker.transform;
+
+            SpriteRenderer[] renderers =
+                visualRoot.GetComponentsInChildren<SpriteRenderer>(
+                    true
+                );
+
+            foreach (SpriteRenderer renderer in renderers)
+            {
+                if (renderer == null)
+                    continue;
+
+                if (!originalRendererColors.TryGetValue(
+                        renderer,
+                        out Color originalColor))
+                {
+                    continue;
+                }
+
+                renderer.color =
+                    Color.Lerp(
+                        originalColor,
+                        invalidStickerFlashColor,
+                        blend
+                    );
+            }
+        }
+    }
+
+
+    private void CacheStickerRendererColors(
+        BaseSticker sticker)
+    {
+        if (sticker == null)
+            return;
+
+        Transform visualRoot =
+            sticker.stickerRoot != null
+                ? sticker.stickerRoot
+                : sticker.transform;
+
+        SpriteRenderer[] renderers =
+            visualRoot.GetComponentsInChildren<SpriteRenderer>(
+                true
+            );
+
+        foreach (SpriteRenderer renderer in renderers)
+        {
+            if (renderer == null ||
+                originalRendererColors.ContainsKey(renderer))
+            {
+                continue;
+            }
+
+            originalRendererColors.Add(
+                renderer,
+                renderer.color
+            );
+        }
+    }
+
+
+    private void RestoreStickerColors(
+        BaseSticker sticker)
+    {
+        if (sticker == null)
+            return;
+
+        Transform visualRoot =
+            sticker.stickerRoot != null
+                ? sticker.stickerRoot
+                : sticker.transform;
+
+        SpriteRenderer[] renderers =
+            visualRoot.GetComponentsInChildren<SpriteRenderer>(
+                true
+            );
+
+        foreach (SpriteRenderer renderer in renderers)
+        {
+            if (renderer == null)
+                continue;
+
+            if (originalRendererColors.TryGetValue(
+                    renderer,
+                    out Color originalColor))
+            {
+                renderer.color =
+                    originalColor;
+
+                originalRendererColors.Remove(
+                    renderer
+                );
+            }
+        }
+    }
+
+
+    private void RestoreAllInvalidStickerColors()
+    {
+        foreach (KeyValuePair<SpriteRenderer, Color> pair
+                 in originalRendererColors)
+        {
+            if (pair.Key != null)
+                pair.Key.color = pair.Value;
+        }
+
+        originalRendererColors.Clear();
+    }
+
 
     // =========================================================
     // SEGMENT IDENTIFICATION

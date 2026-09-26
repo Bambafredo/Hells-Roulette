@@ -6928,6 +6928,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   wrongStickerPanel: {fileID: 1866646970}
+  flashInvalidStickers: 1
+  invalidStickerFlashColor: {r: 1, g: 0, b: 0, a: 1}
+  invalidStickerFlashSpeed: 2.5
+  invalidStickerFlashIntensity: 1
 --- !u!114 &996127463
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7191,7 +7195,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: f15ee9276d3bb5b42ab0d4fc6f5a76b8, type: 3}
   rerollButtonCollider: {fileID: 23581347}
   rerollsRemainingText: {fileID: 701791785}
-  startingRerolls: 3
+  startingRerolls: 99
   rerollMode: 1
 --- !u!114 &996127469
 MonoBehaviour:
