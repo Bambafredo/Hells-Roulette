@@ -515,6 +515,18 @@ public class BaseSticker : MonoBehaviour
 
         if (Input.GetMouseButtonDown(0))
         {
+            /*
+             * A visually hidden Album must not leave invisible stickers
+             * draggable. Their GameObjects remain active so Album passives
+             * and static UI calculations continue to work normally.
+             */
+            if (currentAlbumZone != null &&
+                AlbumManager.Instance != null &&
+                !AlbumManager.Instance.IsInteractionEnabled)
+            {
+                return;
+            }
+
             if (controller != null &&
                 controller.SpinInProgress)
             {

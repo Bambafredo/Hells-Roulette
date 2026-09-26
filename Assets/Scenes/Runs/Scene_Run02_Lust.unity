@@ -7034,13 +7034,14 @@ MonoBehaviour:
   allowExtendedState: 1
   allowFullExtendedState: 1
   startSizeState: 1
+  hideAlbumInFullExtended: 1
   slideDuration: 0.2
   hiddenExtraOffset: 10
   maxLogEntries: 250
   separateSpinBlocks: 1
   mouseWheelScrollSpeed: 0.12
   normalTextColor: {r: 1, g: 1, b: 1, a: 1}
-  spinHeaderColor: {r: 1, g: 1, b: 1, a: 1}
+  spinHeaderColor: {r: 0, g: 1, b: 0.9900925, a: 1}
   stickerColor: {r: 0, g: 1, b: 0, a: 1}
   bloodColor: {r: 1, g: 0, b: 0, a: 1}
   moneyColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
@@ -14786,6 +14787,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   albumZone: {fileID: 1353839700}
+  presentationRoot: {fileID: 1353839698}
 --- !u!43 &1772441285
 Mesh:
   m_ObjectHideFlags: 0

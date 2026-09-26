@@ -9,6 +9,23 @@ public class AlbumManager : MonoBehaviour
     [Header("References")]
     public AlbumZone albumZone;
 
+    [Header("Presentation")]
+
+    [Tooltip(
+        "Optional root whose renderers are hidden when another UI element " +
+        "temporarily covers the Album. Defaults to AlbumZone."
+    )]
+    public Transform presentationRoot;
+
+    public bool IsInteractionEnabled =>
+        !presentationHidden;
+
+    private bool presentationHidden = false;
+
+    private readonly Dictionary<Renderer, bool>
+        rendererStatesBeforeHide =
+            new Dictionary<Renderer, bool>();
+
     // =========================================================
     // UNITY
     // =========================================================
@@ -48,6 +65,13 @@ public class AlbumManager : MonoBehaviour
             albumZone =
                 GetComponentInChildren<AlbumZone>(true);
         }
+
+        if (presentationRoot == null &&
+            albumZone != null)
+        {
+            presentationRoot =
+                albumZone.transform;
+        }
     }
 
     // =========================================================
@@ -63,8 +87,11 @@ public class AlbumManager : MonoBehaviour
 
     public bool IsPointInsideAlbum(Vector2 worldPoint)
     {
-        if (!HasAlbum())
+        if (!IsInteractionEnabled ||
+            !HasAlbum())
+        {
             return false;
+        }
 
         return albumZone.ContainsPoint(worldPoint);
     }
@@ -98,6 +125,7 @@ public class AlbumManager : MonoBehaviour
         BaseSticker sticker)
     {
         if (sticker == null ||
+            !IsInteractionEnabled ||
             !HasAlbum())
         {
             return false;
@@ -146,6 +174,89 @@ public class AlbumManager : MonoBehaviour
 
         return true;
     }
+
+    // =========================================================
+    // PRESENTATION / INTERACTION
+    // =========================================================
+
+    public void SetPresentationHidden(
+        bool hidden)
+    {
+        if (presentationHidden == hidden)
+            return;
+
+        presentationHidden = hidden;
+
+        if (!presentationHidden)
+        {
+            RestoreHiddenRenderers();
+            return;
+        }
+
+        HideAlbumRenderers();
+    }
+
+
+    private void LateUpdate()
+    {
+        /*
+         * Stickers can change while the Album is hidden (for example a
+         * Zombie transmutation). Catch newly-created renderers without
+         * disabling any GameObject or sticker logic.
+         */
+        if (presentationHidden)
+            HideAlbumRenderers();
+    }
+
+
+    private void HideAlbumRenderers()
+    {
+        Transform root =
+            presentationRoot != null
+                ? presentationRoot
+                : albumZone != null
+                    ? albumZone.transform
+                    : null;
+
+        if (root == null)
+            return;
+
+        Renderer[] renderers =
+            root.GetComponentsInChildren<Renderer>(
+                true
+            );
+
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null)
+                continue;
+
+            if (!rendererStatesBeforeHide
+                .ContainsKey(renderer))
+            {
+                rendererStatesBeforeHide.Add(
+                    renderer,
+                    renderer.enabled
+                );
+            }
+
+            renderer.enabled = false;
+        }
+    }
+
+
+    private void RestoreHiddenRenderers()
+    {
+        foreach (KeyValuePair<Renderer, bool> pair
+                 in rendererStatesBeforeHide)
+        {
+            if (pair.Key != null)
+                pair.Key.enabled = pair.Value;
+        }
+
+        rendererStatesBeforeHide.Clear();
+    }
+
 
     // =========================================================
     // HIERARCHY QUERY

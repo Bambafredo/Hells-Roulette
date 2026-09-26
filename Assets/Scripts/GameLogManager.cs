@@ -68,6 +68,12 @@ public class GameLogManager : MonoBehaviour
     public GameLogPanelSizeState startSizeState =
         GameLogPanelSizeState.Normal;
 
+    [Tooltip(
+        "If enabled, entering Full Extended temporarily hides the Album " +
+        "and disables Album interaction without disabling Album stickers."
+    )]
+    public bool hideAlbumInFullExtended = false;
+
     [Tooltip("Duration of the open/close slide animation.")]
     [Min(0.01f)]
     public float slideDuration = 0.2f;
@@ -358,6 +364,8 @@ public class GameLogManager : MonoBehaviour
                 ? normalPanelPosition
                 : hiddenPosition;
 
+        RefreshAlbumVisibilityForCurrentSize();
+
 
         if (logText != null)
         {
@@ -623,6 +631,8 @@ public class GameLogManager : MonoBehaviour
             CurrentSizeState =
                 GameLogPanelSizeState.Normal;
 
+            RefreshAlbumVisibilityForCurrentSize();
+
             logPanel.SetSizeWithCurrentAnchors(
                 RectTransform.Axis.Vertical,
                 normalPanelHeight
@@ -709,6 +719,8 @@ public class GameLogManager : MonoBehaviour
 
         CurrentSizeState =
             state;
+
+        RefreshAlbumVisibilityForCurrentSize();
 
 
         if (resizeRoutine != null)
@@ -1055,6 +1067,24 @@ public class GameLogManager : MonoBehaviour
 
 
         Canvas.ForceUpdateCanvases();
+    }
+
+
+    private void RefreshAlbumVisibilityForCurrentSize()
+    {
+        if (AlbumManager.Instance == null)
+            return;
+
+        bool shouldHideAlbum =
+            hideAlbumInFullExtended &&
+            IsOpen &&
+            CurrentSizeState ==
+                GameLogPanelSizeState.FullExtended;
+
+        AlbumManager.Instance
+            .SetPresentationHidden(
+                shouldHideAlbum
+            );
     }
 
 
