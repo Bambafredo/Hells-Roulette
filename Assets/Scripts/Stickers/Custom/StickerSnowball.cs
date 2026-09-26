@@ -147,6 +147,7 @@ public class StickerSnowball : StickerEffect
 
         int actualDamageDealt =
             DealTrampleDamage(
+                owner,
                 damageBeforeGrowth
             );
 
@@ -320,6 +321,7 @@ public class StickerSnowball : StickerEffect
     // =========================================================
 
     private int DealTrampleDamage(
+        BaseSticker owner,
         int requestedDamage)
     {
         EnemyPanelManager enemyPanel =
@@ -349,7 +351,11 @@ public class StickerSnowball : StickerEffect
         while (remainingDamage > 0)
         {
             BaseEnemy target =
-                enemyPanel.GetLeftmostAliveEnemy();
+                StickerTargetingUtility.GetFirstDamageTarget(
+                    enemyPanel,
+                    owner,
+                    StickerSpinLocation.WinningSegment
+                );
 
 
             if (target == null ||

@@ -173,7 +173,11 @@ public class StickerZombie : StickerEffect
 
         BaseEnemy target =
             enemyPanel != null
-                ? enemyPanel.GetLeftmostAliveEnemy()
+                ? StickerTargetingUtility.GetFirstDamageTarget(
+                    enemyPanel,
+                    owner,
+                    location
+                )
                 : null;
 
 
@@ -316,11 +320,6 @@ public class StickerZombie : StickerEffect
         bool wasOnWheel =
             target.currentSegment != null;
 
-        bool wasInAlbum =
-            target.currentAlbumZone != null ||
-            (AlbumManager.Instance != null &&
-             AlbumManager.Instance.IsStickerInAlbum(target));
-
 
         BaseSticker replacement =
             target.TransmuteTo(
@@ -335,15 +334,11 @@ public class StickerZombie : StickerEffect
 
         /*
          * A replacement can have a different collider / size than the sticker
-         * it replaced.
-         *
-         * Re-run the project's shared placement authority immediately for both
-         * Roulette and Album transmutations. The validator delegates Album
-         * geometry to AlbumPlacementUtility, so bounds / overlap rules remain
-         * identical to normal manual Album placement.
+         * it replaced. Re-run the project's existing wheel placement authority
+         * immediately so out-of-segment or overlap states hard-lock input in
+         * exactly the same way as any other invalid placement.
          */
-        if (wasOnWheel ||
-            wasInAlbum)
+        if (wasOnWheel)
         {
             Physics2D.SyncTransforms();
 
@@ -643,28 +638,6 @@ public class StickerZombie : StickerEffect
             CurrencyManager.Instance
                 .AddDollar(
                     payout
-                );
-        }
-
-
-        if (GameLogManager.Instance != null)
-        {
-            string moneyText =
-                GameLogManager.Instance
-                    .MoneyText(
-                        $"${payout}"
-                    );
-
-
-            GameLogManager.Instance
-                .AddGameplayLine(
-                    GameLogManager.Instance
-                        .StickerText(
-                            stickerName
-                        ) +
-                    " destroyed: Gain " +
-                    moneyText +
-                    $" ({zombieCountInSegment} Zombie effect(s))."
                 );
         }
 

@@ -61,7 +61,11 @@ public class StickerSoldierAnt : StickerEffect
         }
 
         BaseEnemy target =
-            enemyPanel.GetLeftmostAliveEnemy();
+            StickerTargetingUtility.GetFirstDamageTarget(
+                enemyPanel,
+                owner,
+                StickerSpinLocation.WinningSegment
+            );
 
         if (target == null)
         {

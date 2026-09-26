@@ -104,7 +104,9 @@ public class StickerBowlingBall : StickerEffect
         if (scoredHit)
         {
             int damageDealt =
-                DealTrampleDamage();
+                DealTrampleDamage(
+                    owner
+                );
 
 
             string description =
@@ -176,7 +178,8 @@ public class StickerBowlingBall : StickerEffect
     /// single-target rules (including Untouchable pass-through) instead of
     /// introducing a second targeting implementation inside the sticker.
     /// </summary>
-    private int DealTrampleDamage()
+    private int DealTrampleDamage(
+        BaseSticker owner)
     {
         EnemyPanelManager enemyPanel =
             Object.FindObjectOfType<EnemyPanelManager>();
@@ -205,7 +208,11 @@ public class StickerBowlingBall : StickerEffect
         while (remainingDamage > 0)
         {
             BaseEnemy target =
-                enemyPanel.GetLeftmostAliveEnemy();
+                StickerTargetingUtility.GetFirstDamageTarget(
+                    enemyPanel,
+                    owner,
+                    StickerSpinLocation.WinningSegment
+                );
 
 
             if (target == null ||
