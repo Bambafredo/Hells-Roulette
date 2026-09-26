@@ -42,6 +42,13 @@ public class StickerPlacementValidator : MonoBehaviour
     private readonly Dictionary<SpriteRenderer, Color> originalRendererColors =
         new Dictionary<SpriteRenderer, Color>();
 
+    /*
+     * Any manual sticker drag temporarily suppresses ALL invalid-placement
+     * flashing. This keeps the whole board visually neutral while the player
+     * is actively fixing placement.
+     */
+    private bool suppressInvalidStickerFlashDuringDrag = false;
+
     private RouletteController controller;
 
     // =========================================================
@@ -60,6 +67,12 @@ public class StickerPlacementValidator : MonoBehaviour
 
         controller = FindObjectOfType<RouletteController>();
 
+        BaseSticker.OnAnyStickerDragStarted +=
+            HandleStickerDragStarted;
+
+        BaseSticker.OnAnyStickerDragEnded +=
+            HandleStickerDragEnded;
+
         if (wrongStickerPanel != null)
             wrongStickerPanel.SetActive(false);
     }
@@ -72,6 +85,12 @@ public class StickerPlacementValidator : MonoBehaviour
 
     private void OnDestroy()
     {
+        BaseSticker.OnAnyStickerDragStarted -=
+            HandleStickerDragStarted;
+
+        BaseSticker.OnAnyStickerDragEnded -=
+            HandleStickerDragEnded;
+
         RestoreAllInvalidStickerColors();
 
         if (Instance == this)
@@ -368,6 +387,39 @@ public class StickerPlacementValidator : MonoBehaviour
         return true;
     }
 
+    private void HandleStickerDragStarted(
+        BaseSticker sticker)
+    {
+        suppressInvalidStickerFlashDuringDrag =
+            true;
+
+        /*
+         * Restore every cached renderer immediately. In particular, this
+         * restores the dragged sticker BEFORE BaseSticker applies its normal
+         * 0.6 drag alpha, so the validator never caches that temporary alpha
+         * as the sticker's authored color.
+         */
+        RestoreAllInvalidStickerColors();
+    }
+
+
+    private void HandleStickerDragEnded(
+        BaseSticker sticker)
+    {
+        suppressInvalidStickerFlashDuringDrag =
+            false;
+
+        /*
+         * Do not cache colors here.
+         *
+         * BaseSticker fires OnAnyStickerDragEnded before it finishes restoring
+         * its own drag visuals (sorting + alpha). Waiting until the next Update
+         * guarantees we cache the fully-restored post-drag appearance instead
+         * of accidentally preserving the temporary 0.6 drag alpha.
+         */
+    }
+
+
     // =========================================================
     // INVALID STICKER VISUAL FEEDBACK
     // =========================================================
@@ -425,7 +477,8 @@ public class StickerPlacementValidator : MonoBehaviour
             return;
 
 
-        if (!flashInvalidStickers)
+        if (!flashInvalidStickers ||
+            suppressInvalidStickerFlashDuringDrag)
         {
             RestoreAllInvalidStickerColors();
             return;
