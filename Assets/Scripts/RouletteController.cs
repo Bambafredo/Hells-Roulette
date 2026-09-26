@@ -328,6 +328,14 @@ public class RouletteController : MonoBehaviour
         if (dragging)
             return false;
 
+        /*
+         * A manually dragged sticker is temporarily outside its normal wheel
+         * / Album placement. Never allow a spin to begin in that state, or the
+         * player could deliberately remove a harmful sticker for one spin.
+         */
+        if (BaseSticker.CurrentDraggedSticker != null)
+            return false;
+
         if (StickerPlacementValidator.Instance != null &&
             StickerPlacementValidator.Instance.InputBlocked)
         {

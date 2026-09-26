@@ -33,6 +33,20 @@ public class BaseSticker : MonoBehaviour
         OnAnyStickerDragEnded;
 
 
+    /// <summary>
+    /// The physical sticker currently being manually dragged, if any.
+    ///
+    /// This is authoritative drag state owned by BaseSticker itself. Systems
+    /// such as RouletteController may read it to prevent gameplay actions that
+    /// would be exploitable while a sticker is temporarily out of position.
+    /// </summary>
+    public static BaseSticker CurrentDraggedSticker
+    {
+        get;
+        private set;
+    }
+
+
     // ===========================================================
     // USE CONSUMPTION MODIFIERS
     // ===========================================================
@@ -378,6 +392,12 @@ public class BaseSticker : MonoBehaviour
             isDragging =
                 false;
 
+            if (CurrentDraggedSticker == this)
+            {
+                CurrentDraggedSticker =
+                    null;
+            }
+
             OnAnyStickerDragEnded?
                 .Invoke(
                     this
@@ -554,6 +574,9 @@ public class BaseSticker : MonoBehaviour
             {
                 isDragging = true;
 
+                CurrentDraggedSticker =
+                    this;
+
                 OnAnyStickerDragStarted?
                     .Invoke(
                         this
@@ -674,6 +697,12 @@ public class BaseSticker : MonoBehaviour
                 HandleDrop();
 
                 isDragging = false;
+
+                if (CurrentDraggedSticker == this)
+                {
+                    CurrentDraggedSticker =
+                        null;
+                }
 
                 OnAnyStickerDragEnded?
                     .Invoke(
