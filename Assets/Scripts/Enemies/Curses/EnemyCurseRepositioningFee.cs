@@ -122,12 +122,29 @@ public class EnemyCurseRepositioningFee : EnemyCurse
     private bool CanChargeRepositioningFee()
     {
         /*
-         * Reward Phase is always a safe setup zone.
+         * End-of-round Rewards are a safe setup zone because the current
+         * enemy encounter is effectively over.
+         *
+         * Gameplay free-sticker rewards (Cupon / Matryoshka) are different:
+         * they can open in the MIDDLE of a round. If spins remain, the player
+         * will return to the same enemy, so Repositioning Fee must stay active
+         * and cannot be cheesed by reorganizing the wheel inside that modal.
+         *
+         * If the gameplay reward happens after the final spin, it is safe for
+         * the same reason as the normal end-of-round Reward Phase.
          */
         if (RewardManager.Instance != null &&
             RewardManager.Instance.RewardPhaseActive)
         {
-            return false;
+            bool gameplayRewardWithSpinsRemaining =
+                RewardManager.Instance.GameplayFreeStickerActive &&
+                RoundManager.Instance != null &&
+                RoundManager.Instance.TokensRemaining > 0;
+
+            if (!gameplayRewardWithSpinsRemaining)
+            {
+                return false;
+            }
         }
 
 
@@ -365,7 +382,8 @@ public class EnemyCurseRepositioningFee : EnemyCurse
          * Segment A -> invalid drop -> returned to Segment A
          * Album -> Segment
          * Album -> Album
-         * Any movement during Reward Phase
+         * Any movement during an end-of-round Reward Phase
+         * Any movement during a gameplay free-sticker Reward after the final spin
          * Any movement during Draft
          * Any movement during a safe final Infestation, when enabled
          */
