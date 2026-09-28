@@ -1310,8 +1310,8 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 248013825}
   m_HandleRect: {fileID: 248013824}
   m_Direction: 2
-  m_Value: 1.0000006
-  m_Size: 0.80860656
+  m_Value: 1.0000019
+  m_Size: 0.8086067
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -7009,6 +7009,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 1fc19221487ac294f91721a683e2e6b7, type: 3}
   - {fileID: 577474978131120927, guid: f15ee9276d3bb5b42ab0d4fc6f5a76b8, type: 3}
   - {fileID: 577474978131120927, guid: 4750936881a0c44408b234204482cae3, type: 3}
+  - {fileID: 577474978131120927, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
   bloodPriceMultiplier: 2
   enableSharedPricing: 1
   sharedCoinPriceSequence: 060000000a0000001000000018000000
@@ -7195,6 +7196,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 1fc19221487ac294f91721a683e2e6b7, type: 3}
   - {fileID: 577474978131120927, guid: f15ee9276d3bb5b42ab0d4fc6f5a76b8, type: 3}
   - {fileID: 577474978131120927, guid: 4750936881a0c44408b234204482cae3, type: 3}
+  - {fileID: 577474978131120927, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
   rerollButtonCollider: {fileID: 23581347}
   rerollsRemainingText: {fileID: 701791785}
   startingRerolls: 3
@@ -8958,6 +8960,7 @@ Transform:
   - {fileID: 1849301722}
   - {fileID: 1840691570}
   - {fileID: 33877464}
+  - {fileID: 1984790527}
   m_Father: {fileID: 1353839698}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1171386728
@@ -17573,6 +17576,68 @@ MonoBehaviour:
   freeCostColor: {r: 1, g: 1, b: 1, a: 1}
   releasedSprite: {fileID: 21300000, guid: dfaa73ec9b4f4da4f9212951a6a96b1d, type: 3}
   pressedSprite: {fileID: 21300000, guid: b607f0f46d7b5ac4e97e04158d792da0, type: 3}
+--- !u!1001 &1984790526
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1156078942}
+    m_Modifications:
+    - target: {fileID: 577474978131120927, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_Name
+      value: Sticker_TrashBag
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -1.14
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 1.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+--- !u!4 &1984790527 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 9022462484478120845, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
+  m_PrefabInstance: {fileID: 1984790526}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1987697952
 GameObject:
   m_ObjectHideFlags: 0
