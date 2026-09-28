@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03b18e9f46a169945b5fa86e4fe36b39, type: 3}
+  m_Name: StickerWrench
+  m_EditorClassIdentifier: 
+  stickerName: Wrench
+  icon: {fileID: 21300000, guid: 73f8ea133da91a84aa95ae11c896cef5, type: 3}
+  basePurchaseCost: 5
+  maxUses: 6
+  consumeUseOnWinningActivation: 0
+  consumeUseOnNonWinningActivation: 1
+  consumeUseOnAlbumActivation: 0
+  winningUseConsumptionTag: 0
+  losingUseConsumptionTag: 2
+  albumUseConsumptionTag: 0
+  dollarReward: 0
+  logDescription: 
+  winningSegmentTooltip: Deal {damage} damage.
+  losingSegmentTooltip: Restore 1 use to a random sticker in this segment. If a use
+    is restored, consume 1 use.
+  albumTooltip: 
+  destroyedTooltip: 
+  damageAmount: 2

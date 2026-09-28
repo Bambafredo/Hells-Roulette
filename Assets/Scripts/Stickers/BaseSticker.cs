@@ -2135,6 +2135,43 @@ public class BaseSticker : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Restores uses to this physical sticker instance, up to its configured
+    /// maximum. Returns the number of uses actually restored.
+    /// </summary>
+    public int RestoreUses(
+        int amount)
+    {
+        EnsureUseStateInitialized();
+
+        if (amount <= 0 ||
+            effect == null ||
+            !effect.HasLimitedUses ||
+            consumed ||
+            pendingGameplayDestruction ||
+            remainingUses <= 0 ||
+            remainingUses >= effect.maxUses)
+        {
+            return 0;
+        }
+
+        int before =
+            remainingUses;
+
+        remainingUses =
+            Mathf.Min(
+                effect.maxUses,
+                remainingUses + amount
+            );
+
+        return
+            Mathf.Max(
+                0,
+                remainingUses - before
+            );
+    }
+
+
     private int ResolveUseConsumptionAmount(
         int requestedUses)
     {

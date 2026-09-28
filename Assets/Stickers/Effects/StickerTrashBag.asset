@@ -24,8 +24,8 @@ MonoBehaviour:
   albumUseConsumptionTag: 0
   dollarReward: 0
   logDescription: 
-  winningSegmentTooltip: 'Destroy a random sticker in this segment. Increase X by
-    {increase} and grow by {growth}%. Current X: {x}.'
+  winningSegmentTooltip: 'Destroy a random sticker in this segment. Increase damage
+    by {increase} and grow by {growth}%. Current damage: {x}.'
   losingSegmentTooltip: Deal {x} damage randomly distributed among enemies.
   albumTooltip: Lose {x} Blood.
   destroyedTooltip: 
