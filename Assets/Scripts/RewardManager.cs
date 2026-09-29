@@ -36,6 +36,10 @@ public class RewardManager : MonoBehaviour
         // This is NOT an end-of-round Reward Phase.
         GameplayFreeSticker,
 
+        // Several free stickers shown simultaneously in the dedicated
+        // Multiple Rewards panel.
+        GameplayMultipleFreeStickers,
+
         CleanRowBonus,
         StandardRewards
     }
@@ -110,6 +114,42 @@ public class RewardManager : MonoBehaviour
 
 
     // =========================================================
+    // GAMEPLAY MULTIPLE FREE STICKERS
+    // =========================================================
+
+    [Header("Gameplay Multiple Free Stickers")]
+
+    [Tooltip(
+        "Reward_Panel/MultipleRewards (or equivalent). Dedicated view used " +
+        "when one gameplay effect grants several free stickers at once."
+    )]
+    public Transform multipleRewardsPanel;
+
+    [Tooltip(
+        "Offer slots inside MultipleRewards. The current panel supports up to " +
+        "three simultaneous rewards; larger grants are automatically batched."
+    )]
+    public Transform[] multipleRewardSlots =
+        new Transform[3];
+
+    [Tooltip(
+        "Optional text inside the MultipleRewards panel. " +
+        "{source} is replaced by the requesting sticker/effect name and " +
+        "{count} by the number of rewards in the current batch."
+    )]
+    public TMP_Text multipleRewardsText;
+
+    public string multipleRewardsTextTemplate =
+        "{source}: Claim {count} rewards";
+
+    [Tooltip(
+        "If enabled, slot GameObjects not used by the current batch are hidden."
+    )]
+    public bool hideUnusedMultipleRewardSlots =
+        true;
+
+
+    // =========================================================
     // ENEMY VIEW
     // =========================================================
 
@@ -181,6 +221,28 @@ public class RewardManager : MonoBehaviour
 
         currentBonusOffer =
             null;
+    }
+
+
+    private void ClearMultipleRewardOffers()
+    {
+        if (currentMultipleRewardOffers == null)
+            return;
+
+
+        foreach (GameObject offer in currentMultipleRewardOffers)
+        {
+            if (offer != null)
+            {
+                Destroy(
+                    offer
+                );
+            }
+        }
+
+
+        currentMultipleRewardOffers =
+            new GameObject[0];
     }
 
 
@@ -362,6 +424,12 @@ public class RewardManager : MonoBehaviour
             RewardStage.GameplayFreeSticker;
 
 
+    public bool GameplayMultipleFreeStickersActive =>
+        RewardPhaseActive &&
+        CurrentRewardStage ==
+            RewardStage.GameplayMultipleFreeStickers;
+
+
     public bool CleanRowBonusActive =>
         RewardPhaseActive &&
         CurrentRewardStage ==
@@ -517,6 +585,48 @@ public class RewardManager : MonoBehaviour
     private GameObject activeGameplayFreeStickerPrefab =
         null;
 
+
+    // =========================================================
+    // GAMEPLAY MULTIPLE FREE-STICKER REQUESTS
+    // =========================================================
+
+    private class MultipleFreeStickerRequest
+    {
+        public string sourceName;
+        public List<GameObject> prefabs =
+            new List<GameObject>();
+
+        public int nextPrefabIndex =
+            0;
+    }
+
+
+    private readonly Queue<MultipleFreeStickerRequest>
+        gameplayMultipleFreeStickerRequests =
+            new Queue<MultipleFreeStickerRequest>();
+
+
+    private MultipleFreeStickerRequest
+        activeMultipleFreeStickerRequest =
+            null;
+
+
+    private GameObject[] currentMultipleRewardOffers =
+        new GameObject[0];
+
+
+    private int currentMultipleRewardClaimsRequired =
+        0;
+
+    private int currentMultipleRewardClaimsCompleted =
+        0;
+
+
+    public bool HasQueuedGameplayMultipleFreeStickerRewards =>
+        activeMultipleFreeStickerRequest != null ||
+        gameplayMultipleFreeStickerRequests.Count > 0;
+
+
     private RoundManager roundManager;
 
 
@@ -562,6 +672,12 @@ public class RewardManager : MonoBehaviour
         {
             rewardPanel.SetActive(false);
         }
+
+
+        SetTransformActive(
+            multipleRewardsPanel,
+            false
+        );
 
 
         RewardPhaseActive = false;
@@ -816,38 +932,207 @@ public class RewardManager : MonoBehaviour
     }
 
 
-    private void HandleGameplaySpinResolutionCompleted()
+    /// <summary>
+    /// Queues several copies of one exact physical sticker prefab as ONE
+    /// gameplay reward group.
+    ///
+    /// The dedicated Multiple Rewards panel shows as many offers at once as
+    /// there are configured slots. Larger grants are automatically split into
+    /// consecutive batches without returning to gameplay between them.
+    /// </summary>
+    public bool RequestMultipleFreeStickerRewards(
+        GameObject exactStickerPrefab,
+        int count,
+        string sourceName = null)
     {
-        if (gameplayFreeStickerRequests.Count <= 0 ||
-            RewardPhaseActive)
+        int safeCount =
+            Mathf.Max(
+                0,
+                count
+            );
+
+
+        if (safeCount <= 0)
+            return false;
+
+
+        List<GameObject> prefabs =
+            new List<GameObject>();
+
+
+        for (int i = 0;
+             i < safeCount;
+             i++)
         {
-            return;
+            prefabs.Add(
+                exactStickerPrefab
+            );
         }
 
 
-        /*
-         * Infestation has priority over optional gameplay rewards.
-         *
-         * Both systems flush from RoundManager's post-gameplay callback and
-         * reuse the same Reward Panel. The order in which C# event subscribers
-         * happen to run must never decide which modal wins.
-         *
-         * InfestationManager exposes its pending state, so a queued Infestation
-         * blocks this modal even before its panel has physically opened. When
-         * Infestation finishes, it explicitly hands the existing external-flow
-         * lock to RewardManager if a free-sticker request is still queued.
-         */
+        return
+            RequestMultipleFreeStickerRewards(
+                prefabs,
+                sourceName
+            );
+    }
+
+
+    /// <summary>
+    /// Generic multiple-reward API. Every prefab is granted as an exact free
+    /// sticker; null / malformed prefabs reject the complete request so a modal
+    /// can never open with an unclaimable slot.
+    /// </summary>
+    public bool RequestMultipleFreeStickerRewards(
+        IList<GameObject> exactStickerPrefabs,
+        string sourceName = null)
+    {
+        if (rewardPanel == null ||
+            multipleRewardsPanel == null ||
+            exactStickerPrefabs == null ||
+            exactStickerPrefabs.Count <= 0)
+        {
+            Debug.LogWarning(
+                "[MULTIPLE REWARDS] Cannot queue rewards: Reward Panel, " +
+                "Multiple Rewards panel, or reward list is missing."
+            );
+
+            return false;
+        }
+
+
+        int capacity =
+            GetMultipleRewardBatchCapacity();
+
+
+        if (capacity <= 0)
+        {
+            Debug.LogWarning(
+                "[MULTIPLE REWARDS] Cannot queue rewards: no valid reward slots."
+            );
+
+            return false;
+        }
+
+
+        MultipleFreeStickerRequest request =
+            new MultipleFreeStickerRequest();
+
+
+        request.sourceName =
+            string.IsNullOrWhiteSpace(
+                sourceName
+            )
+                ? "Gameplay effect"
+                : sourceName;
+
+
+        foreach (GameObject prefab in exactStickerPrefabs)
+        {
+            if (prefab == null)
+            {
+                Debug.LogWarning(
+                    "[MULTIPLE REWARDS] Cannot queue rewards: one requested " +
+                    "prefab is null."
+                );
+
+                return false;
+            }
+
+
+            BaseSticker sticker =
+                prefab.GetComponentInChildren<BaseSticker>(
+                    true
+                );
+
+
+            if (sticker == null)
+            {
+                Debug.LogWarning(
+                    $"[MULTIPLE REWARDS] Cannot queue '{prefab.name}': " +
+                    "prefab has no BaseSticker."
+                );
+
+                return false;
+            }
+
+
+            request.prefabs.Add(
+                prefab
+            );
+        }
+
+
+        gameplayMultipleFreeStickerRequests.Enqueue(
+            request
+        );
+
+
+        Debug.Log(
+            $"[MULTIPLE REWARDS] Queued {request.prefabs.Count} exact reward(s) " +
+            $"from '{request.sourceName}'. Pending groups = " +
+            $"{gameplayMultipleFreeStickerRequests.Count}."
+        );
+
+
+        return true;
+    }
+
+
+    private void HandleGameplaySpinResolutionCompleted()
+    {
+        TryBeginQueuedGameplayModalAfterResolution();
+    }
+
+
+    /// <summary>
+    /// Starts any queued gameplay reward modal after sticker/enemy resolution.
+    ///
+    /// This is public because delayed sticker effects such as Midas Hand can
+    /// discover their reward count from the SAME post-gameplay callback after
+    /// RewardManager's own listener has already run.
+    ///
+    /// Multiple-reward requests have priority over sequential single rewards.
+    /// Infestation still has priority over both because all three systems share
+    /// the Reward Panel.
+    /// </summary>
+    public bool TryBeginQueuedGameplayModalAfterResolution()
+    {
+        if (RewardPhaseActive)
+            return false;
+
+
         if (InfestationManager.Instance != null &&
             InfestationManager.Instance
                 .HasPendingOrActiveInfestation)
         {
-            return;
+            return false;
         }
 
 
-        BeginGameplayFreeStickerSequence(
-            true
-        );
+        if (gameplayMultipleFreeStickerRequests.Count > 0)
+        {
+            BeginGameplayMultipleFreeStickerSequence(
+                true
+            );
+
+            return
+                GameplayMultipleFreeStickersActive;
+        }
+
+
+        if (gameplayFreeStickerRequests.Count > 0)
+        {
+            BeginGameplayFreeStickerSequence(
+                true
+            );
+
+            return
+                GameplayFreeStickerActive;
+        }
+
+
+        return false;
     }
 
 
@@ -880,20 +1165,522 @@ public class RewardManager : MonoBehaviour
     /// </summary>
     public bool TryResumeQueuedGameplayModalFromExistingFlowLock()
     {
-        if (gameplayFreeStickerRequests.Count <= 0 ||
-            RewardPhaseActive)
+        if (RewardPhaseActive)
+            return false;
+
+
+        if (gameplayMultipleFreeStickerRequests.Count > 0)
+        {
+            BeginGameplayMultipleFreeStickerSequence(
+                false
+            );
+
+            return
+                GameplayMultipleFreeStickersActive;
+        }
+
+
+        if (gameplayFreeStickerRequests.Count > 0)
+        {
+            BeginGameplayFreeStickerSequence(
+                false
+            );
+
+            return
+                GameplayFreeStickerActive;
+        }
+
+
+        return false;
+    }
+
+
+    // =========================================================
+    // GAMEPLAY MULTIPLE FREE-STICKER SEQUENCE
+    // =========================================================
+
+    private void BeginGameplayMultipleFreeStickerSequence(
+        bool acquireExternalFlowLock)
+    {
+        if (gameplayMultipleFreeStickerRequests.Count <= 0)
+            return;
+
+
+        ResolveRoundManagerReference();
+
+
+        if (acquireExternalFlowLock &&
+            roundManager != null)
+        {
+            roundManager.SetExternalSpinBlock(
+                true
+            );
+        }
+
+
+        if (enemyCamera != null)
+        {
+            enemyCameraWasEnabledBeforeReward =
+                enemyCamera.enabled;
+
+            enemyCamera.enabled =
+                false;
+        }
+
+
+        RewardPhaseActive =
+            true;
+
+        CurrentRewardStage =
+            RewardStage.GameplayMultipleFreeStickers;
+
+
+        rewardPanel.SetActive(
+            true
+        );
+
+
+        ShowGameplayMultipleFreeStickerView();
+
+        BeginNextMultipleFreeStickerRequest();
+    }
+
+
+    private void BeginNextMultipleFreeStickerRequest()
+    {
+        ClearMultipleRewardOffers();
+
+
+        if (activeMultipleFreeStickerRequest == null)
+        {
+            if (gameplayMultipleFreeStickerRequests.Count <= 0)
+            {
+                CompleteGameplayMultipleFreeStickerSequence();
+                return;
+            }
+
+
+            activeMultipleFreeStickerRequest =
+                gameplayMultipleFreeStickerRequests.Dequeue();
+        }
+
+
+        BeginNextMultipleFreeStickerBatch();
+    }
+
+
+    private void BeginNextMultipleFreeStickerBatch()
+    {
+        ClearMultipleRewardOffers();
+
+
+        if (activeMultipleFreeStickerRequest == null)
+        {
+            BeginNextMultipleFreeStickerRequest();
+            return;
+        }
+
+
+        if (activeMultipleFreeStickerRequest.nextPrefabIndex >=
+            activeMultipleFreeStickerRequest.prefabs.Count)
+        {
+            activeMultipleFreeStickerRequest =
+                null;
+
+            BeginNextMultipleFreeStickerRequest();
+            return;
+        }
+
+
+        int capacity =
+            GetMultipleRewardBatchCapacity();
+
+
+        if (capacity <= 0)
+        {
+            Debug.LogError(
+                "[MULTIPLE REWARDS] No valid reward slots are available."
+            );
+
+            SkipActiveMultipleFreeStickerRequest();
+            return;
+        }
+
+
+        int remaining =
+            activeMultipleFreeStickerRequest.prefabs.Count -
+            activeMultipleFreeStickerRequest.nextPrefabIndex;
+
+
+        int batchCount =
+            Mathf.Min(
+                capacity,
+                remaining
+            );
+
+
+        currentMultipleRewardClaimsRequired =
+            0;
+
+        currentMultipleRewardClaimsCompleted =
+            0;
+
+
+        UpdateMultipleRewardSlotVisibility(
+            batchCount
+        );
+
+
+        currentMultipleRewardOffers =
+            new GameObject[batchCount];
+
+
+        for (int i = 0;
+             i < batchCount;
+             i++)
+        {
+            GameObject prefab =
+                activeMultipleFreeStickerRequest.prefabs[
+                    activeMultipleFreeStickerRequest.nextPrefabIndex
+                ];
+
+
+            activeMultipleFreeStickerRequest.nextPrefabIndex++;
+
+
+            Transform slot =
+                GetMultipleRewardSlot(
+                    i
+                );
+
+
+            GameObject offer =
+                SpawnOffer(
+                    prefab,
+                    slot,
+                    RewardStickerOffer.OfferMode.FreeClaim
+                );
+
+
+            currentMultipleRewardOffers[i] =
+                offer;
+
+
+            if (offer != null)
+            {
+                currentMultipleRewardClaimsRequired++;
+            }
+        }
+
+
+        ApplyGameplayMultipleRewardsText(
+            currentMultipleRewardClaimsRequired
+        );
+
+
+        if (currentMultipleRewardClaimsRequired <= 0)
+        {
+            Debug.LogWarning(
+                "[MULTIPLE REWARDS] Current batch produced no valid offers. " +
+                "Advancing instead of locking gameplay."
+            );
+
+            BeginNextMultipleFreeStickerBatch();
+            return;
+        }
+
+
+        Debug.Log(
+            $"[MULTIPLE REWARDS] '{activeMultipleFreeStickerRequest.sourceName}' " +
+            $"opened a batch of {currentMultipleRewardClaimsRequired} reward(s)."
+        );
+    }
+
+
+    private bool TryClaimMultipleFreeOffer(
+        GameObject offerObject,
+        BaseSticker sticker)
+    {
+        if (!GameplayMultipleFreeStickersActive ||
+            offerObject == null ||
+            sticker == null ||
+            currentMultipleRewardOffers == null)
         {
             return false;
         }
 
 
-        BeginGameplayFreeStickerSequence(
+        int index =
+            -1;
+
+
+        for (int i = 0;
+             i < currentMultipleRewardOffers.Length;
+             i++)
+        {
+            if (currentMultipleRewardOffers[i] ==
+                offerObject)
+            {
+                index =
+                    i;
+
+                break;
+            }
+        }
+
+
+        if (index < 0)
+            return false;
+
+
+        currentMultipleRewardOffers[index] =
+            null;
+
+
+        currentMultipleRewardClaimsCompleted =
+            Mathf.Min(
+                currentMultipleRewardClaimsRequired,
+                currentMultipleRewardClaimsCompleted + 1
+            );
+
+
+        Debug.Log(
+            $"[MULTIPLE REWARDS] Claimed '{GetStickerName(sticker)}'. " +
+            $"{currentMultipleRewardClaimsCompleted}/" +
+            $"{currentMultipleRewardClaimsRequired} in current batch."
+        );
+
+
+        if (currentMultipleRewardClaimsCompleted >=
+            currentMultipleRewardClaimsRequired)
+        {
+            BeginNextMultipleFreeStickerBatch();
+        }
+
+
+        return true;
+    }
+
+
+    private void SkipActiveMultipleFreeStickerRequest()
+    {
+        string sourceName =
+            activeMultipleFreeStickerRequest != null
+                ? activeMultipleFreeStickerRequest.sourceName
+                : "Gameplay effect";
+
+
+        ClearMultipleRewardOffers();
+
+
+        activeMultipleFreeStickerRequest =
+            null;
+
+        currentMultipleRewardClaimsRequired =
+            0;
+
+        currentMultipleRewardClaimsCompleted =
+            0;
+
+
+        Debug.Log(
+            $"[MULTIPLE REWARDS] Remaining rewards from '{sourceName}' skipped."
+        );
+
+
+        BeginNextMultipleFreeStickerRequest();
+    }
+
+
+    private void CompleteGameplayMultipleFreeStickerSequence()
+    {
+        ClearMultipleRewardOffers();
+
+        SetTransformActive(
+            multipleRewardsPanel,
             false
         );
 
 
+        activeMultipleFreeStickerRequest =
+            null;
+
+        currentMultipleRewardClaimsRequired =
+            0;
+
+        currentMultipleRewardClaimsCompleted =
+            0;
+
+
+        /*
+         * A sequential gameplay reward may also have been queued during the
+         * same spin. Keep the already-held flow lock and camera state while
+         * handing directly to the existing single-reward stage.
+         */
+        if (gameplayFreeStickerRequests.Count > 0)
+        {
+            CurrentRewardStage =
+                RewardStage.GameplayFreeSticker;
+
+
+            ShowGameplayFreeStickerView();
+
+            BeginNextGameplayFreeStickerOffer();
+
+            return;
+        }
+
+
+        RewardPhaseActive =
+            false;
+
+        CurrentRewardStage =
+            RewardStage.None;
+
+
+        if (rewardPanel != null)
+        {
+            rewardPanel.SetActive(
+                false
+            );
+        }
+
+
+        if (enemyCamera != null)
+        {
+            enemyCamera.enabled =
+                enemyCameraWasEnabledBeforeReward;
+        }
+
+
+        if (roundManager != null)
+        {
+            roundManager.SetExternalSpinBlock(
+                false
+            );
+        }
+
+
+        Debug.Log(
+            "[MULTIPLE REWARDS] Gameplay multiple-reward sequence completed."
+        );
+    }
+
+
+    private int GetMultipleRewardBatchCapacity()
+    {
+        if (multipleRewardSlots == null)
+            return 0;
+
+
+        int validSlots =
+            0;
+
+
+        foreach (Transform slot in multipleRewardSlots)
+        {
+            if (slot != null)
+            {
+                validSlots++;
+            }
+        }
+
+
         return
-            GameplayFreeStickerActive;
+            validSlots;
+    }
+
+
+    private Transform GetMultipleRewardSlot(
+        int index)
+    {
+        if (multipleRewardSlots == null ||
+            index < 0 ||
+            index >= multipleRewardSlots.Length)
+        {
+            return null;
+        }
+
+
+        return
+            multipleRewardSlots[index];
+    }
+
+
+    private void UpdateMultipleRewardSlotVisibility(
+        int activeCount)
+    {
+        if (multipleRewardSlots == null)
+            return;
+
+
+        for (int i = 0;
+             i < multipleRewardSlots.Length;
+             i++)
+        {
+            Transform slot =
+                multipleRewardSlots[i];
+
+
+            if (slot == null)
+                continue;
+
+
+            if (!hideUnusedMultipleRewardSlots)
+            {
+                slot.gameObject.SetActive(
+                    true
+                );
+
+                continue;
+            }
+
+
+            slot.gameObject.SetActive(
+                i < activeCount
+            );
+        }
+    }
+
+
+    private void ApplyGameplayMultipleRewardsText(
+        int batchCount)
+    {
+        if (multipleRewardsText == null)
+            return;
+
+
+        string sourceName =
+            activeMultipleFreeStickerRequest != null &&
+            !string.IsNullOrWhiteSpace(
+                activeMultipleFreeStickerRequest.sourceName
+            )
+                ? activeMultipleFreeStickerRequest.sourceName
+                : "Gameplay effect";
+
+
+        string template =
+            string.IsNullOrWhiteSpace(
+                multipleRewardsTextTemplate
+            )
+                ? "{source}: Claim {count} rewards"
+                : multipleRewardsTextTemplate;
+
+
+        multipleRewardsText.text =
+            template
+                .Replace(
+                    "{source}",
+                    sourceName
+                )
+                .Replace(
+                    "{count}",
+                    Mathf.Max(
+                        0,
+                        batchCount
+                    )
+                    .ToString()
+                );
     }
 
 
@@ -1083,6 +1870,26 @@ public class RewardManager : MonoBehaviour
 
         activeGameplayFreeStickerSource =
             null;
+
+
+        /*
+         * A multiple-reward group may have been queued after this sequential
+         * free-sticker stage had already started. Hand the same modal/flow lock
+         * directly to it instead of briefly returning to gameplay.
+         */
+        if (gameplayMultipleFreeStickerRequests.Count > 0)
+        {
+            CurrentRewardStage =
+                RewardStage.GameplayMultipleFreeStickers;
+
+
+            ShowGameplayMultipleFreeStickerView();
+
+            BeginNextMultipleFreeStickerRequest();
+
+            return;
+        }
+
 
         RewardPhaseActive =
             false;
@@ -1431,6 +2238,20 @@ public class RewardManager : MonoBehaviour
 
 
         // -----------------------------------------------------
+        // GAMEPLAY MULTIPLE FREE STICKERS
+        // -----------------------------------------------------
+
+        if (GameplayMultipleFreeStickersActive)
+        {
+            return
+                TryClaimMultipleFreeOffer(
+                    offerObject,
+                    sticker
+                );
+        }
+
+
+        // -----------------------------------------------------
         // GAMEPLAY FREE STICKER (Cupon / Matryoshka / etc.)
         // -----------------------------------------------------
 
@@ -1670,6 +2491,11 @@ public class RewardManager : MonoBehaviour
     {
         SetActive(regularRewardBackground, true);
 
+        SetTransformActive(
+            multipleRewardsPanel,
+            false
+        );
+
         SetTransformActive(rewardSlotA, false);
         SetTransformActive(rewardSlotB, false);
         SetTransformActive(rewardSlotC, false);
@@ -1690,8 +2516,97 @@ public class RewardManager : MonoBehaviour
     }
 
 
+    private void ShowGameplayMultipleFreeStickerView()
+    {
+        SetActive(
+            regularRewardBackground,
+            true
+        );
+
+        SetTransformActive(
+            rewardSlotA,
+            false
+        );
+
+        SetTransformActive(
+            rewardSlotB,
+            false
+        );
+
+        SetTransformActive(
+            rewardSlotC,
+            false
+        );
+
+        SetTransformActive(
+            rewardSlotD,
+            false
+        );
+
+        SetTransformActive(
+            rewardBonusSlot,
+            false
+        );
+
+
+        SetTextActive(
+            rewardSlotAPriceText,
+            false
+        );
+
+        SetTextActive(
+            rewardSlotBPriceText,
+            false
+        );
+
+
+        SetColliderObjectActive(
+            rerollButtonCollider,
+            false
+        );
+
+        SetTextActive(
+            rerollCostText,
+            false
+        );
+
+
+        SetColliderObjectActive(
+            changeCurrencyButtonCollider,
+            false
+        );
+
+        SetTextActive(
+            changeCurrencyButtonText,
+            false
+        );
+
+
+        SetTransformActive(
+            multipleRewardsPanel,
+            true
+        );
+
+
+        /*
+         * Multiple rewards are optional bonuses, never forced infestations.
+         * Skip is therefore always available and discards the unclaimed
+         * remainder of the current reward group.
+         */
+        SetColliderObjectActive(
+            skipButtonCollider,
+            true
+        );
+    }
+
+
     private void ShowCleanRowBonusView()
     {
+        SetTransformActive(
+            multipleRewardsPanel,
+            false
+        );
+
         /*
          * Clean Row is now a two-sticker choice:
          * C = normal random bonus
@@ -1724,6 +2639,11 @@ public class RewardManager : MonoBehaviour
 
     private void ShowStandardRewardView()
     {
+        SetTransformActive(
+            multipleRewardsPanel,
+            false
+        );
+
         SetActive(
             regularRewardBackground,
             true
@@ -3048,6 +3968,17 @@ public class RewardManager : MonoBehaviour
 
 
         // -----------------------------------------------------
+        // GAMEPLAY MULTIPLE FREE STICKERS
+        // -----------------------------------------------------
+
+        if (GameplayMultipleFreeStickersActive)
+        {
+            SkipActiveMultipleFreeStickerRequest();
+            return;
+        }
+
+
+        // -----------------------------------------------------
         // GAMEPLAY FREE STICKER
         // -----------------------------------------------------
 
@@ -3111,7 +4042,13 @@ public class RewardManager : MonoBehaviour
     {
         ClearRemainingOffers();
         ClearBonusOffer();
+        ClearMultipleRewardOffers();
         ClearCleanRowOffers();
+
+        SetTransformActive(
+            multipleRewardsPanel,
+            false
+        );
 
 
         UpdateRewardTexts();

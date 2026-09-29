@@ -4542,7 +4542,7 @@ GameObject:
   - component: {fileID: 638076428}
   - component: {fileID: 638076427}
   m_Layer: 0
-  m_Name: Bonus_1
+  m_Name: Reward_1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5722,7 +5722,7 @@ GameObject:
   - component: {fileID: 766375393}
   - component: {fileID: 766375392}
   m_Layer: 0
-  m_Name: Bonus_2
+  m_Name: Reward_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -6147,7 +6147,7 @@ GameObject:
   - component: {fileID: 852226371}
   - component: {fileID: 852226370}
   m_Layer: 0
-  m_Name: MultipleBonus
+  m_Name: MultipleRewards
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -6248,7 +6248,7 @@ GameObject:
   - component: {fileID: 862650639}
   - component: {fileID: 862650638}
   m_Layer: 0
-  m_Name: Bonus_3
+  m_Name: Reward_3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7351,6 +7351,14 @@ MonoBehaviour:
   rewardBonusSlot: {fileID: 1581233132}
   regularRewardBackground: {fileID: 2057492686}
   gameplayFreeStickerBonusTextTemplate: '{source}: Get a free sticker'
+  multipleRewardsPanel: {fileID: 852226369}
+  multipleRewardSlots:
+  - {fileID: 638076426}
+  - {fileID: 766375391}
+  - {fileID: 862650637}
+  multipleRewardsText: {fileID: 1497622536}
+  multipleRewardsTextTemplate: '{source}: Claim {count} rewards'
+  hideUnusedMultipleRewardSlots: 1
   enemyCamera: {fileID: 712121793}
   rerollButtonCollider: {fileID: 1392370264}
   skipButtonCollider: {fileID: 1803339945}
@@ -7404,6 +7412,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 4750936881a0c44408b234204482cae3, type: 3}
   - {fileID: 577474978131120927, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
   - {fileID: 577474978131120927, guid: e9fcbb2ce3303b84ba2306a8ef02c3bd, type: 3}
+  - {fileID: 577474978131120927, guid: 0ced6481a0231454797752b35a358a77, type: 3}
   bloodPriceMultiplier: 2
   enableSharedPricing: 1
   sharedCoinPriceSequence: 060000000a0000001000000018000000
@@ -7592,6 +7601,7 @@ MonoBehaviour:
   - {fileID: 577474978131120927, guid: 4750936881a0c44408b234204482cae3, type: 3}
   - {fileID: 577474978131120927, guid: 582203d890c275e44bcfc55eaa0fe920, type: 3}
   - {fileID: 577474978131120927, guid: e9fcbb2ce3303b84ba2306a8ef02c3bd, type: 3}
+  - {fileID: 577474978131120927, guid: 0ced6481a0231454797752b35a358a77, type: 3}
   rerollButtonCollider: {fileID: 23581347}
   rerollsRemainingText: {fileID: 701791785}
   startingRerolls: 3
@@ -9355,7 +9365,6 @@ Transform:
   - {fileID: 1849301722}
   - {fileID: 1840691570}
   - {fileID: 33877464}
-  - {fileID: 1267111492}
   m_Father: {fileID: 1353839698}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1171386728
@@ -9832,68 +9841,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1260010642}
   m_CullTransparentMesh: 1
---- !u!1001 &1267111491
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 1156078942}
-    m_Modifications:
-    - target: {fileID: 577474978131120927, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_Name
-      value: Sticker_GoldenNugget
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -1.26
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 1.57
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
---- !u!4 &1267111492 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 9022462484478120845, guid: a716cccf89181724e8a8e650f53e57b5, type: 3}
-  m_PrefabInstance: {fileID: 1267111491}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1269127758
 GameObject:
   m_ObjectHideFlags: 0
@@ -12580,7 +12527,7 @@ GameObject:
   - component: {fileID: 1497622536}
   - component: {fileID: 1497622535}
   m_Layer: 0
-  m_Name: Infestation_Text
+  m_Name: MultipleRewards_Text
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

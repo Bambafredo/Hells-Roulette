@@ -137,7 +137,10 @@ public class EnemyCurseRepositioningFee : EnemyCurse
             RewardManager.Instance.RewardPhaseActive)
         {
             bool gameplayRewardWithSpinsRemaining =
-                RewardManager.Instance.GameplayFreeStickerActive &&
+                (
+                    RewardManager.Instance.GameplayFreeStickerActive ||
+                    RewardManager.Instance.GameplayMultipleFreeStickersActive
+                ) &&
                 RoundManager.Instance != null &&
                 RoundManager.Instance.TokensRemaining > 0;
 
