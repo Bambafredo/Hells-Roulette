@@ -6,7 +6,7 @@ using UnityEngine;
     fileName = "StickerSoldierAnt",
     menuName = "Stickers/Sticker Soldier Ant"
 )]
-public class StickerSoldierAnt : StickerEffect
+public class StickerSoldierAnt : StickerEffect, IAntSticker
 {
     [Header("Soldier Ant Damage")]
     [Min(0)]
@@ -238,3 +238,4 @@ public class StickerSoldierAnt : StickerEffect
                 );
     }
 }
+
