@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cab3861c28268c4f8c9750bf58a858e, type: 3}
+  m_Name: StickerAntQueen
+  m_EditorClassIdentifier: 
+  stickerName: Ant Queen
+  icon: {fileID: 21300000, guid: 6e853617a3ecb5f49bc1bd21bbc53a1d, type: 3}
+  basePurchaseCost: 5
+  maxUses: 0
+  consumeUseOnWinningActivation: 0
+  consumeUseOnNonWinningActivation: 0
+  consumeUseOnAlbumActivation: 0
+  winningUseConsumptionTag: 0
+  losingUseConsumptionTag: 0
+  albumUseConsumptionTag: 0
+  dollarReward: 0
+  logDescription: 
+  winningSegmentTooltip: 'Deal {damagePerAnt} damage to the leftmost enemy for each
+    other Ant on the wheel. Current damage: {winningDamage}.'
+  losingSegmentTooltip: 'Gain $1 for each other Ant on the wheel. Current gain: ${losingMoney}.'
+  albumTooltip: '{albumChance}% chance to gain a random Ant sticker. Chance increases
+    by {chancePerAlbumAnt}% for each other Ant in the Album.'
+  destroyedTooltip: 
+  baseAntRewardChance: 20
+  chanceIncreasePerOtherAlbumAnt: 10
+  antRewardPrefabs:
+  - {fileID: 577474978131120927, guid: 46a8ce007cc0c36498aae087d3dae18f, type: 3}
+  - {fileID: 577474978131120927, guid: 01d54ead78aa0304580e41c5ebc05fa6, type: 3}
+  damagePerOtherAnt: 1
